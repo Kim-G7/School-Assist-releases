@@ -1,0 +1,105 @@
+{
+  "board": "ZIMSEC",
+  "level": "O-Level",
+  "subject": "Geography",
+  "code": "4022",
+  "description": "Replace this with your syllabus. Delete the example topic and add your own.",
+  "gradeScale": [
+    {
+      "grade": "A",
+      "min": 75
+    },
+    {
+      "grade": "B",
+      "min": 65
+    },
+    {
+      "grade": "C",
+      "min": 50
+    },
+    {
+      "grade": "D",
+      "min": 40
+    },
+    {
+      "grade": "E",
+      "min": 30
+    },
+    {
+      "grade": "U",
+      "min": 0
+    }
+  ],
+  "topics": [
+    {
+      "title": "Weather and Climate",
+      "summary": "One short sentence shown in the topic list.",
+      "estMinutes": 40,
+      "term": 1,
+      "notes": [
+        "## Headings start with ##",
+        "Write paragraphs as normal text.",
+        "- Bullet points start with a dash",
+        "- **Bold** with double stars",
+        "",
+        "[[A formula or key fact goes in double square brackets]]",
+        "",
+        "> A tip or warning starts with >",
+        "",
+        "| Tables | use | pipes |",
+        "|---|---|---|",
+        "| a | b | c |"
+      ],
+      "examples": [
+        {
+          "q": "A worked example question.",
+          "a": "Step 1…\nStep 2…\nAnswer."
+        }
+      ],
+      "questions": [
+        {
+          "type": "mcq",
+          "prompt": "Multiple choice: answer is the option number, counting from 0.",
+          "options": [
+            "Correct option",
+            "Wrong",
+            "Wrong",
+            "Wrong"
+          ],
+          "answer": 0,
+          "marks": 1,
+          "explanation": "Shown after the student answers."
+        },
+        {
+          "type": "tf",
+          "prompt": "True or false question.",
+          "answer": true,
+          "marks": 1
+        },
+        {
+          "type": "short",
+          "prompt": "Short answer: list every accepted spelling.",
+          "answer": [
+            "convectional rainfall",
+            "convection rainfall"
+          ],
+          "marks": 1
+        },
+        {
+          "type": "numeric",
+          "prompt": "Numeric answer, e.g. a calculation.",
+          "answer": 12.5,
+          "tolerance": 0.1,
+          "marks": 2
+        },
+        {
+          "type": "structured",
+          "prompt": "Long answer that students mark themselves against the scheme.",
+          "markScheme": "Point one [1]\nPoint two [1]\nPoint three [1]",
+          "marks": 3
+        }
+      ]
+    }
+  ],
+  "papers": []
+}

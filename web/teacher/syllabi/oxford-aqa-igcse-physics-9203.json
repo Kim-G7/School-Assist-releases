@@ -1,0 +1,377 @@
+{
+  "id": "syl_oxaqa_physics_9203",
+  "board": "Oxford AQA",
+  "level": "International GCSE",
+  "subject": "Physics",
+  "code": "9203",
+  "description": "Forces and motion, energy, and electricity, with calculation practice.",
+  "gradeScale": [
+    {
+      "grade": "9",
+      "min": 85
+    },
+    {
+      "grade": "8",
+      "min": 75
+    },
+    {
+      "grade": "7",
+      "min": 65
+    },
+    {
+      "grade": "6",
+      "min": 57
+    },
+    {
+      "grade": "5",
+      "min": 50
+    },
+    {
+      "grade": "4",
+      "min": 42
+    },
+    {
+      "grade": "3",
+      "min": 34
+    },
+    {
+      "grade": "2",
+      "min": 25
+    },
+    {
+      "grade": "1",
+      "min": 15
+    },
+    {
+      "grade": "U",
+      "min": 0
+    }
+  ],
+  "topics": [
+    {
+      "id": "op_forces",
+      "title": "Forces and Motion",
+      "estMinutes": 45,
+      "term": 1,
+      "summary": "Speed, acceleration, motion graphs, Newton's laws and momentum.",
+      "notes": [
+        "## Speed, velocity and acceleration",
+        "[[speed = distance ÷ time]]",
+        "**Velocity** is speed in a stated direction, so it is a vector.",
+        "[[acceleration = change in velocity ÷ time taken      a = (v − u) ÷ t]]",
+        "Speed is measured in m/s and acceleration in m/s^2.",
+        "## Graphs of motion",
+        "- **Distance–time graph**: the gradient is the **speed**. A horizontal line means the object is stationary.",
+        "- **Velocity–time graph**: the gradient is the **acceleration**, and the **area under the line** is the distance travelled.",
+        "## Newton's laws",
+        "1. An object stays at rest, or at a constant velocity, unless a **resultant force** acts on it.",
+        "2. Resultant force = mass × acceleration.",
+        "3. When two objects interact, they exert **equal and opposite** forces on each other.",
+        "[[F = m × a]]",
+        "## Weight",
+        "[[weight = mass × gravitational field strength      W = mg]]",
+        "On Earth, g ≈ 9.8 N/kg (often taken as 10 N/kg).",
+        "## Momentum",
+        "[[momentum = mass × velocity      p = mv]]",
+        "In a collision, the total momentum is **conserved** when no external forces act."
+      ],
+      "examples": [
+        {
+          "q": "A car accelerates from 5 m/s to 25 m/s in 4 s. Find its acceleration.",
+          "a": "a = (v − u) ÷ t\n= (25 − 5) ÷ 4\n= 5 m/s^2"
+        },
+        {
+          "q": "A resultant force of 1200 N acts on a car of mass 800 kg. Find its acceleration.",
+          "a": "F = ma, so a = F ÷ m\n= 1200 ÷ 800\n= 1.5 m/s^2"
+        }
+      ],
+      "questions": [
+        {
+          "type": "numeric",
+          "prompt": "A runner covers 400 m in 50 s. What is her average speed in m/s?",
+          "answer": 8,
+          "explanation": "400 ÷ 50 = 8 m/s",
+          "marks": 1,
+          "id": "op_forces_q1"
+        },
+        {
+          "type": "numeric",
+          "prompt": "Find the weight, in N, of a 60 kg person where g = 10 N/kg.",
+          "answer": 600,
+          "explanation": "W = mg = 60 × 10 = 600 N",
+          "marks": 1,
+          "id": "op_forces_q2"
+        },
+        {
+          "type": "mcq",
+          "prompt": "What does the gradient of a velocity–time graph represent?",
+          "options": [
+            "Momentum",
+            "Acceleration",
+            "Distance",
+            "Speed"
+          ],
+          "answer": 1,
+          "explanation": "Gradient = change in velocity ÷ time = acceleration.",
+          "marks": 1,
+          "id": "op_forces_q3"
+        },
+        {
+          "type": "numeric",
+          "prompt": "Find the momentum, in kg m/s, of a 2 kg ball moving at 3 m/s.",
+          "answer": 6,
+          "explanation": "p = mv = 2 × 3 = 6 kg m/s",
+          "marks": 1,
+          "id": "op_forces_q4"
+        },
+        {
+          "type": "tf",
+          "prompt": "An object moving at a constant velocity has a resultant force of zero acting on it.",
+          "answer": true,
+          "explanation": "Newton's first law: with no resultant force, the velocity does not change.",
+          "marks": 1,
+          "id": "op_forces_q5"
+        },
+        {
+          "type": "structured",
+          "prompt": "A trolley of mass 2 kg accelerates from rest to 6 m/s in 3 s.\n(a) Calculate its acceleration.\n(b) Calculate the resultant force acting on it.",
+          "markScheme": "(a) a = (6 − 0) ÷ 3  [1] = 2 m/s^2  [1]\n(b) F = ma = 2 × 2  [1] = 4 N  [1]",
+          "marks": 4,
+          "id": "op_forces_q6"
+        }
+      ]
+    },
+    {
+      "id": "op_energy",
+      "title": "Energy",
+      "estMinutes": 40,
+      "term": 2,
+      "summary": "Energy stores, conservation, work, power and efficiency.",
+      "notes": [
+        "## Energy stores and transfers",
+        "Energy is stored as kinetic, gravitational potential, elastic potential, chemical, thermal and nuclear energy. It is **transferred** by forces (mechanical work), by electric current, by heating and by radiation (light and sound).",
+        "## Conservation of energy",
+        "Energy cannot be created or destroyed, only transferred from one store to another. Some energy is usually transferred to the surroundings as **wasted** thermal energy.",
+        "## Key equations",
+        "[[kinetic energy = ½ × mass × speed^2      E_{k} = ½mv^2]]",
+        "[[gravitational potential energy = mass × g × height      E_{p} = mgh]]",
+        "[[work done = force × distance moved      W = Fd]]",
+        "[[power = energy transferred ÷ time      P = E ÷ t]]",
+        "[[efficiency = useful energy output ÷ total energy input  (× 100%)]]",
+        "## Energy resources",
+        "- **Renewable**: solar, wind, hydroelectric (such as Kariba), geothermal and biomass. They will not run out.",
+        "- **Non-renewable**: coal (such as Hwange), oil, natural gas and nuclear fuel. They will eventually run out."
+      ],
+      "examples": [
+        {
+          "q": "Find the kinetic energy of a 1000 kg car moving at 20 m/s.",
+          "a": "E_{k} = ½mv^2 = ½ × 1000 × 20^2\n= 500 × 400\n= 200 000 J (200 kJ)"
+        },
+        {
+          "q": "A motor uses 500 J of electrical energy to lift a load, giving it 350 J of potential energy. Find its efficiency.",
+          "a": "efficiency = useful output ÷ total input\n= 350 ÷ 500\n= 0.7, which is 70%"
+        }
+      ],
+      "questions": [
+        {
+          "type": "numeric",
+          "prompt": "Find the gravitational potential energy, in J, gained by a 2 kg book lifted 1.5 m. (g = 10 N/kg)",
+          "answer": 30,
+          "explanation": "E_{p} = mgh = 2 × 10 × 1.5 = 30 J",
+          "marks": 1,
+          "id": "op_energy_q1"
+        },
+        {
+          "type": "numeric",
+          "prompt": "A 60 W bulb is on for 10 s. How much energy, in J, does it transfer?",
+          "answer": 600,
+          "explanation": "E = Pt = 60 × 10 = 600 J",
+          "marks": 1,
+          "id": "op_energy_q2"
+        },
+        {
+          "type": "mcq",
+          "prompt": "Which of these is a renewable energy resource?",
+          "options": [
+            "Coal",
+            "Natural gas",
+            "Oil",
+            "Hydroelectric"
+          ],
+          "answer": 3,
+          "explanation": "Hydroelectric power uses flowing water, which is continually replaced.",
+          "marks": 1,
+          "id": "op_energy_q3"
+        },
+        {
+          "type": "numeric",
+          "prompt": "Find the work done, in J, when a force of 50 N moves an object 4 m.",
+          "answer": 200,
+          "explanation": "W = Fd = 50 × 4 = 200 J",
+          "marks": 1,
+          "id": "op_energy_q4"
+        },
+        {
+          "type": "tf",
+          "prompt": "A machine can have an efficiency greater than 100%.",
+          "answer": false,
+          "explanation": "That would mean creating energy, which breaks the law of conservation of energy.",
+          "marks": 1,
+          "id": "op_energy_q5"
+        },
+        {
+          "type": "structured",
+          "prompt": "A 0.5 kg ball is dropped from a height of 20 m. Ignore air resistance and take g = 10 N/kg.\n(a) Calculate the potential energy it loses.\n(b) Calculate its speed just before it hits the ground.",
+          "markScheme": "(a) E_{p} = mgh = 0.5 × 10 × 20  [1] = 100 J  [1]\n(b) ½mv^2 = 100, so v^2 = 400  [1] and v = 20 m/s  [1]",
+          "marks": 4,
+          "id": "op_energy_q6"
+        }
+      ]
+    },
+    {
+      "id": "op_electricity",
+      "title": "Electricity",
+      "estMinutes": 45,
+      "term": 3,
+      "summary": "Current, potential difference, resistance, circuits, power and safety.",
+      "notes": [
+        "## Current, potential difference and resistance",
+        "- **Current (I)** is the rate of flow of charge. It is measured in amperes (A) with an **ammeter** connected in **series**.",
+        "- **Potential difference (V)** is measured in volts (V) with a **voltmeter** connected in **parallel**.",
+        "[[V = I × R      (potential difference = current × resistance)]]",
+        "[[Q = I × t      (charge = current × time)]]",
+        "## Series and parallel circuits",
+        "| | Series | Parallel |",
+        "|---|---|---|",
+        "| Current | the same everywhere | splits between the branches |",
+        "| Potential difference | shared between the components | the same across each branch |",
+        "| Total resistance | R = R_{1} + R_{2} | less than the smallest single resistor |",
+        "## Electrical power and energy",
+        "[[P = V × I      P = I^2R      E = P × t]]",
+        "Energy bills use the **kilowatt-hour** (kWh): 1 kWh is the energy used by a 1 kW appliance in 1 hour.",
+        "## Mains safety",
+        "- **Fuse**: melts if the current is too large, breaking the circuit.",
+        "- **Earth wire**: connects a metal case to earth, so a fault current flows to earth and blows the fuse.",
+        "- **Circuit breaker**: a switch that trips automatically and can be reset."
+      ],
+      "examples": [
+        {
+          "q": "A current of 2 A flows through a 6 Ω resistor. Find the potential difference across it.",
+          "a": "V = IR\n= 2 × 6\n= 12 V"
+        },
+        {
+          "q": "Resistors of 4 Ω and 8 Ω are connected in series to a 6 V battery. Find the current.",
+          "a": "Total resistance = 4 + 8 = 12 Ω\nI = V ÷ R = 6 ÷ 12 = 0.5 A"
+        }
+      ],
+      "questions": [
+        {
+          "type": "numeric",
+          "prompt": "Find the resistance, in Ω, of a lamp with 12 V across it and 3 A through it.",
+          "answer": 4,
+          "explanation": "R = V ÷ I = 12 ÷ 3 = 4 Ω",
+          "marks": 1,
+          "id": "op_electricity_q1"
+        },
+        {
+          "type": "mcq",
+          "prompt": "How is a voltmeter connected in a circuit?",
+          "options": [
+            "In place of the component",
+            "Either way",
+            "In series with the component",
+            "In parallel with the component"
+          ],
+          "answer": 3,
+          "explanation": "A voltmeter measures the difference between two points, so it goes across (in parallel with) the component.",
+          "marks": 1,
+          "id": "op_electricity_q2"
+        },
+        {
+          "type": "numeric",
+          "prompt": "Find the total resistance, in Ω, of 3 Ω and 5 Ω resistors in series.",
+          "answer": 8,
+          "explanation": "In series, add the resistances: 3 + 5 = 8 Ω",
+          "marks": 1,
+          "id": "op_electricity_q3"
+        },
+        {
+          "type": "numeric",
+          "prompt": "A 2 kW kettle runs for 0.5 hours. How much energy does it use, in kWh?",
+          "answer": 1,
+          "explanation": "E = P × t = 2 kW × 0.5 h = 1 kWh",
+          "marks": 1,
+          "id": "op_electricity_q4"
+        },
+        {
+          "type": "mcq",
+          "prompt": "What is the purpose of a fuse?",
+          "options": [
+            "To break the circuit if the current is too large",
+            "To store charge",
+            "To increase the current",
+            "To earth the appliance"
+          ],
+          "answer": 0,
+          "explanation": "The fuse wire melts when the current exceeds its rating.",
+          "marks": 1,
+          "id": "op_electricity_q5"
+        },
+        {
+          "type": "structured",
+          "prompt": "A 230 V heater draws a current of 8 A.\n(a) Calculate its power.\n(b) Which fuse should be fitted: 3 A, 5 A or 13 A? Explain your choice.",
+          "markScheme": "(a) P = VI = 230 × 8  [1] = 1840 W  [1]\n(b) 13 A  [1], the smallest rating above the normal current of 8 A (3 A and 5 A would blow in normal use)  [1]",
+          "marks": 4,
+          "id": "op_electricity_q6"
+        }
+      ]
+    }
+  ],
+  "papers": [
+    {
+      "id": "syl_oxaqa_physics_9203_p1",
+      "title": "Paper 1 Mock: short answers",
+      "durationMin": 30,
+      "instructions": "Answer all questions. Calculators may be used unless stated otherwise.",
+      "questionIds": [
+        "op_forces_q1",
+        "op_forces_q2",
+        "op_forces_q3",
+        "op_energy_q1",
+        "op_energy_q2",
+        "op_energy_q3",
+        "op_electricity_q1",
+        "op_electricity_q2",
+        "op_electricity_q3"
+      ]
+    },
+    {
+      "id": "syl_oxaqa_physics_9203_p2",
+      "title": "Paper 2 Mock: structured questions",
+      "durationMin": 45,
+      "instructions": "Answer all questions. Show your working. After submitting you will mark your answers against the marking scheme.",
+      "questionIds": [
+        "op_forces_q6",
+        "op_energy_q6",
+        "op_electricity_q6"
+      ]
+    },
+    {
+      "id": "syl_oxaqa_physics_9203_p3",
+      "title": "Full mock examination",
+      "durationMin": 60,
+      "instructions": "A mixed paper across the whole syllabus. Answer all questions.",
+      "questionIds": [
+        "op_forces_q4",
+        "op_forces_q5",
+        "op_forces_q6",
+        "op_energy_q4",
+        "op_energy_q5",
+        "op_energy_q6",
+        "op_electricity_q4",
+        "op_electricity_q5",
+        "op_electricity_q6"
+      ]
+    }
+  ]
+}

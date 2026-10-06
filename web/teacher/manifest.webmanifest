@@ -1,0 +1,23 @@
+{
+  "name": "School Assist Teacher",
+  "short_name": "SA Teacher",
+  "description": "Registers, mark book, termly reports, schemes and records and a class screen for primary school teachers. Works offline.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": [
+    "fullscreen",
+    "standalone"
+  ],
+  "orientation": "any",
+  "background_color": "#f4f6f9",
+  "theme_color": "#1D4E89",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
