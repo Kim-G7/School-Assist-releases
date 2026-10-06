@@ -318,7 +318,7 @@
   /* ------------------------------------------------------------ AI marking (optional)
      Written answers the app can't check are sent to cloud/functions/mark with their question and
      scheme row; each comes back with a mark and a line of feedback. The student can still change it. */
-  M.aiMarking = function () { return !!(A.Cloud && (S().get("settings", "ai") || {}).enabled); };
+  M.aiMarking = function () { return !!(A.AI && A.AI.where() && (S().get("settings", "ai") || {}).enabled); }; // online, or through the school hub
   function answerText(u, a) {
     if (Array.isArray(a) && u.boxes && u.boxes.length) return u.boxes.map(function (b, k) { return a[k] && String(a[k]).trim() ? (b.label ? b.label.replace(/___/g, "…") + ": " : "") + a[k] + (b.unit ? " " + b.unit : "") : ""; }).filter(Boolean).join("\n");
     return Array.isArray(a) ? a.join("\n") : String(a || "");
@@ -341,7 +341,7 @@
     return batches.reduce(function (p, batch) {
       return p.then(function () {
         var cur = M.paperSitting(sid, paper.id);
-        return A.Cloud.markAI({ paper: title, items: batch.map(function (u) {
+        return A.AI.mark({ paper: title, items: batch.map(function (u) {
           return { id: u.id, question: u.text || "", scheme: u.ms ? u.ms.answer : "(No row for this part in the marking scheme: mark it as a Cambridge examiner would, using the paper's level descriptors.)",
             guide: u.ms ? u.ms.guide : "", marks: u.marks, answer: answerText(u, (cur.answers || {})[u.id]) };
         }) }).then(function (res) {

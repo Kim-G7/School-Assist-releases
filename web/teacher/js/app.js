@@ -271,6 +271,8 @@
       var msg = L.msg ? '<p class="form-msg" role="alert">' + I("alert") + esc(L.msg) + "</p>" : "";
       if (A.Cloud) { var online = Login.cloudStep(back, msg); if (online != null) return online; }
       if (A.edition === "teacher" && A.Primary) { var pt = A.Primary.loginStep(L, back, msg); if (pt != null) return pt; }
+      // students registering themselves, and "forgot your password?": the same steps as online (js/school.js does the work)
+      if (!A.Cloud && A.School && /^(register|regboard|regsubjects|registered|forgotask|asked)$/.test(L.step)) { var off = Login.cloudStep(back, msg); if (off != null) return off; }
       if (L.step === "staffcode") return staffCodeStep(back, msg);
       if (L.step === "staffreg") {
         return back + '<h2 class="mt" style="font-size:24px">Register as a teacher or admin</h2><p class="muted small mt-sm">Use the staff code your school gave you: the teacher code makes you a teacher, the admin code an admin. An admin approves you before you can sign in.</p>' + A.staffRegisterForm(msg);
@@ -310,7 +312,9 @@
           '<label class="field"><span>Student ID</span><input class="input" name="sid" value="' + esc(L.sid) + '" autocomplete="username" autocapitalize="characters" spellcheck="false" placeholder="' + esc(ID_EG) + '"></label>' +
           '<label class="field"><span>Password</span><div class="pw-wrap"><input class="input" type="password" name="pw" autocomplete="current-password"><button type="button" class="btn btn-ghost btn-icon btn-sm" data-act="pw-toggle" aria-label="Show password">' + I("eye") + "</button></div></label>" +
           msg + '<button class="btn btn-primary btn-lg btn-block mt" type="submit">Sign in</button></form>' +
+          (A.School ? '<div class="row mt-sm" style="justify-content:center"><button class="btn btn-ghost btn-sm" data-act="login-goto" data-step="forgotask">' + I("key") + "Forgot your password?</button></div>" : "") +
           '<div class="divider"></div><div class="row wrap spread"><span class="small">First time signing in?</span><button class="btn" data-act="login-setup">' + I("key") + "Set up your account</button></div>" +
+          (A.School ? '<div class="row wrap spread mt-sm"><span class="small">New and not on the school\'s list yet?</span><button class="btn" data-act="login-goto" data-step="register">' + I("plus") + "Register</button></div>" : "") +
           Login.example();
       }
       if (L.step === "setup") {
@@ -591,6 +595,8 @@
     L.sid = sid;
     if (!sid || !pw) { L.msg = "Enter your student ID and password."; redrawLogin(); return; }
     if (u && !M.hasPassword(u.id)) { L.msg = "This account has no password yet. Choose \u201cSet up your account\u201d below."; redrawLogin(); return; }
+    if (u && u.status === "pending") { L.msg = "Your account is waiting for an admin to approve it. Try again once they have."; redrawLogin(); return; }
+    if (u && u.status === "declined") { L.msg = "An admin didn't approve this account. Ask at the school office."; redrawLogin(); return; }
     var cred = u && M.credential(u.id);
     if (!u || !cred || cred.password !== pw) {
       L.msg = "Student ID or password is not right.";
@@ -667,7 +673,7 @@
     if (pw !== form.pw2.value) return loginFail(new Error("The two passwords are different. Type them again."));
     L.regPw = pw;
     L.busy = "Fetching the subjects…"; L.msg = ""; redrawLogin();
-    A.Cloud.subjects().then(function (list) {
+    (A.Cloud ? A.Cloud.subjects() : Promise.resolve(M.offeredSubjects())).then(function (list) {
       L.busy = false; L.offered = list || [];
       var boards = boardsOf(L.offered);
       if (!boards.length) throw new Error("There are no subjects to choose yet. Ask the admin.");
@@ -683,13 +689,14 @@
     if (!ids.length) return loginFail(new Error("Tick the subjects you are taking."));
     var pw = L.regPw;
     L.busy = "Registering…"; L.msg = ""; redrawLogin();
-    A.Cloud.register(L.name, L.level, pw, ids).then(function (r) {
+    (A.Cloud ? A.Cloud.register(L.name, L.level, pw, ids) : A.School.register(L.name, L.level, pw, ids)).then(function (r) {
       L = blank(); L.step = "registered"; L.registered = r; L.pw = pw;
       redrawLogin();
     }).catch(loginFail);
   };
   A.act["cloud-registered-continue"] = function () {
     var r = L.registered || {}, pw = L.pw;
+    if (!A.Cloud) { L = blank(); L.step = "student"; L.sid = r.studentNo || ""; L.msg = "An admin needs to approve your account first. Then sign in here with your ID and password."; redrawLogin(); return; }
     L.busy = true; redrawLogin();
     A.Cloud.signIn(r.studentNo, pw).then(function (p) {
       L.pw = null;
@@ -723,7 +730,7 @@
     L.name = f.name.trim();
     if (!login) return loginFail(new Error("Enter your " + (L.role === "teacher" ? "email address" : "student ID") + "."));
     L.busy = "Sending…"; L.msg = ""; redrawLogin();
-    A.Cloud.recover({ action: "ask", login: login, name: f.name, note: f.note }).then(function () {
+    (A.Cloud ? A.Cloud.recover({ action: "ask", login: login, name: f.name, note: f.note }) : A.School.askAdmin(login, f.name, f.note)).then(function () {
       L.busy = false; L.step = "asked"; redrawLogin();
     }).catch(loginFail);
   };

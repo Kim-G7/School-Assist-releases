@@ -15,7 +15,7 @@
     return S().filter("alerts", function (a) { return a.teacherId === tid; }).sort(function (a, b) { return b.createdAt - a.createdAt; });
   };
   Al.unread = function (tid) { return Al.mine(tid).filter(function (a) { return !a.readAt; }).length; };
-  Al.href = function (a) { return a.kind === "register" ? "#/t/settings?s=people" : a.attemptId ? "#/t/attempt/" + a.attemptId : a.taskId ? "#/t/task/" + a.taskId : "#/t/home"; };
+  Al.href = function (a) { return a.kind === "register" || a.kind === "password" ? "#/t/settings?s=people" : a.attemptId ? "#/t/attempt/" + a.attemptId : a.taskId ? "#/t/task/" + a.taskId : "#/t/home"; };
 
   Al.check = function () {
     var me = M.me();

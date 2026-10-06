@@ -1,0 +1,845 @@
+{
+  "id": "syl_cie_biology_0610",
+  "board": "Cambridge",
+  "level": "IGCSE",
+  "subject": "Biology",
+  "code": "0610",
+  "description": "Core IGCSE Biology: organisms, cells, transport, enzymes and nutrition.",
+  "gradeScale": [
+    {
+      "grade": "A*",
+      "min": 85
+    },
+    {
+      "grade": "A",
+      "min": 75
+    },
+    {
+      "grade": "B",
+      "min": 65
+    },
+    {
+      "grade": "C",
+      "min": 55
+    },
+    {
+      "grade": "D",
+      "min": 45
+    },
+    {
+      "grade": "E",
+      "min": 35
+    },
+    {
+      "grade": "F",
+      "min": 25
+    },
+    {
+      "grade": "G",
+      "min": 15
+    },
+    {
+      "grade": "U",
+      "min": 0
+    }
+  ],
+  "topics": [
+    {
+      "id": "cb_living",
+      "title": "Characteristics and Classification of Living Organisms",
+      "estMinutes": 35,
+      "term": 1,
+      "summary": "MRS GREN, classification groups, binomial names and keys.",
+      "notes": [
+        "## Characteristics of living organisms",
+        "All living things carry out seven life processes. Remember them as **MRS GREN**:",
+        "| Letter | Process | Meaning |",
+        "|---|---|---|",
+        "| M | Movement | an action that causes a change of position or place |",
+        "| R | Respiration | chemical reactions in cells that break down nutrients to release energy |",
+        "| S | Sensitivity | detecting and responding to changes in the environment |",
+        "| G | Growth | a permanent increase in size and dry mass |",
+        "| R | Reproduction | processes that make more of the same kind of organism |",
+        "| E | Excretion | removing waste products of metabolism and substances in excess |",
+        "| N | Nutrition | taking in materials for energy, growth and development |",
+        "## Classification",
+        "Organisms are sorted into groups by their **shared features**. From the largest group to the smallest:",
+        "[[kingdom → phylum → class → order → family → genus → species]]",
+        "> Memory aid: **K**ing **P**hilip **C**ame **O**ver **F**or **G**ood **S**oup",
+        "## The binomial system",
+        "Every species has a two-part scientific name: the **genus** (capital letter) followed by the **species** (lower case), written in italics or underlined. Example: *Homo sapiens*.",
+        "A **species** is a group of organisms that can reproduce to produce fertile offspring.",
+        "## Dichotomous keys",
+        "A key uses a series of paired statements, two choices at each step, to identify an organism."
+      ],
+      "examples": [
+        {
+          "q": "Is a car alive? It moves, uses fuel and gives out waste gases.",
+          "a": "No. A car shows movement and something like excretion, but it does not grow, reproduce, sense and respond on its own, or respire in cells. A living organism must show ALL seven characteristics."
+        },
+        {
+          "q": "The lion's scientific name is Panthera leo. How should it be written, and what is its genus?",
+          "a": "Written as *Panthera leo* (italics), or underlined when handwritten.\nGenus: Panthera (capital P). Species: leo (lower case)."
+        }
+      ],
+      "questions": [
+        {
+          "type": "mcq",
+          "prompt": "Which life process releases energy from nutrients?",
+          "options": [
+            "Nutrition",
+            "Growth",
+            "Respiration",
+            "Excretion"
+          ],
+          "answer": 2,
+          "explanation": "Respiration breaks down nutrients such as glucose to release energy.",
+          "marks": 1,
+          "id": "cb_living_q1"
+        },
+        {
+          "type": "mcq",
+          "prompt": "Which is the correct way to write the scientific name of humans?",
+          "options": [
+            "*homo Sapiens*",
+            "*Homo Sapiens*",
+            "*Homo sapiens*",
+            "*Sapiens homo*"
+          ],
+          "answer": 2,
+          "explanation": "The genus has a capital letter, the species is lower case, and the name is in italics.",
+          "marks": 1,
+          "id": "cb_living_q2"
+        },
+        {
+          "type": "short",
+          "prompt": "What is the smallest group in the classification system?",
+          "answer": [
+            "species",
+            "a species"
+          ],
+          "explanation": "Species is the smallest group; kingdom is the largest.",
+          "marks": 1,
+          "id": "cb_living_q3"
+        },
+        {
+          "type": "tf",
+          "prompt": "Excretion is the removal of undigested food from the body.",
+          "answer": false,
+          "explanation": "That is egestion. Excretion removes the waste products of metabolism, such as CO₂ and urea.",
+          "marks": 1,
+          "id": "cb_living_q4"
+        },
+        {
+          "type": "mcq",
+          "prompt": "Which pair of characteristics do both plants and animals show?",
+          "options": [
+            "Growth and reproduction",
+            "Digestion of food in a gut",
+            "Movement of the whole organism",
+            "Photosynthesis"
+          ],
+          "answer": 0,
+          "explanation": "All living organisms grow and reproduce.",
+          "marks": 1,
+          "id": "cb_living_q5"
+        },
+        {
+          "type": "structured",
+          "prompt": "State the meaning of the term species. Explain why a horse and a donkey are different species even though they can breed to produce a mule.",
+          "markScheme": "A species is a group of organisms that can reproduce to produce fertile offspring  [1]\nA mule is infertile / cannot reproduce  [1]\nSo horses and donkeys are different species  [1]",
+          "marks": 3,
+          "id": "cb_living_q6"
+        }
+      ]
+    },
+    {
+      "id": "cb_cells",
+      "title": "Cell Structure",
+      "estMinutes": 40,
+      "term": 1,
+      "summary": "Plant, animal and bacterial cells, specialised cells, magnification.",
+      "notes": [
+        "## Cell structures and their functions",
+        "| Structure | Function | Plant | Animal |",
+        "|---|---|---|---|",
+        "| Cell membrane | controls what enters and leaves the cell | ✓ | ✓ |",
+        "| Cytoplasm | where most chemical reactions take place | ✓ | ✓ |",
+        "| Nucleus | contains the genetic material (DNA) that controls the cell | ✓ | ✓ |",
+        "| Mitochondria | site of aerobic respiration | ✓ | ✓ |",
+        "| Ribosomes | site of protein synthesis | ✓ | ✓ |",
+        "| Cell wall | made of cellulose; gives strength and shape | ✓ | ✗ |",
+        "| Chloroplasts | contain chlorophyll; site of photosynthesis | ✓ | ✗ |",
+        "| Large permanent vacuole | contains cell sap; keeps the cell firm | ✓ | ✗ |",
+        "Bacterial cells have **no nucleus**: their DNA is a circular chromosome, plus small rings called **plasmids**.",
+        "## Specialised cells",
+        "- **Red blood cell**: no nucleus and a biconcave shape, so it can carry more oxygen",
+        "- **Root hair cell**: a long extension gives a large surface area to absorb water and ions",
+        "- **Palisade mesophyll cell**: packed with chloroplasts for photosynthesis",
+        "- **Ciliated cell**: cilia move mucus",
+        "- **Sperm cell**: a tail for swimming and many mitochondria for energy",
+        "## Levels of organisation",
+        "[[cell → tissue → organ → organ system → organism]]",
+        "## Magnification",
+        "[[magnification = image size ÷ actual size]]",
+        "Use the **same units** for both sizes (1 mm = 1000 µm)."
+      ],
+      "examples": [
+        {
+          "q": "A cell measures 25 mm on a photograph. Its actual size is 0.05 mm. Calculate the magnification.",
+          "a": "magnification = image size ÷ actual size\n= 25 ÷ 0.05\n= ×500"
+        },
+        {
+          "q": "Explain why root hair cells do not contain chloroplasts.",
+          "a": "Root hair cells are underground, where there is no light, so they cannot photosynthesise. Chloroplasts would be of no use to them."
+        }
+      ],
+      "questions": [
+        {
+          "type": "mcq",
+          "prompt": "Which structure is found in plant cells but not in animal cells?",
+          "options": [
+            "Mitochondria",
+            "Cell membrane",
+            "Cell wall",
+            "Nucleus"
+          ],
+          "answer": 2,
+          "explanation": "Only plant cells have a cellulose cell wall.",
+          "marks": 1,
+          "id": "cb_cells_q1"
+        },
+        {
+          "type": "mcq",
+          "prompt": "Where does aerobic respiration take place?",
+          "options": [
+            "Mitochondria",
+            "Nucleus",
+            "Vacuole",
+            "Ribosomes"
+          ],
+          "answer": 0,
+          "explanation": "Mitochondria are the site of aerobic respiration.",
+          "marks": 1,
+          "id": "cb_cells_q2"
+        },
+        {
+          "type": "numeric",
+          "prompt": "An image of a cell is 40 mm long and the magnification is ×400. What is the actual length in mm?",
+          "answer": 0.1,
+          "explanation": "actual size = image size ÷ magnification = 40 ÷ 400 = 0.1 mm",
+          "marks": 1,
+          "tolerance": 0.001,
+          "id": "cb_cells_q3"
+        },
+        {
+          "type": "short",
+          "prompt": "What is the name of the green pigment found in chloroplasts?",
+          "answer": [
+            "chlorophyll"
+          ],
+          "explanation": "Chlorophyll absorbs light energy for photosynthesis.",
+          "marks": 1,
+          "id": "cb_cells_q4"
+        },
+        {
+          "type": "tf",
+          "prompt": "Red blood cells contain a large nucleus.",
+          "answer": false,
+          "explanation": "Red blood cells have no nucleus, which leaves more room for haemoglobin.",
+          "marks": 1,
+          "id": "cb_cells_q5"
+        },
+        {
+          "type": "mcq",
+          "prompt": "Which order runs from smallest to largest?",
+          "options": [
+            "cell → tissue → organ → organ system",
+            "organ → tissue → cell → organ system",
+            "tissue → cell → organ → organ system",
+            "cell → organ → tissue → organ system"
+          ],
+          "answer": 0,
+          "explanation": "Cells form tissues, tissues form organs and organs form organ systems.",
+          "marks": 1,
+          "id": "cb_cells_q6"
+        },
+        {
+          "type": "structured",
+          "prompt": "Describe two ways in which a red blood cell is adapted to carry oxygen.",
+          "markScheme": "Any two of:\n• contains haemoglobin, which binds oxygen  [1]\n• no nucleus, so more space for haemoglobin  [1]\n• biconcave shape gives a large surface area for diffusion  [1]\n• small and flexible, so it can pass through capillaries  [1]\n(Maximum 2 marks)",
+          "marks": 2,
+          "id": "cb_cells_q7"
+        }
+      ]
+    },
+    {
+      "id": "cb_transport",
+      "title": "Movement into and out of Cells",
+      "estMinutes": 45,
+      "term": 1,
+      "summary": "Diffusion, osmosis and active transport.",
+      "notes": [
+        "## Diffusion",
+        "**Diffusion** is the net movement of particles from a region of **higher concentration** to a region of **lower concentration**, down a concentration gradient, as a result of their random movement. It does not need energy from respiration.",
+        "The rate of diffusion increases with:",
+        "- a larger surface area",
+        "- a steeper concentration gradient",
+        "- a higher temperature",
+        "- a shorter distance to travel",
+        "## Osmosis",
+        "**Osmosis** is the net movement of **water molecules** from a region of higher water potential (a dilute solution) to a region of lower water potential (a concentrated solution), through a **partially permeable membrane**.",
+        "| Solution outside the cell | Animal cell | Plant cell |",
+        "|---|---|---|",
+        "| More dilute than the cytoplasm | swells and may burst | becomes **turgid** (the wall stops it bursting) |",
+        "| Same concentration | no change | no change |",
+        "| More concentrated | shrinks | becomes **flaccid**, then **plasmolysed** |",
+        "## Active transport",
+        "**Active transport** moves particles **against** a concentration gradient (from low to high), using **energy from respiration** and carrier proteins in the membrane.",
+        "> Example: root hair cells take in mineral ions from the soil by active transport, because the ion concentration is higher inside the root."
+      ],
+      "examples": [
+        {
+          "q": "A potato chip is placed in a concentrated sugar solution for an hour. Predict and explain what happens to its mass.",
+          "a": "Its mass decreases.\nThe sugar solution has a lower water potential than the potato cells, so water leaves the cells by osmosis through their partially permeable membranes."
+        },
+        {
+          "q": "Why does diffusion happen faster on a hot day?",
+          "a": "At a higher temperature particles have more kinetic energy and move faster, so they spread out more quickly."
+        }
+      ],
+      "questions": [
+        {
+          "type": "mcq",
+          "prompt": "Which process needs energy from respiration?",
+          "options": [
+            "Diffusion",
+            "Osmosis",
+            "Active transport",
+            "All of them"
+          ],
+          "answer": 2,
+          "explanation": "Only active transport uses energy, because it moves particles against a concentration gradient.",
+          "marks": 1,
+          "id": "cb_transport_q1"
+        },
+        {
+          "type": "mcq",
+          "prompt": "Osmosis is the movement of which molecules?",
+          "options": [
+            "All particles",
+            "Water molecules",
+            "Glucose molecules",
+            "Oxygen molecules"
+          ],
+          "answer": 1,
+          "explanation": "Osmosis is specifically the movement of water across a partially permeable membrane.",
+          "marks": 1,
+          "id": "cb_transport_q2"
+        },
+        {
+          "type": "tf",
+          "prompt": "In diffusion, particles move from a low concentration to a high concentration.",
+          "answer": false,
+          "explanation": "Diffusion is from high to low concentration.",
+          "marks": 1,
+          "id": "cb_transport_q3"
+        },
+        {
+          "type": "mcq",
+          "prompt": "A plant cell placed in pure water becomes…",
+          "options": [
+            "Plasmolysed",
+            "Flaccid",
+            "Burst",
+            "Turgid"
+          ],
+          "answer": 3,
+          "explanation": "Water enters by osmosis; the cell wall stops the cell bursting, so it becomes turgid.",
+          "marks": 1,
+          "id": "cb_transport_q4"
+        },
+        {
+          "type": "short",
+          "prompt": "What term describes a membrane that lets some molecules through but not others? (two words)",
+          "answer": [
+            "partially permeable",
+            "selectively permeable",
+            "semi permeable",
+            "semi-permeable",
+            "semipermeable"
+          ],
+          "explanation": "A partially permeable membrane lets small molecules such as water through, but not large ones such as sucrose.",
+          "marks": 1,
+          "id": "cb_transport_q5"
+        },
+        {
+          "type": "mcq",
+          "prompt": "Which change would increase the rate of diffusion into a cell?",
+          "options": [
+            "A thicker membrane",
+            "A lower temperature",
+            "A smaller concentration gradient",
+            "A larger surface area"
+          ],
+          "answer": 3,
+          "explanation": "A larger surface area lets more particles cross at once.",
+          "marks": 1,
+          "id": "cb_transport_q6"
+        },
+        {
+          "type": "structured",
+          "prompt": "Explain how root hair cells absorb mineral ions from the soil, even when the concentration of ions in the soil is lower than in the cell.",
+          "markScheme": "By active transport  [1]\nIons move against the concentration gradient  [1]\nThis uses energy from respiration / carrier proteins  [1]",
+          "marks": 3,
+          "id": "cb_transport_q7"
+        }
+      ]
+    },
+    {
+      "id": "cb_enzymes",
+      "title": "Biological Molecules and Enzymes",
+      "estMinutes": 50,
+      "term": 2,
+      "summary": "Carbohydrates, fats and proteins, food tests, and how enzymes work.",
+      "notes": [
+        "## Biological molecules",
+        "| Molecule | Made from | Elements |",
+        "|---|---|---|",
+        "| Carbohydrates (starch, glycogen, cellulose) | simple sugars such as glucose | C, H, O |",
+        "| Fats and oils | fatty acids and glycerol | C, H, O |",
+        "| Proteins | amino acids | C, H, O, N (sometimes S) |",
+        "## Food tests",
+        "| Test for | Reagent | Positive result |",
+        "|---|---|---|",
+        "| Starch | iodine solution | orange-brown → blue-black |",
+        "| Reducing sugar | Benedict's solution, then heat | blue → green, yellow or brick-red |",
+        "| Protein | biuret solution | blue → purple |",
+        "| Fats and oils | ethanol emulsion test | a milky-white emulsion forms |",
+        "| Vitamin C | DCPIP | blue → colourless |",
+        "## Enzymes",
+        "**Enzymes** are proteins that act as **biological catalysts**: they speed up chemical reactions without being changed themselves.",
+        "- Each enzyme has an **active site** with a specific shape. Only a **complementary** substrate fits (the lock-and-key model), forming an enzyme–substrate complex.",
+        "- **Temperature**: activity increases up to the **optimum** (about 37 °C for human enzymes). Above it, the active site changes shape and the enzyme is **denatured**.",
+        "- **pH**: each enzyme has an optimum pH. Extreme pH also denatures enzymes.",
+        "> Enzymes are not \"killed\" at high temperatures, because they were never alive. Say **denatured**."
+      ],
+      "examples": [
+        {
+          "q": "A student adds Benedict's solution to a fruit juice and heats it. The colour turns brick-red. What does this show?",
+          "a": "The juice contains a reducing sugar such as glucose. Brick-red shows a high concentration."
+        },
+        {
+          "q": "Explain why an enzyme stops working at 60 °C.",
+          "a": "The high temperature changes the shape of the active site, so the enzyme is denatured.\nThe substrate no longer fits the active site, so no enzyme–substrate complexes form."
+        }
+      ],
+      "questions": [
+        {
+          "type": "mcq",
+          "prompt": "Which reagent is used to test for starch?",
+          "options": [
+            "Biuret solution",
+            "Ethanol",
+            "Iodine solution",
+            "Benedict's solution"
+          ],
+          "answer": 2,
+          "explanation": "Iodine turns from orange-brown to blue-black when starch is present.",
+          "marks": 1,
+          "id": "cb_enzymes_q1"
+        },
+        {
+          "type": "mcq",
+          "prompt": "What are proteins made from?",
+          "options": [
+            "Starch",
+            "Fatty acids and glycerol",
+            "Amino acids",
+            "Glucose"
+          ],
+          "answer": 2,
+          "explanation": "Proteins are long chains of amino acids.",
+          "marks": 1,
+          "id": "cb_enzymes_q2"
+        },
+        {
+          "type": "short",
+          "prompt": "What word describes an enzyme whose active site has permanently changed shape?",
+          "answer": [
+            "denatured"
+          ],
+          "explanation": "A denatured enzyme can no longer bind its substrate.",
+          "marks": 1,
+          "id": "cb_enzymes_q3"
+        },
+        {
+          "type": "mcq",
+          "prompt": "A positive biuret test shows a colour change from blue to…",
+          "options": [
+            "Colourless",
+            "Blue-black",
+            "Purple",
+            "Brick-red"
+          ],
+          "answer": 2,
+          "explanation": "Biuret turns purple when protein is present.",
+          "marks": 1,
+          "id": "cb_enzymes_q4"
+        },
+        {
+          "type": "tf",
+          "prompt": "Enzymes are used up in the reactions they catalyse.",
+          "answer": false,
+          "explanation": "Catalysts are not used up; each enzyme can be used again and again.",
+          "marks": 1,
+          "id": "cb_enzymes_q5"
+        },
+        {
+          "type": "numeric",
+          "prompt": "At about what temperature, in °C, do most human enzymes work best?",
+          "answer": 37,
+          "explanation": "Human enzymes have an optimum of about 37 °C, which is body temperature.",
+          "marks": 1,
+          "tolerance": 1,
+          "id": "cb_enzymes_q6"
+        },
+        {
+          "type": "structured",
+          "prompt": "Using the lock-and-key model, explain why the enzyme amylase can break down starch but not protein.",
+          "markScheme": "Enzymes have an active site with a specific shape  [1]\nStarch is complementary to / fits the active site of amylase  [1]\nProtein has a different shape, so it does not fit and no enzyme–substrate complex forms  [1]",
+          "marks": 3,
+          "id": "cb_enzymes_q7"
+        }
+      ]
+    },
+    {
+      "id": "cb_plants",
+      "title": "Plant Nutrition",
+      "estMinutes": 45,
+      "term": 2,
+      "summary": "Photosynthesis, limiting factors, leaf structure and mineral ions.",
+      "notes": [
+        "## Photosynthesis",
+        "**Photosynthesis** is the process by which plants make carbohydrates from raw materials using energy from light.",
+        "[[carbon dioxide + water → glucose + oxygen  (light, chlorophyll)]]",
+        "[[6CO_{2} + 6H_{2}O → C_{6}H_{12}O_{6} + 6O_{2}]]",
+        "## How the plant uses glucose",
+        "- in respiration, to release energy",
+        "- stored as **starch**, which is insoluble so it does not affect osmosis",
+        "- converted to **cellulose** for cell walls",
+        "- converted to **sucrose** for transport in the phloem",
+        "- combined with nitrate ions to make **amino acids** and proteins",
+        "## Limiting factors",
+        "The rate of photosynthesis is limited by whichever factor is in shortest supply:",
+        "- light intensity",
+        "- carbon dioxide concentration",
+        "- temperature, because enzymes are involved",
+        "## Leaf structure",
+        "| Feature | Adaptation |",
+        "|---|---|",
+        "| Broad, thin lamina | large surface area to absorb light; short distance for gases to diffuse |",
+        "| Palisade mesophyll | many chloroplasts near the upper surface |",
+        "| Spongy mesophyll | air spaces let gases diffuse |",
+        "| Stomata | let CO_{2} in and O_{2} out; opened and closed by guard cells |",
+        "| Veins (xylem and phloem) | xylem brings water; phloem carries sucrose away |",
+        "## Mineral ions",
+        "- **Nitrate ions** are needed to make amino acids. Deficiency: poor growth and yellow leaves.",
+        "- **Magnesium ions** are needed to make chlorophyll. Deficiency: yellowing between the veins."
+      ],
+      "examples": [
+        {
+          "q": "A leaf from a plant kept in the dark for 48 hours is tested with iodine. It stays orange-brown. Explain why.",
+          "a": "In the dark the plant cannot photosynthesise, so it makes no new glucose.\nIt has used up its stored starch in respiration, so the iodine test is negative."
+        },
+        {
+          "q": "On a graph, the rate of photosynthesis rises with light intensity and then levels off. Suggest why it levels off.",
+          "a": "Another factor, such as carbon dioxide concentration or temperature, has become the limiting factor, so more light does not increase the rate."
+        }
+      ],
+      "questions": [
+        {
+          "type": "mcq",
+          "prompt": "Which gas do leaves take in for photosynthesis?",
+          "options": [
+            "Oxygen",
+            "Nitrogen",
+            "Carbon dioxide",
+            "Water vapour"
+          ],
+          "answer": 2,
+          "explanation": "CO₂ is a raw material for photosynthesis.",
+          "marks": 1,
+          "id": "cb_plants_q1"
+        },
+        {
+          "type": "mcq",
+          "prompt": "In which form do plants store glucose?",
+          "options": [
+            "Glycogen",
+            "Starch",
+            "Cellulose",
+            "Protein"
+          ],
+          "answer": 1,
+          "explanation": "Plants store glucose as insoluble starch. Glycogen is the animal store.",
+          "marks": 1,
+          "id": "cb_plants_q2"
+        },
+        {
+          "type": "short",
+          "prompt": "Which ion is needed to make chlorophyll?",
+          "answer": [
+            "magnesium",
+            "magnesium ion",
+            "magnesium ions",
+            "mg",
+            "mg2+"
+          ],
+          "explanation": "Without magnesium, leaves turn yellow between the veins.",
+          "marks": 1,
+          "id": "cb_plants_q3"
+        },
+        {
+          "type": "tf",
+          "prompt": "Photosynthesis produces oxygen as a by-product.",
+          "answer": true,
+          "explanation": "Oxygen is released and diffuses out through the stomata.",
+          "marks": 1,
+          "id": "cb_plants_q4"
+        },
+        {
+          "type": "mcq",
+          "prompt": "Which cells open and close the stomata?",
+          "options": [
+            "Palisade cells",
+            "Xylem cells",
+            "Root hair cells",
+            "Guard cells"
+          ],
+          "answer": 3,
+          "explanation": "A pair of guard cells surrounds each stoma.",
+          "marks": 1,
+          "id": "cb_plants_q5"
+        },
+        {
+          "type": "mcq",
+          "prompt": "Why is glucose stored as starch?",
+          "options": [
+            "Starch dissolves easily in water",
+            "Starch releases oxygen",
+            "Starch is sweeter",
+            "Starch is insoluble, so it does not affect osmosis"
+          ],
+          "answer": 3,
+          "explanation": "Insoluble starch does not draw water into cells by osmosis.",
+          "marks": 1,
+          "id": "cb_plants_q6"
+        },
+        {
+          "type": "structured",
+          "prompt": "Describe how you would show that light is needed for photosynthesis, using a destarched potted plant and iodine solution.",
+          "markScheme": "Destarch the plant by keeping it in the dark for 48 hours  [1]\nCover part of a leaf with black paper or foil, then leave the plant in light for several hours  [1]\nTest the leaf for starch: boil it in water, then in ethanol to remove chlorophyll, then add iodine  [1]\nOnly the uncovered part turns blue-black, showing starch was made only where light reached  [1]",
+          "marks": 4,
+          "id": "cb_plants_q7"
+        }
+      ]
+    },
+    {
+      "id": "cb_human",
+      "title": "Human Nutrition",
+      "estMinutes": 45,
+      "term": 2,
+      "summary": "A balanced diet, the digestive system, digestive enzymes and absorption.",
+      "notes": [
+        "## A balanced diet",
+        "A **balanced diet** contains all the nutrients in the correct proportions:",
+        "| Nutrient | Main use | Good sources |",
+        "|---|---|---|",
+        "| Carbohydrates | energy | sadza, bread, rice |",
+        "| Fats | energy store, insulation | cooking oil, butter, nuts |",
+        "| Proteins | growth and repair | beans, meat, fish, eggs |",
+        "| Vitamin C | healthy skin and gums (lack causes scurvy) | oranges, guavas |",
+        "| Vitamin D | absorbing calcium (lack causes rickets) | fish oils, sunlight on the skin |",
+        "| Calcium | bones and teeth | milk, kapenta |",
+        "| Iron | making haemoglobin (lack causes anaemia) | red meat, leafy greens |",
+        "| Fibre | keeps food moving through the gut | vegetables, whole grains |",
+        "## The digestive system",
+        "[[mouth → oesophagus → stomach → small intestine → large intestine → anus]]",
+        "Associated organs: salivary glands, liver (makes bile), gall bladder (stores bile) and pancreas.",
+        "## Digestion",
+        "- **Mechanical digestion** breaks food into smaller pieces (teeth, churning in the stomach) without changing the molecules.",
+        "- **Chemical digestion** uses enzymes to break large insoluble molecules into small soluble ones.",
+        "| Enzyme | Substrate → product | Made in |",
+        "|---|---|---|",
+        "| Amylase | starch → maltose | salivary glands, pancreas |",
+        "| Protease (pepsin, trypsin) | proteins → amino acids | stomach, pancreas |",
+        "| Lipase | fats → fatty acids + glycerol | pancreas |",
+        "**Bile** is alkaline. It neutralises stomach acid and **emulsifies** fats into small droplets, giving lipase a larger surface area to act on.",
+        "## Absorption",
+        "Most absorption happens in the **ileum**. Its **villi** and microvilli give a very large surface area, with thin walls and a rich blood supply."
+      ],
+      "examples": [
+        {
+          "q": "Explain why bile is important even though it contains no enzymes.",
+          "a": "Bile emulsifies fats into small droplets, which increases the surface area for lipase to act on.\nIt is also alkaline, so it neutralises stomach acid and gives the right pH for enzymes in the small intestine."
+        },
+        {
+          "q": "A child has soft, bent leg bones. Suggest which nutrient is lacking.",
+          "a": "Vitamin D (or calcium). This is rickets: without vitamin D, calcium is not absorbed properly, so the bones are weak."
+        }
+      ],
+      "questions": [
+        {
+          "type": "mcq",
+          "prompt": "Which enzyme breaks down starch?",
+          "options": [
+            "Pepsin",
+            "Lipase",
+            "Amylase",
+            "Trypsin"
+          ],
+          "answer": 2,
+          "explanation": "Amylase digests starch to maltose.",
+          "marks": 1,
+          "id": "cb_human_q1"
+        },
+        {
+          "type": "mcq",
+          "prompt": "Where does most absorption of digested food take place?",
+          "options": [
+            "Oesophagus",
+            "Large intestine",
+            "Ileum (small intestine)",
+            "Stomach"
+          ],
+          "answer": 2,
+          "explanation": "The villi of the ileum give a huge surface area.",
+          "marks": 1,
+          "id": "cb_human_q2"
+        },
+        {
+          "type": "short",
+          "prompt": "Which deficiency disease is caused by a lack of vitamin C?",
+          "answer": [
+            "scurvy"
+          ],
+          "explanation": "Scurvy causes bleeding gums and poor wound healing.",
+          "marks": 1,
+          "id": "cb_human_q3"
+        },
+        {
+          "type": "tf",
+          "prompt": "Bile contains enzymes that digest fat.",
+          "answer": false,
+          "explanation": "Bile has no enzymes. It emulsifies fat so that lipase can work faster.",
+          "marks": 1,
+          "id": "cb_human_q4"
+        },
+        {
+          "type": "mcq",
+          "prompt": "What are the products of fat digestion?",
+          "options": [
+            "Amino acids",
+            "Glucose",
+            "Maltose",
+            "Fatty acids and glycerol"
+          ],
+          "answer": 3,
+          "explanation": "Lipase breaks fats into fatty acids and glycerol.",
+          "marks": 1,
+          "id": "cb_human_q5"
+        },
+        {
+          "type": "mcq",
+          "prompt": "Which nutrient is mainly used for growth and repair?",
+          "options": [
+            "Fat",
+            "Fibre",
+            "Carbohydrate",
+            "Protein"
+          ],
+          "answer": 3,
+          "explanation": "Proteins provide amino acids for building new cells.",
+          "marks": 1,
+          "id": "cb_human_q6"
+        },
+        {
+          "type": "structured",
+          "prompt": "Describe three ways in which the villi of the small intestine are adapted for absorption.",
+          "markScheme": "Any three of:\n• large surface area, with microvilli  [1]\n• thin walls, one cell thick, so a short diffusion distance  [1]\n• a good blood supply that keeps the concentration gradient steep  [1]\n• a lacteal to absorb fatty acids and glycerol  [1]\n(Maximum 3 marks)",
+          "marks": 3,
+          "id": "cb_human_q7"
+        }
+      ]
+    }
+  ],
+  "papers": [
+    {
+      "id": "syl_cie_biology_0610_p1",
+      "title": "Paper 1 Mock: short answers",
+      "durationMin": 30,
+      "instructions": "Answer all questions. Calculators may be used unless stated otherwise.",
+      "questionIds": [
+        "cb_living_q1",
+        "cb_living_q2",
+        "cb_living_q3",
+        "cb_cells_q1",
+        "cb_cells_q2",
+        "cb_cells_q3",
+        "cb_transport_q1",
+        "cb_transport_q2",
+        "cb_transport_q3",
+        "cb_enzymes_q1",
+        "cb_enzymes_q2",
+        "cb_enzymes_q3",
+        "cb_plants_q1",
+        "cb_plants_q2",
+        "cb_plants_q3",
+        "cb_human_q1",
+        "cb_human_q2",
+        "cb_human_q3"
+      ]
+    },
+    {
+      "id": "syl_cie_biology_0610_p2",
+      "title": "Paper 2 Mock: structured questions",
+      "durationMin": 45,
+      "instructions": "Answer all questions. Show your working. After submitting you will mark your answers against the marking scheme.",
+      "questionIds": [
+        "cb_living_q6",
+        "cb_cells_q7",
+        "cb_transport_q7",
+        "cb_enzymes_q7",
+        "cb_plants_q7",
+        "cb_human_q7"
+      ]
+    },
+    {
+      "id": "syl_cie_biology_0610_p3",
+      "title": "Full mock examination",
+      "durationMin": 60,
+      "instructions": "A mixed paper across the whole syllabus. Answer all questions.",
+      "questionIds": [
+        "cb_living_q4",
+        "cb_living_q5",
+        "cb_living_q6",
+        "cb_cells_q4",
+        "cb_cells_q5",
+        "cb_cells_q7",
+        "cb_transport_q4",
+        "cb_transport_q5",
+        "cb_transport_q7",
+        "cb_enzymes_q4",
+        "cb_enzymes_q5",
+        "cb_enzymes_q7",
+        "cb_plants_q4",
+        "cb_plants_q5",
+        "cb_plants_q7",
+        "cb_human_q4",
+        "cb_human_q5",
+        "cb_human_q7"
+      ]
+    }
+  ]
+}

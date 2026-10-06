@@ -16,7 +16,7 @@
     sections.push(["sync", "Offline & sync", "refresh"]);
     if (admin) sections.push(["people", "People", "users"], ["devices", "Devices", "phone"]);
     if (me.role === "teacher" && A.edition !== "teacher") sections.push(["integrity", "Exam integrity", "shield"]);
-    if (admin && A.Cloud) sections.push(["ai", "AI marking", "bulb"]);
+    if (admin && A.edition !== "teacher" && A.AI) sections.push(["ai", "AI marking", "bulb"]); // online, or through the school hub
     if (admin) sections.push(["data", "Backup & data", "database"]);
     if (A.Updates) sections.push(["updates", "App updates", "download"]);
     sections.push(["account", me.role === "student" || A.Cloud ? "My password" : "My PIN", "lock"]);
@@ -337,6 +337,7 @@
       '<form data-submit="people-search" class="row"><input class="input sm" name="q" value="' + esc(q.q || "") + '" placeholder="Search name or ID" style="width:220px" aria-label="Search people"><button class="btn btn-sm" type="submit">' + I("search") + "</button></form>" +
       (A.Cloud ? (role === "student" ? '<button class="btn btn-primary" data-act="cloud-add-student">' + I("plus") + "Add student</button>" : '<button class="btn btn-primary" data-act="teacher-add">' + I("plus") + "Add teacher</button>") :
         '<button class="btn btn-primary" data-act="person-edit" data-role="' + role + '">' + I("plus") + "Add " + role + "</button>") + "</div>";
+    if (!A.Cloud && A.School && role === "student") html += A.School.peopleHtml(me);
     if (A.Cloud) {
       html += A.pwRequestsHtml ? A.pwRequestsHtml(me) : "";
       users.sort(function (a, b) { return (a.status === "pending" ? 0 : 1) - (b.status === "pending" ? 0 : 1); });
@@ -580,18 +581,19 @@
      numbers, algebra, short answers). With AI marking on, written explanations and essays are
      marked too, against the marking scheme, by Claude. It needs an Anthropic API key (paid per use). */
   SECTIONS.ai = function () {
-    var on = !!(S().get("settings", "ai") || {}).enabled;
+    var on = !!(S().get("settings", "ai") || {}).enabled, hub = A.AI.where() !== "cloud";
     return {
       html: '<div class="card card-pad" style="max-width:760px"><h3>AI marking for written answers</h3>' +
         '<p class="muted small mt-sm">The app already marks multiple choice, numbers, algebra and short answers. Written explanations and essays are left for students to mark with the scheme. ' +
         'With AI marking on, those answers are also marked against the marking scheme by Claude (Anthropic), with a line of feedback on each. Students can still change any mark.</p>' +
         '<ul class="small mt"><li>Students\' answers, the questions and the marking scheme are sent to Anthropic to be marked. Names are not sent.</li>' +
         '<li>It needs an Anthropic API key, billed by Anthropic per use: roughly US$0.05–0.30 per paper, depending on how much is written.</li>' +
-        '<li>Each person can have up to 40 marking requests a day.</li></ul>' +
+        '<li>Each person can have up to 40 marking requests a day.</li>' +
+        (hub ? "<li>It runs through the <b>school hub</b>: the key is kept on the hub computer, never on students' devices, and marking works on any device connected to the hub (Settings → Offline &amp; sync). Save the key on the hub computer itself.</li>" : "") + "</ul>" +
         '<div id="ai-status" class="callout mt">' + I("refresh") + "<div>Checking…</div></div>" +
         '<label class="check mt"><input type="checkbox" id="ai-on"' + (on ? " checked" : "") + '> <b>Mark written answers with AI</b></label>' +
         '<form data-submit="ai-key" class="mt"><label class="field"><span>Anthropic API key</span><div class="pw-wrap"><input class="input" type="password" name="key" autocomplete="off" placeholder="sk-ant-…"><button type="button" class="btn btn-ghost btn-icon btn-sm" data-act="pw-toggle" aria-label="Show key">' + I("eye") + "</button></div>" +
-        '<span class="hint">Create one at console.anthropic.com → API keys. It is stored online where only the marking service can read it; the app never shows it again.</span></label>' +
+        '<span class="hint">Create one at console.anthropic.com → API keys. ' + (hub ? "It is stored on the school hub computer, where only the marking service reads it" : "It is stored online where only the marking service can read it") + '; the app never shows it again.</span></label>' +
         '<div class="row wrap mt-sm"><button class="btn btn-primary" type="submit">' + I("key") + 'Save key</button><button class="btn btn-ghost" type="button" data-act="ai-key-clear">Remove the key</button></div></form></div>',
       mount: function () {
         var box = document.getElementById("ai-status");
@@ -599,13 +601,13 @@
           S().put("settings", Object.assign({}, S().get("settings", "ai") || { id: "ai" }, { id: "ai", enabled: this.checked }));
           UI.toast(this.checked ? "AI marking is on" : "AI marking is off");
         });
-        A.Cloud.admin("ai-status").then(function (st) {
+        A.AI.status().then(function (st) {
           if (!box) return;
           box.className = "callout mt" + (st.configured ? "" : " warn");
           box.innerHTML = I(st.configured ? "checkCircle" : "alert") + "<div>" + (st.configured
             ? "<b>A key is saved</b> (ending " + esc(st.hint || "") + "). Last 30 days: " + st.month.requests + " marking request" + (st.month.requests === 1 ? "" : "s") +
               ", " + Math.round((st.month.input_tokens + st.month.output_tokens) / 1000) + "k tokens."
-            : "<b>No key yet.</b> Save an Anthropic API key below, then tick the box.") + "</div>";
+            : "<b>No key yet.</b> " + (st.canSetKey === false ? "Open School Assist on the hub computer and save the key there, then tick the box." : "Save an Anthropic API key below, then tick the box.")) + "</div>";
         }).catch(function (e) { if (box) box.innerHTML = I("wifiOff") + "<div>" + esc(e.message || String(e)) + "</div>"; });
       },
     };
@@ -613,13 +615,13 @@
   A.act["ai-key"] = function (form) {
     var key = form.key.value.trim();
     if (!key) { UI.toast("Paste the key first", "bad"); return; }
-    A.Cloud.admin("ai-key", { key: key }).then(function () { form.key.value = ""; UI.toast("Key saved"); A.render(); })
+    A.AI.saveKey(key).then(function () { form.key.value = ""; UI.toast("Key saved"); A.render(); })
       .catch(function (e) { UI.toast(e.message || String(e), "bad"); });
   };
   A.act["ai-key-clear"] = function () {
     UI.confirm("Remove the AI key? AI marking stops until a new key is saved.", { danger: true, ok: "Remove" }).then(function (ok) {
       if (!ok) return;
-      A.Cloud.admin("ai-key", { key: "" }).then(function () { UI.toast("Key removed"); A.render(); }).catch(function (e) { UI.toast(e.message || String(e), "bad"); });
+      A.AI.saveKey("").then(function () { UI.toast("Key removed"); A.render(); }).catch(function (e) { UI.toast(e.message || String(e), "bad"); });
     });
   };
 
