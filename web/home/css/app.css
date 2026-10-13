@@ -580,6 +580,50 @@ a.topic-row:hover { background: var(--surface-2); text-decoration: none; }
 .login-brand ul { list-style: none; padding: 0; margin: 28px 0 0; position: relative; z-index: 1; }
 .login-brand li { display: flex; gap: 12px; align-items: center; margin: 12px 0; opacity: .95; }
 .login-brand li .i { color: var(--accent); }
+/* the set-up page (js/setup.js): a page of its own, before any school is on this device */
+.setup-page { min-height: 100vh; background: var(--bg); color: var(--text); display: flex; flex-direction: column; }
+.setup-top { display: flex; align-items: center; gap: 12px; padding: 18px 28px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.setup-top .setup-mark { width: 36px; height: 36px; }
+.setup-top b { display: block; font-size: 16px; }
+.setup-top span { display: block; font-size: 12px; color: var(--text-3); }
+.setup-main { flex: 1; padding: 32px 20px 48px; display: flex; flex-direction: column; align-items: center; }
+.setup-card { width: 100%; max-width: 760px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 32px 36px; }
+.setup-card h1 { font-size: 26px; font-weight: 800; letter-spacing: -.01em; margin: 0 0 6px; }
+.setup-card > p.muted, .setup-card form > p.muted { max-width: 640px; }
+.setup-steps { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 0; margin: 0 0 26px; font-size: 13px; color: var(--text-3); }
+.setup-steps li { display: flex; align-items: center; gap: 8px; }
+.setup-steps li span { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-3, var(--bg)); font-weight: 700; font-size: 12px; }
+.setup-steps li span .i { width: 14px; height: 14px; }
+.setup-steps li.on { color: var(--text); font-weight: 600; }
+.setup-steps li.on span { background: var(--brand); color: var(--on-brand); }
+.setup-steps li.done span { background: var(--good-soft); color: var(--good-text); }
+.setup-logo { display: flex; gap: 18px; align-items: center; }
+.setup-logo .logo { width: 88px; height: 88px; flex: none; }
+.setup-logo .logo img, .setup-logo .logo svg { width: 100%; height: 100%; object-fit: contain; }
+.setup-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 26px; flex-wrap: wrap; }
+.setup-actions .btn .i:last-child:not(:first-child) { margin-left: 6px; margin-right: 0; }
+.setup-links { margin-top: 18px; font-size: 14px; color: var(--text-2); text-align: center; }
+.setup-links .sep { display: inline-block; width: 1px; height: 14px; background: var(--border-strong); margin: 0 12px; vertical-align: middle; }
+.setup-links .link, .share-opt .link { background: none; border: 0; padding: 0; color: var(--brand-text); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
+.setup-connect { max-width: 520px; text-align: center; }
+.setup-connect .logo { width: 104px; height: 104px; margin: 0 auto 14px; }
+.setup-connect .logo img { width: 100%; height: 100%; object-fit: contain; }
+.setup-spin { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--border); border-top-color: var(--brand); margin: 16px auto 0; animation: su-spin 1s linear infinite; }
+@keyframes su-spin { to { transform: rotate(360deg); } }
+.setup-swatch-preview { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 10px; font-size: 13px; }
+.setup-swatch-preview i { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+.share-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.share-opt { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.share-opt h3 { margin: 0; font-size: 15px; }
+.share-opt p { flex: 1; margin: 0; }
+.share-opt .btn { align-self: flex-start; }
+.share-ico { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: var(--brand-softer); color: var(--brand-text); }
+@media (max-width: 640px) { .setup-card { padding: 22px 18px; } .setup-top { padding: 14px 16px; } }
+.login-about { margin-top: 24px; max-width: 540px; }
+.login-about h3 { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; opacity: .72; margin: 0 0 6px; }
+.login-about p { margin: 0; font-size: 15px; line-height: 1.55; opacity: .95; }
+.login-about ol { margin: 4px 0 0; padding-left: 20px; font-size: 15px; line-height: 1.5; }
+.login-about li { display: list-item; margin: 4px 0; }
 .login-panel { display: flex; align-items: center; justify-content: center; padding: 40px; background: var(--bg); }
 .login-box { width: 100%; max-width: 440px; }
 .role-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 22px; }
@@ -639,6 +683,7 @@ a.topic-row:hover { background: var(--surface-2); text-decoration: none; }
 .callout .i { color: var(--brand-text); margin-top: 1px; }
 .callout.warn { background: var(--warn-soft); border-color: transparent; }
 .callout.warn .i { color: var(--warn-text); }
+.licence-bar { margin-bottom: 16px; align-items: center; }
 .swatches { display: flex; gap: 10px; flex-wrap: wrap; }
 .swatch { border: 2px solid var(--border); border-radius: 12px; padding: 6px; cursor: pointer; background: var(--surface); display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--text-2); width: 92px; }
 .swatch .pair { display: flex; width: 100%; height: 30px; border-radius: 8px; overflow: hidden; }

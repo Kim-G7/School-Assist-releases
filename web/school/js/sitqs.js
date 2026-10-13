@@ -318,7 +318,7 @@
   /* ------------------------------------------------------------ AI marking (optional)
      Written answers the app can't check are sent to cloud/functions/mark with their question and
      scheme row; each comes back with a mark and a line of feedback. The student can still change it. */
-  M.aiMarking = function () { return !!(A.AI && A.AI.where() && (S().get("settings", "ai") || {}).enabled); }; // online, or through the school hub
+  M.aiMarking = function () { return !!(A.AI && A.AI.where() && (S().get("settings", "ai") || {}).enabled && (!A.Licence || A.Licence.has("ai-marking"))); }; // online, or through the school hub; a Premium feature
   function answerText(u, a) {
     if (Array.isArray(a) && u.boxes && u.boxes.length) return u.boxes.map(function (b, k) { return a[k] && String(a[k]).trim() ? (b.label ? b.label.replace(/___/g, "…") + ": " : "") + a[k] + (b.unit ? " " + b.unit : "") : ""; }).filter(Boolean).join("\n");
     return Array.isArray(a) ? a.join("\n") : String(a || "");

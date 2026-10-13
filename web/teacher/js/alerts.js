@@ -15,7 +15,7 @@
     return S().filter("alerts", function (a) { return a.teacherId === tid; }).sort(function (a, b) { return b.createdAt - a.createdAt; });
   };
   Al.unread = function (tid) { return Al.mine(tid).filter(function (a) { return !a.readAt; }).length; };
-  Al.href = function (a) { return a.kind === "register" || a.kind === "password" ? "#/t/settings?s=people" : a.attemptId ? "#/t/attempt/" + a.attemptId : a.taskId ? "#/t/task/" + a.taskId : "#/t/home"; };
+  Al.href = function (a) { return a.kind === "feature" ? "#/t/settings?s=licence" : a.kind === "register" || a.kind === "password" ? "#/t/settings?s=people" : a.attemptId ? "#/t/attempt/" + a.attemptId : a.taskId ? "#/t/task/" + a.taskId : "#/t/home"; };
 
   Al.check = function () {
     var me = M.me();
@@ -69,7 +69,7 @@
     el.className = "alert-pop " + (TONE[a.kind] || "");
     el.setAttribute("role", "alert");
     el.innerHTML = '<div class="alert-ico">' + I(ICON[a.kind] || "bell") + '</div><div class="grow"><b>' + esc(a.title) + '</b><p>' + esc(a.body) + "</p>" +
-      '<div class="row mt-sm"><a class="btn btn-sm btn-primary" href="' + Al.href(a) + '" data-alert-open="' + a.id + '">' + (a.kind === "copy" ? "Review the paper" : a.kind === "due" ? "See who is missing" : a.kind === "register" ? "Approve or decline" : "Start marking") + "</a>" +
+      '<div class="row mt-sm"><a class="btn btn-sm btn-primary" href="' + Al.href(a) + '" data-alert-open="' + a.id + '">' + (a.kind === "copy" ? "Review the paper" : a.kind === "due" ? "See who is missing" : a.kind === "register" ? "Approve or decline" : a.kind === "feature" ? "See your plan" : "Start marking") + "</a>" +
       '<button type="button" class="btn btn-sm btn-ghost" data-alert-dismiss="' + a.id + '">Dismiss</button></div></div>' +
       '<button type="button" class="btn btn-ghost btn-icon btn-sm" data-alert-dismiss="' + a.id + '" aria-label="Close">' + I("x") + "</button>";
     root.appendChild(el);

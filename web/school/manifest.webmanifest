@@ -1,6 +1,6 @@
 {
-  "name": "School Classroom",
-  "short_name": "Classroom",
+  "name": "School Assist",
+  "short_name": "School Assist",
   "description": "Registers, tasks, syllabus notes and exam practice for teachers and students. Works offline.",
   "start_url": "./",
   "scope": "./",

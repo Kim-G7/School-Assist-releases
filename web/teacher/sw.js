@@ -1,11 +1,11 @@
 /* Service worker: keeps the whole app available offline once it has been opened.
    Bump VERSION whenever you change any file so devices pick up the update. */
-var VERSION = "classroom-v21-teacher-mux5lo01";
+var VERSION = "classroom-v22-teacher-mv76bp0c";
 var FILES = [
   "./", "index.html", "school.config.js", "manifest.webmanifest", "css/app.css", "assets/icon.svg",
   "fonts/inter-latin-400-normal.woff2", "fonts/inter-latin-500-normal.woff2", "fonts/inter-latin-600-normal.woff2", "fonts/inter-latin-700-normal.woff2",
   "js/util.js", "js/theme.js", "js/store.js", "js/cloud.js", "js/model.js", "js/ui.js", "js/seed-syllabi.js", "js/seed.js", "js/app.js", "js/screen.js",
-  "js/devices.js", "js/alerts.js", "js/timetable.js", "js/materials.js", "js/papers.js", "js/pdfview.js", "js/paperscan.js", "js/sitpaper.js", "js/marker.js", "js/pad.js", "js/sitqs.js", "js/subjects.js", "js/notescan.js", "js/tutor.js", "js/sylread.js", "js/tutoradmin.js", "js/primary.js", "vendor/pdfjs/pdf.min.js", "vendor/pdfjs/pdf.worker.min.js", "js/teacher.js", "js/student.js", "js/exam.js", "js/syllabus.js", "js/staff.js", "js/school.js", "js/updates.js", "js/settings.js", "js/sync.js",
+  "js/devices.js", "js/alerts.js", "js/timetable.js", "js/materials.js", "js/papers.js", "js/pdfview.js", "js/paperscan.js", "js/sitpaper.js", "js/marker.js", "js/pad.js", "js/sitqs.js", "js/subjects.js", "js/notescan.js", "js/tutor.js", "js/sylread.js", "js/tutoradmin.js", "js/primary.js", "vendor/pdfjs/pdf.min.js", "vendor/pdfjs/pdf.worker.min.js", "js/teacher.js", "js/student.js", "js/exam.js", "js/syllabus.js", "js/staff.js", "js/school.js", "js/licence-key.js", "js/licence.js", "js/setup.js", "js/updates.js", "js/settings.js", "js/sync.js",
 ];
 
 self.addEventListener("install", function (e) {

@@ -31,6 +31,17 @@ window.SCHOOL_CONFIG = {
   // "light" | "dark" | "system". Each user can still switch in the app.
   defaultTheme: "light",
 
+  /* Who sells and supports School Assist: shown in Settings → Plan & licence. Add a phone or email. */
+  company: { name: "Golden Technologies", phone: "", email: "" },
+
+  /* Renewals of schools' keys (scripts/licence.cjs renew --publish): an admin's computer online picks up a
+     school's renewal from here by itself, so a payment never needs a new key. */
+  licenceFeed: "https://raw.githubusercontent.com/Kim-G7/School-Assist-releases/main/licences/",
+
+  /* true: a new install opens on the demo school (Greenfield High), for a computer that shows the app.
+     Otherwise it opens on the set-up page; "Open the demo school" is there too. */
+  demo: false,
+
   academicYear: "2026",
   term: "Term 3",
   terms: ["Term 1", "Term 2", "Term 3"],

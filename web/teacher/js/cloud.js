@@ -2,7 +2,9 @@
    student IDs (HOME-001, HOME-002, ...), admin approval, sync and library files.
    On only in the home edition when school.config.js → home.cloud has a url and a key.
    The app still works offline; this only adds sign-in and the online copy of the data.
-   Server side: cloud/migrations (tables, sync rules) and cloud/functions (register, setup-admin, admin). */
+   Server side: cloud/migrations (tables, sync rules) and cloud/functions (register, setup-admin, admin).
+   One database holds many schools: school.config.js → home.cloud.school names this app's school
+   (default "home"); the server keeps every school's rows, people, numbers and files apart (migration 008). */
 (function (A) {
   "use strict";
   var CFG = window.SCHOOL_CONFIG || {};
@@ -10,6 +12,7 @@
   if (!C || !C.url || !C.key) { A.Cloud = null; return; }
 
   var SKEY = "sca-cloud-session";
+  var SCHOOL = String(C.school || "home").toLowerCase(); // which school's data this copy of the app belongs to
   var EMAIL_DOMAIN = "students.home-study.invalid"; // students sign in with an ID; this address is never emailed
   var session = read();
   var refreshing = null;
@@ -73,8 +76,13 @@
     }).then(asJson);
   }
 
+  /** Library files sit in one folder per school; Home's stay where they always were (the bucket's root). */
+  function filePath(id) { return (SCHOOL === "home" ? "" : SCHOOL + "/") + encodeURIComponent(id); }
+
   var Cloud = (A.Cloud = {
     url: C.url,
+    /** The school id this app belongs to ("home", "ghs", ...). */
+    school: SCHOOL,
     session: function () { return session; },
     profile: function () { return session && session.profile; },
     emailFor: function (studentNo) { return String(studentNo).trim().toLowerCase() + "@" + EMAIL_DOMAIN; },
@@ -96,7 +104,7 @@
       if (s) fetch(C.url + "/auth/v1/logout", { method: "POST", headers: { apikey: C.key, Authorization: "Bearer " + s.access_token } }).catch(function () {});
     },
     register: function (name, level, password, subjects) {
-      return net(fetch(C.url + "/functions/v1/register", { method: "POST", headers: headers(null, { "Content-Type": "application/json" }), body: JSON.stringify({ name: name, level: level, password: password, subjects: subjects || [] }) })).then(asJson);
+      return net(fetch(C.url + "/functions/v1/register", { method: "POST", headers: headers(null, { "Content-Type": "application/json" }), body: JSON.stringify({ name: name, level: level, password: password, subjects: subjects || [], school: SCHOOL }) })).then(asJson);
     },
     /** A teacher or admin registers with the school's staff code (cloud/functions/register-staff). */
     registerStaff: function (f) {
@@ -104,10 +112,10 @@
     },
     /** The subjects on offer, for registering (no sign-in needed). */
     subjects: function () {
-      return net(fetch(C.url + "/rest/v1/rpc/public_subjects", { method: "POST", headers: headers(null, { "Content-Type": "application/json" }), body: "{}" })).then(asJson);
+      return net(fetch(C.url + "/rest/v1/rpc/public_subjects", { method: "POST", headers: headers(null, { "Content-Type": "application/json" }), body: SCHOOL === "home" ? "{}" : JSON.stringify({ p_school: SCHOOL }) })).then(asJson);
     },
     setupAdmin: function (f) {
-      return net(fetch(C.url + "/functions/v1/setup-admin", { method: "POST", headers: headers(null, { "Content-Type": "application/json" }), body: JSON.stringify(f) })).then(asJson);
+      return net(fetch(C.url + "/functions/v1/setup-admin", { method: "POST", headers: headers(null, { "Content-Type": "application/json" }), body: JSON.stringify(Object.assign({ school: SCHOOL }, f)) })).then(asJson);
     },
     rpc: function (fn, args) { return call("/rest/v1/rpc/" + fn, args || {}); },
     admin: function (action, body) { return call("/functions/v1/admin", Object.assign({ action: action }, body || {})); },
@@ -134,7 +142,7 @@
     /** Library files: PDFs, videos and pictures, up to 50 MB each on the free plan. */
     upload: function (f) {
       return fresh().then(function (as) {
-        return fetch(C.url + "/storage/v1/object/library/" + encodeURIComponent(f.id), {
+        return fetch(C.url + "/storage/v1/object/library/" + filePath(f.id), {
           method: "POST", body: f.blob, headers: headers(as, { "Content-Type": f.type || "application/octet-stream" }),
         });
       }).then(function (r) {
@@ -148,7 +156,7 @@
     },
     download: function (id) {
       return fresh().then(function (as) {
-        return fetch(C.url + "/storage/v1/object/authenticated/library/" + encodeURIComponent(id), { headers: headers(as) });
+        return fetch(C.url + "/storage/v1/object/authenticated/library/" + filePath(id), { headers: headers(as) });
       }).then(function (r) { return r.ok ? r.blob() : null; });
     },
   });

@@ -60,11 +60,18 @@
       name: o.name || base.name || "Our School",
       shortName: o.shortName || base.shortName || o.name || base.name || "School",
       motto: o.motto != null ? o.motto : base.motto || "",
+      // shown on the sign-in screen under the motto
+      vision: o.vision != null ? o.vision : base.vision || "",
+      mission: o.mission != null ? o.mission : base.mission || "",
+      aims: o.aims != null ? o.aims : base.aims || "",
       logo: o.logo != null && o.logo !== "" ? o.logo : base.logo || "",
       primary: o.primary || colors.primary || "#1D4E89",
       secondary: o.secondary || colors.secondary || "#E8A317",
     };
   };
+
+  /** Black or white text, whichever reads better on this colour. */
+  Theme.readableOn = function (hex) { return readableOn(hex); };
 
   Theme.mode = function () {
     var m; try { m = localStorage.getItem(THEME_KEY); } catch (e) { m = null; }
@@ -116,7 +123,60 @@
     if (meta) meta.setAttribute("content", v["--brand-side"]);
     var fav = document.querySelector('link[rel="icon"]');
     if (fav) fav.setAttribute("href", b.logo || "data:image/svg+xml;charset=utf-8," + encodeURIComponent(Theme.crestSVG(b)));
+    var touch = document.querySelector('link[rel="apple-touch-icon"]'), ai = A.edition !== "home" && A.Store && A.Store.state && A.Store.get("settings", "appicon");
+    if (touch && ai && ai.png) touch.setAttribute("href", ai.png); // iPad and iPhone: Add to Home Screen
+    Theme.queueAppIcon();
   };
+
+  /* --------------------------------------------------------------- the app's own icon
+     The school's logo (or, with no logo, its crest) becomes the app's icon, so the app looks like the
+     school's own:
+       - the desktop app's window, taskbar, desktop and Start-menu icons (electron/main.cjs → brand:set),
+         on every school computer, because the branding reaches them all by sync;
+       - the icon and name a tablet or phone gets when it adds the app from the school hub to its home
+         screen: an admin's device draws it into the settings record "appicon", which the hub serves as
+         school-icon.png and in manifest.webmanifest (server.cjs).
+     Home (home study) keeps the School Assist icon. */
+  function sigOf(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36) + s.length.toString(36); }
+  /** The logo or crest drawn on a transparent square, as a PNG data URL. */
+  Theme.iconPNG = function (size) {
+    var b = Theme.get();
+    var src = b.logo || "data:image/svg+xml;charset=utf-8," + encodeURIComponent(Theme.crestSVG(b).replace("<svg ", '<svg width="200" height="216" '));
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.onload = function () {
+        var c = document.createElement("canvas"), x = c.getContext("2d"), box = size * 0.94;
+        c.width = c.height = size;
+        var w = img.naturalWidth || box, h = img.naturalHeight || box, k = Math.min(box / w, box / h);
+        x.imageSmoothingQuality = "high";
+        x.drawImage(img, (size - w * k) / 2, (size - h * k) / 2, w * k, h * k);
+        try { resolve(c.toDataURL("image/png")); } catch (e) { reject(e); }
+      };
+      img.onerror = function () { reject(new Error("The logo could not be drawn")); };
+      img.src = src;
+    });
+  };
+  var iconTimer = null, iconBusy = false, ICON_KEY = "sca-appicon";
+  Theme.queueAppIcon = function () { clearTimeout(iconTimer); iconTimer = setTimeout(syncAppIcon, 1500); };
+  function syncAppIcon() {
+    if (A.edition === "home" || iconBusy || !A.Store || !A.Store.state) return;
+    var b = Theme.get(), sig = sigOf((b.logo || Theme.crestSVG(b)) + "|" + b.name + "|" + b.shortName), jobs = [], done;
+    var d = window.desktop;
+    try { done = localStorage.getItem(ICON_KEY); } catch (e) { done = null; }
+    if (d && d.brand && done !== sig) {
+      jobs.push(Theme.iconPNG(256).then(function (png) { return d.brand.set({ png: png, name: b.name }); })
+        .then(function () { try { localStorage.setItem(ICON_KEY, sig); } catch (e) { /* private mode */ } }));
+    }
+    var me = A.M && A.M.me && A.M.me(), rec = A.Store.get("settings", "appicon");
+    if (me && me.isAdmin && (!rec || rec.sig !== sig)) {
+      jobs.push(Theme.iconPNG(512).then(function (png) {
+        A.Store.put("settings", { id: "appicon", sig: sig, png: png, name: b.name, shortName: b.shortName, color: b.primary });
+      }));
+    }
+    if (!jobs.length) return;
+    iconBusy = true;
+    Promise.all(jobs).catch(function (e) { console.warn("[app icon]", e && e.message); }).then(function () { iconBusy = false; });
+  }
 
   /** Apply colours without saving (live preview in Settings → Branding). */
   Theme.preview = function (b) {

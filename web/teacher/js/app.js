@@ -44,6 +44,9 @@
       A.loginNotice = "An administrator signed this device out of " + me.name + "'s account.";
       M.signOut(); me = null;
     }
+    // a new install: the set-up page; a copy for a school (its school file, or opened from the hub): joining it
+    var stage = A.SchoolId ? A.SchoolId.stage(me) : "ready";
+    if (stage !== "ready") { lastPath = "setup"; app.innerHTML = A.SchoolId.page(stage); A.SchoolId.mount(stage); return; }
     if (A.Screen) A.Screen.paint();
     if (!me) { lastPath = "login"; app.innerHTML = Login.html(); return; }
     if (A.Devices) A.Devices.heartbeat(me);
@@ -182,6 +185,7 @@
       : '<a class="btn btn-ghost btn-icon bell" href="#/s/notifications" data-tip="Notifications" aria-label="Notifications">' + I("bell") + '<span class="bell-n' + (bellN ? "" : " hidden") + '" id="bell-count">' + bellN + "</span></a>";
     var crumbs = (view.crumbs || []).map(function (c) { return c.href ? '<a href="' + c.href + '">' + esc(c.label) + "</a>" : "<span>" + esc(c.label) + "</span>"; }).join(I("right"));
 
+    if (me.isAdmin) A.Theme.queueAppIcon(); // the school's logo as the app's icon (js/theme.js)
     return '<div class="shell">' +
       '<aside class="sidebar">' +
       '<div class="side-brand">' + A.Theme.logoHTML() + '<div class="brand-text"><div class="brand-name">' + esc(b.name) + '</div><div class="brand-motto">' + esc(b.motto) + "</div></div></div>" +
@@ -195,7 +199,7 @@
       '<button class="btn btn-ghost btn-icon mobile-only-signout" data-act="signout" data-tip="Sign out" aria-label="Sign out">' + I("logout") + "</button>" +
       (A.Screen ? A.Screen.controls() : "") +
       "</div></header>" +
-      '<main class="content" id="view">' + (view.html || "") + "</main></div>" +
+      '<main class="content" id="view">' + (A.Licence ? A.Licence.banner(me) : "") + (view.html || "") + "</main></div>" +
       '<nav class="bottom-nav" aria-label="Main">' + bottom + "</nav></div>";
   }
 
@@ -255,11 +259,17 @@
   }
 
   var Login = {
+    about: function (b) {
+      var aims = String(b.aims || "").split(/\n+/).map(function (x) { return x.replace(/^\s*([-•*]|\d+[.)])\s*/, "").trim(); }).filter(Boolean);
+      return (b.vision ? '<div class="login-about"><h3>Our vision</h3><p>' + esc(b.vision) + "</p></div>" : "") +
+        (b.mission ? '<div class="login-about"><h3>Our mission</h3><p>' + esc(b.mission) + "</p></div>" : "") +
+        (aims.length ? '<div class="login-about"><h3>Our aims</h3><ol>' + aims.map(function (a) { return "<li>" + esc(a) + "</li>"; }).join("") + "</ol></div>" : "");
+    },
     html: function () {
       var b = A.Theme.get();
+      // the school's own page: its logo, name and motto, then its vision, mission and aims (Settings → School branding)
       var left = '<section class="login-brand"><div style="position:relative;z-index:1">' + A.Theme.logoHTML() +
-        "<h1>" + esc(b.name) + '</h1><p class="motto">' + esc(b.motto) + "</p>" +
-        (A.edition === "teacher" ? "<ul><li>" + I("check") + "The morning register in a few taps</li><li>" + I("edit") + "Mark book and termly reports for the whole class</li><li>" + I("book") + "Schemes of work and the record of work</li><li>" + I("tablet") + "A class screen for the projector or TV</li><li>" + I("wifiOff") + "Works with no internet; pupils' records stay in the school</li>" : "<ul><li>" + I("users") + "Teachers: registers, tasks, marks and progress tracking</li><li>" + I("book") + "Students: notes, worked examples and practice questions</li><li>" + I("clock") + "Exam mode: timed papers with instant feedback</li><li>" + I("wifiOff") + "Works offline, then syncs when you are back online</li>") + "</ul></div>" +
+        "<h1>" + esc(b.name) + '</h1><p class="motto">' + esc(b.motto) + "</p>" + Login.about(b) + "</div>" +
         '<p class="small" style="position:relative;z-index:1;opacity:.8">' + esc((CFG.academicYear || "") + " · " + (CFG.term || "")) + "</p></section>";
       var notice = A.loginNotice ? '<div class="callout warn mb">' + I("shield") + "<div>" + esc(A.loginNotice) + "</div></div>" : "";
       var ctl = A.Screen ? '<div class="scr-float">' + A.Screen.controls() + "</div>" : "";
@@ -270,6 +280,7 @@
       var back = '<button class="btn btn-ghost btn-sm" data-act="login-back">' + I("back") + "Back</button>";
       var msg = L.msg ? '<p class="form-msg" role="alert">' + I("alert") + esc(L.msg) + "</p>" : "";
       if (A.Cloud) { var online = Login.cloudStep(back, msg); if (online != null) return online; }
+      if (A.SchoolId) { var su = A.SchoolId.loginStep(L, back, msg); if (su != null) return su; } // set up a new school, or join the hub
       if (A.edition === "teacher" && A.Primary) { var pt = A.Primary.loginStep(L, back, msg); if (pt != null) return pt; }
       // students registering themselves, and "forgot your password?": the same steps as online (js/school.js does the work)
       if (!A.Cloud && A.School && /^(register|regboard|regsubjects|registered|forgotask|asked)$/.test(L.step)) { var off = Login.cloudStep(back, msg); if (off != null) return off; }
@@ -284,10 +295,10 @@
           '<button class="btn btn-primary btn-lg btn-block mt" data-act="login-goto" data-step="role">Back to sign in</button>';
       }
       if (L.step === "role") {
-        return '<h2 style="font-size:26px">Welcome</h2><p class="muted mt-sm">Who is using this device?</p>' + lastUserCard() +
+        return '<h2 style="font-size:26px">Welcome</h2>' + (A.SchoolId ? A.SchoolId.welcomeCard() : "") + '<p class="muted mt-sm">Who is using this device?</p>' + lastUserCard() +
           '<div class="role-cards">' +
-          '<button class="role-card" data-act="login-role" data-role="teacher"><div class="ico">' + I("school") + "</div><b>I'm a teacher</b><span>Classes, registers, tasks and marks</span></button>" +
-          '<button class="role-card" data-act="login-role" data-role="student"><div class="ico">' + I("cap") + "</div><b>I'm a student</b><span>Sign in with your student ID</span></button>" +
+          '<button class="role-card" data-act="login-role" data-role="teacher"><div class="ico">' + I("school") + "</div><b>I'm a teacher</b><span>Sign in with your name and PIN</span></button>" +
+          '<button class="role-card" data-act="login-role" data-role="student"><div class="ico">' + I("cap") + "</div><b>I'm a student</b><span>Sign in, or create an account</span></button>" +
           "</div>";
       }
       if (L.step === "who") {
@@ -514,6 +525,7 @@
   A.act["login-goto"] = function (el) { L.step = el.getAttribute("data-step"); L.msg = ""; redrawLogin(); };
   A.act["login-back"] = function () {
     L.msg = ""; L.pin = "";
+    if (L.step === "newschool" || L.step === "joinhub") { L.step = A.edition === "teacher" && A.Primary && A.Primary.needsSetup() ? "tsetup" : A.edition === "teacher" ? "who" : "role"; redrawLogin(); return; }
     L.step = L.step === "pin" ? "who" : L.step === "setpw" ? "setup" : L.step === "setup" || L.step === "register" ? "student" : L.step === "setupAdmin" ? "admin"
       : L.step === "forgot" ? (L.role === "teacher" ? "admin" : "student") : L.step === "forgotcode" || L.step === "forgotask" ? "forgot"
       : L.step === "staffreg" ? "who" : L.step === "cloudstaffreg" ? "admin" : L.step === "staffcode" ? (A.Cloud ? "admin" : "who")
@@ -860,6 +872,8 @@
     // ask the browser to keep offline data even when the device is short of space
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
     A.Store.init().then(function () {
+      if (A.SchoolId) { A.SchoolId.migrate(); return A.SchoolId.boot(); }
+    }).then(function () {
       A.Theme.apply();
       if (A.Sync) A.Sync.init();
       if (A.Alerts) A.Alerts.start();

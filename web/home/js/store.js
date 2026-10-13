@@ -243,7 +243,7 @@
       Store.state = Store.empty();
       Store.state.meta.deviceId = A.uid("dev");
       if (branding) Store.state.colls.settings.branding = branding;
-      return Promise.resolve(A.Seed ? A.Seed.run(Store) : null).then(function () {
+      return Promise.resolve(A.Seed ? A.Seed.run(Store, { demo: true }) : null).then(function () {
         Store.state.meta.seededAt = Date.now();
         return Store.flush();
       }).then(function () { Store.emit("change", "*"); });

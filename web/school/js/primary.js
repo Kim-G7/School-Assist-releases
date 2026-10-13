@@ -129,7 +129,7 @@
       '<label class="field"><span>Your class</span><select class="select" name="level">' + opt(st.levels, "Grade 4") + "</select></label>" +
       '<label class="field"><span>Stream</span><input class="input" name="stream" value="Blue" placeholder="e.g. Blue, A, Lion"></label></div>' +
       '<label class="check mt"><input type="checkbox" name="sample" checked> Add 30 sample pupils with a week of registers and some marks, to try it out (remove them later with one button)</label>' +
-      msg + '<button class="btn btn-primary btn-lg btn-block mt" type="submit">' + I("check") + "Set up and sign in</button></form>";
+      msg + '<button class="btn btn-primary btn-lg btn-block mt" type="submit">' + I("check") + "Set up and sign in</button></form>" + (A.SchoolId ? A.SchoolId.joinLink() : "");
   };
   A.act.tsetup = function (form) {
     var f = UI.formData(form), err = "";
@@ -141,6 +141,7 @@
     var now = Date.now(), b = S().get("settings", "branding") || { id: "branding" };
     S().put("settings", Object.assign({}, b, { name: f.school.trim(), shortName: f.school.trim().replace(/\s+(primary|junior)?\s*school$/i, "") || f.school.trim() }));
     var me = S().put("users", { id: A.uid("t"), role: "teacher", name: f.name.trim(), title: "Teacher", isAdmin: true, pin: f.pin, subjects: "Class teacher" });
+    if (A.SchoolId) S().put("settings", { id: "school", schoolId: A.SchoolId.newId(), name: f.school.trim(), abbr: M.schoolAbbr(f.school.trim()), createdBy: me.id });
     var c = S().put("classes", { id: A.uid("cls"), homeroom: true, name: M.homeClassName(f.level, f.stream.trim()), level: f.level, stream: f.stream.trim() || null,
       subject: "Class", teacherId: me.id, studentIds: [], syllabusId: null, createdAt: now });
     if (f.sample) samplePupils(c, me);
@@ -151,6 +152,14 @@
     location.hash = "#/t/home";
     A.render();
   };
+  /** The set-up page (js/setup.js): the first teacher's own class, and sample pupils to try it with. */
+  P.setupClass = function (me, level, stream, sample) {
+    var c = S().put("classes", { id: A.uid("cls"), homeroom: true, name: M.homeClassName(level, stream || ""), level: level, stream: stream || null,
+      subject: "Class", teacherId: me.id, studentIds: [], syllabusId: null });
+    if (sample) samplePupils(c, me);
+    return c;
+  };
+  P.LEVELS = LEVELS;
   A.act["pclass-new"] = function () { classModal(null); };
   function classModal(c) {
     var me = M.me(), st = M.structure(), teachers = S().filter("users", function (u) { return u.role === "teacher"; });

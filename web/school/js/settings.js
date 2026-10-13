@@ -17,6 +17,8 @@
     if (admin) sections.push(["people", "People", "users"], ["devices", "Devices", "phone"]);
     if (me.role === "teacher" && A.edition !== "teacher") sections.push(["integrity", "Exam integrity", "shield"]);
     if (admin && A.edition !== "teacher" && A.AI) sections.push(["ai", "AI marking", "bulb"]); // online, or through the school hub
+    if (admin && A.Licence && A.Licence.applies()) sections.push(["licence", "Plan & licence", "key"]);
+    if (admin && A.SchoolId && A.SchoolId.applies() && A.SchoolId.id()) sections.push(["share", "Share the app", "download"]);
     if (admin) sections.push(["data", "Backup & data", "database"]);
     if (A.Updates) sections.push(["updates", "App updates", "download"]);
     sections.push(["account", me.role === "student" || A.Cloud ? "My password" : "My PIN", "lock"]);
@@ -31,6 +33,8 @@
   SECTIONS.updates = function () { return A.Updates.section(); };
   SECTIONS.subjects = function (me) { return A.mySubjectsSection(me); };
   SECTIONS.primary = function (me) { return A.Primary.settingsSection(me); };
+  SECTIONS.licence = function (me) { return A.Licence.section(me); };
+  SECTIONS.share = function () { return A.SchoolId.shareSection(); };
 
   /* ------------------------------------------------------------ appearance */
   SECTIONS.appearance = function (me) {
@@ -73,10 +77,13 @@
       '<h3>School identity</h3><div class="form-grid mt">' +
       '<label class="field full"><span>School name</span><input class="input" name="name" value="' + esc(b.name) + '"></label>' +
       '<label class="field"><span>Short name <span class="muted">(used when space is tight)</span></span><input class="input" name="shortName" value="' + esc(b.shortName) + '"></label>' +
-      '<label class="field"><span>Motto</span><input class="input" name="motto" value="' + esc(b.motto) + '"></label></div>' +
+      '<label class="field"><span>Motto</span><input class="input" name="motto" value="' + esc(b.motto) + '"></label>' +
+      '<label class="field full"><span>Vision <span class="muted">(on the sign-in screen)</span></span><textarea class="textarea" name="vision" rows="2">' + esc(b.vision) + "</textarea></label>" +
+      '<label class="field full"><span>Mission</span><textarea class="textarea" name="mission" rows="2">' + esc(b.mission) + "</textarea></label>" +
+      '<label class="field full"><span>Aims <span class="muted">(one per line)</span></span><textarea class="textarea" name="aims" rows="3">' + esc(b.aims) + "</textarea></label></div>" +
       '<div class="divider"></div><h3>Logo / crest</h3><div class="row wrap mt"><div id="brand-logo" style="width:84px;height:84px">' + A.Theme.logoHTML() + "</div>" +
       '<div class="grow"><label class="btn">' + I("upload") + 'Upload logo<input type="file" accept="image/*" id="brand-logo-in" hidden></label> <button type="button" class="btn btn-ghost" id="brand-logo-clear">Remove uploaded logo</button>' +
-      '<p class="tiny muted mt-sm">PNG or SVG with a transparent background works best, square, under 500 KB. With no logo, the app draws a crest from your initials and colours.</p></div></div>' +
+      '<p class="tiny muted mt-sm">PNG or SVG with a transparent background works best, square, under 500 KB. With no logo, the app draws a crest from your initials and colours. The logo (or crest) is also the app icon on the school computers, and on tablets and phones that add the app from the school hub.</p></div></div>' +
       '<input type="hidden" name="logo" value="' + esc(saved && saved.logo != null ? saved.logo : "") + '">' +
       '<div class="divider"></div><h3>Colours</h3><p class="muted small mt-sm">Pick a preset or your school\'s exact colours. Text colours adjust automatically so everything stays readable.</p>' +
       '<div class="swatches mt">' + A.Theme.presets.map(function (p) {
@@ -98,7 +105,7 @@
       mount: function (root) {
         var form = root.querySelector("#brand-form");
         var val = function (n) { return form.querySelector("[name=" + n + "]").value; };
-        var current = function () { return { name: val("name").trim(), shortName: val("shortName").trim(), motto: val("motto"), logo: val("logo"), primary: val("primary"), secondary: val("secondary") }; };
+        var current = function () { return { name: val("name").trim(), shortName: val("shortName").trim(), motto: val("motto"), vision: val("vision").trim(), mission: val("mission").trim(), aims: val("aims").trim(), logo: val("logo"), primary: val("primary"), secondary: val("secondary") }; };
         var valid = function (h) { return /^#[0-9a-f]{6}$/i.test(h); };
         var refresh = function () {
           var c = current();
@@ -581,6 +588,7 @@
      numbers, algebra, short answers). With AI marking on, written explanations and essays are
      marked too, against the marking scheme, by Claude. It needs an Anthropic API key (paid per use). */
   SECTIONS.ai = function () {
+    if (A.Licence && !A.Licence.has("ai-marking")) return { html: A.Licence.lockedHtml("ai-marking") }; // Premium only
     var on = !!(S().get("settings", "ai") || {}).enabled, hub = A.AI.where() !== "cloud";
     return {
       html: '<div class="card card-pad" style="max-width:760px"><h3>AI marking for written answers</h3>' +
@@ -634,8 +642,7 @@
       '<div class="divider"></div><h3>Restore or merge</h3><p class="muted small mt-sm"><b>Merge</b> adds newer records from the file and keeps everything else. <b>Replace</b> makes this device an exact copy of the backup.</p>' +
       '<div class="row wrap mt"><label class="btn">' + I("upload") + 'Merge a backup<input type="file" accept=".json" data-change="restore" data-mode="merge" hidden></label><label class="btn btn-danger">' + I("upload") + 'Replace from backup<input type="file" accept=".json" data-change="restore" data-mode="replace" hidden></label></div></div>' +
       '<div class="card card-pad"><h3>On this device</h3><dl class="kv mt">' + counts.map(function (c) { return "<dt>" + esc(c[0]) + "</dt><dd>" + c[1] + "</dd>"; }).join("") + '<dt>Files</dt><dd id="file-count">…</dd></dl>' +
-      '<div class="divider"></div><h3>Demo data</h3><p class="muted small mt-sm">The app ships with a demo school so you can try every feature. When you are ready for real use, start empty: branding and your own account are kept.</p>' +
-      '<div class="row wrap mt"><button class="btn" data-act="reset-demo">' + I("refresh") + 'Reset demo data</button><button class="btn btn-danger" data-act="start-empty">' + I("trash") + "Start empty</button></div></div></div>";
+      demoCard() + "</div></div>";
     return {
       html: html,
       mount: function (root) {
@@ -645,6 +652,26 @@
         });
       },
     };
+  };
+  /** The demo school: try it, rebuild it, or set the real school up. A real school's device: which school, and leaving it. */
+  function demoCard() {
+    var Id = A.SchoolId, rec = Id && Id.record();
+    if (Id && Id.applies() && rec) {
+      return '<div class="divider"></div><h3>The school on this device</h3><p class="muted small mt-sm">This device belongs to <b>' + esc(rec.name || A.Theme.get().name) + "</b>. Its records come from, and go to, the school hub; a hub of another school turns it away.</p>" +
+        '<button class="btn btn-danger mt" data-act="leave-school">' + I("logout") + "Remove the school from this device</button>";
+    }
+    return '<div class="divider"></div><h3>Demo data</h3><p class="muted small mt-sm">The app ships with a demo school so you can try every feature. It never goes to a school hub. When you are ready for real use, set your school up (on the hub computer), or join the school hub (on every other computer).</p>' +
+      '<div class="row wrap mt"><button class="btn" data-act="reset-demo">' + I("refresh") + 'Reset demo data</button>' +
+      (Id && Id.applies() ? '<button class="btn btn-primary" data-act="su-leave-demo">' + I("school") + "Set up my school</button>"
+        : '<button class="btn btn-danger" data-act="start-empty">' + I("trash") + "Start empty</button>") + "</div>";
+  }
+  A.act["leave-school"] = function () {
+    UI.confirm("Remove " + (A.SchoolId.record().name || "the school") + " from this device? Its records here are deleted (the school hub keeps them), the demo school comes back, and the device stops syncing until it joins a hub again.", { danger: true, ok: "Remove" }).then(function (ok) {
+      if (!ok) return;
+      A.Sync.setConfig({ url: "", auto: false });
+      A.act.signout();
+      S().reset().then(function () { if (A.LastUser) A.LastUser.forget(); A.Theme.apply(); UI.toast("The school was removed from this device"); A.render(); });
+    });
   };
   A.act.backup = function () {
     var withFiles = document.getElementById("bk-files").checked;

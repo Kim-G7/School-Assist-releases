@@ -63,7 +63,7 @@
   var School = (A.School = {});
   /** The next student ID: the letters the school's IDs already use (else its initials), the year and a number (GHS-26-118). */
   School.nextId = function () {
-    var seen = {}, letters = M.schoolAbbr(A.Theme.get().name), most = 0;
+    var seen = {}, letters = A.SchoolId ? A.SchoolId.abbr() : M.schoolAbbr(A.Theme.get().name), most = 0;
     S().filter("users", function (u) { return u.role === "student"; }).forEach(function (u) {
       var m = /^([A-Z]{2,6})-\d{2}-\d{2,4}$/.exec(String(u.studentNo || "")); if (m) seen[m[1]] = (seen[m[1]] || 0) + 1;
     });
@@ -74,8 +74,24 @@
     });
     return prefix + String(top + 1).padStart(3, "0");
   };
+  /** The next student number, from the school hub when it answers (so two devices never give out the same
+      one), else worked out on this device. */
+  School.claimId = function () {
+    var local = School.nextId(), prefix = local.replace(/\d+$/, ""), c = A.Sync ? A.Sync.config() : {};
+    if (!c.url || c.cloud || typeof fetch !== "function") return Promise.resolve(local);
+    var ctl = typeof AbortController === "function" ? new AbortController() : null, t = setTimeout(function () { if (ctl) ctl.abort(); }, 4000);
+    var num = function (no) { return parseInt(String(no).slice(prefix.length), 10) || 0; };
+    return fetch(String(c.url).replace(/\/+$/, "") + "/api/next-id", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prefix: prefix, school: A.SchoolId ? A.SchoolId.id() : null }), signal: ctl ? ctl.signal : undefined })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { clearTimeout(t); return j && j.studentNo && num(j.studentNo) >= num(local) ? j.studentNo : local; })
+      .catch(function () { clearTimeout(t); return local; });
+  };
   School.register = function (name, level, pw, subjectIds) {
-    var now = Date.now(), studentNo = School.nextId();
+    return School.claimId().then(function (studentNo) { return registerAs(name, level, pw, subjectIds, studentNo); });
+  };
+  function registerAs(name, level, pw, subjectIds, studentNo) {
+    var now = Date.now();
     var u = S().put("users", { id: A.uid("s"), role: "student", name: name, level: level, stream: null, studentNo: studentNo, status: "pending", registeredAt: now, selfRegistered: true });
     M.setPassword(u.id, pw, u.id);
     return M.requestSubjects(u.id, subjectIds).then(function () {
@@ -83,7 +99,7 @@
       if (A.Sync) A.Sync.maybe();
       return { studentNo: studentNo, name: name };
     });
-  };
+  }
   School.pending = function () { return S().filter("users", function (u) { return u.role === "student" && u.status === "pending"; }).sort(function (a, b) { return (a.registeredAt || 0) - (b.registeredAt || 0); }); };
   A.act["school-approve"] = function (el) {
     var u = M.user(el.getAttribute("data-id")), yes = el.getAttribute("data-yes") === "1";

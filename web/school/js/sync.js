@@ -1,6 +1,9 @@
 /* Optional sync with the school server (server.cjs). The app never needs it to work:
    everything is saved on the device first, and sync runs whenever a connection exists.
-   Merge rule: newest `updatedAt` wins per record; records have a single owner role. */
+   Merge rule: newest `updatedAt` wins per record; records have a single owner role.
+   Schools: a device sends its school id with every sync. A device with no school yet (the demo, or a new
+   install) sends nothing and, the first time it reaches a hub that has a school, joins it: its own copy is
+   replaced by the school's (js/setup.js). A hub turns away a device of another school (server.cjs). */
 (function (A) {
   "use strict";
   var KEY = "sca-sync";
@@ -67,23 +70,41 @@
       if (c.cloud && !A.Cloud.session()) return Promise.reject(new Error("Sign in online to sync"));
       if (running) return running;
       var S = A.Store, meta = S.state.meta, startedAt = Date.now();
-      var changes = S.changedSince(meta.lastPushAt || 0), sent = 0;
+      // null: this device has no school yet (the demo, or a new install): it only receives
+      var school = !c.cloud && A.SchoolId && A.SchoolId.applies() ? A.SchoolId.id() : undefined;
+      var changes = school === null ? {} : S.changedSince(meta.lastPushAt || 0), sent = 0;
       if (c.cloud) { delete changes.credentials; delete changes.netinfo; } // passwords live in the online sign-in
       Object.keys(changes).forEach(function (k) { sent += changes[k].length; });
       var request = c.cloud
         ? A.Cloud.rpc("sync", { p_since: meta.serverSince || 0, p_changes: changes })
         : fetch(c.url + "/api/sync", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deviceId: A.Devices ? A.Devices.id() : meta.deviceId, since: meta.serverSince || 0, changes: changes }),
+          body: JSON.stringify({ deviceId: A.Devices ? A.Devices.id() : meta.deviceId, since: school === null ? 0 : meta.serverSince || 0, changes: changes,
+            school: school, schoolName: school ? (A.SchoolId.record() || {}).name || A.Theme.get().name : undefined }),
         }).then(function (r) {
-          if (!r.ok) throw new Error("Server replied " + r.status);
-          return r.json();
+          return r.json().catch(function () { return {}; }).then(function (j) {
+            if (!r.ok) throw new Error(j.error || "Server replied " + r.status);
+            return j;
+          });
         });
       running = request.then(function (res) {
+        if (school === null) {
+          // no school here yet: join the hub's school, if it has one
+          meta.lastSyncAt = Date.now();
+          if (!res.school) { state = "ok"; lastError = "This hub has no school yet. Set the school up on the hub computer."; A.refreshStatus(); return { sent: 0, received: 0 }; }
+          return A.SchoolId.adopt(res, startedAt).then(function (n) {
+            state = "ok"; lastError = "";
+            A.Theme.apply(); A.render();
+            if (A.UI) A.UI.toast("This device has joined " + (res.school.name || "the school"));
+            Sync.files(c);
+            return { sent: 0, received: n, joined: true };
+          });
+        }
         var received = 0;
         Object.keys(res.changes || {}).forEach(function (coll) {
           (res.changes[coll] || []).forEach(function (rec) { if (S.merge(coll, rec)) received++; });
         });
+        if (A.SchoolId && A.SchoolId.hubOk) A.SchoolId.hubOk();
         meta.lastPushAt = startedAt;
         meta.serverSince = res.now;
         meta.lastSyncAt = Date.now();
@@ -104,6 +125,8 @@
         if (c.cloud && !e.offline && (/no school assist account/i.test(e.message || "") || !A.Cloud.session()) && A.cloudSignedOut) {
           A.cloudSignedOut("Please sign in again.");
         }
+        // the hub didn't answer at all (not an error reply): maybe its address changed (js/setup.js looks for it)
+        if (!c.cloud && e && e.name === "TypeError" && A.SchoolId && A.SchoolId.lostHub) A.SchoolId.lostHub(c.url);
         if (quiet) { state = "local"; } else { state = "error"; lastError = e.message || String(e); }
         A.refreshStatus();
         throw e;
