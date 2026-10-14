@@ -132,6 +132,8 @@
   Id.mount = function (stage) {
     if (stage === "connect" && !C.busy && !C.timer) Id.connect();
     if (stage === "wizard" && W.step === "hub") hubStatus();
+    if (stage === "wizard" && W.step === "restore" && A.Backup) A.Backup.mountRestore();
+    if (stage === "wizard" && A.Backup) A.Backup.revokedNote(); // this computer was a hub that Golden Technologies signed out
   };
   function redraw() { A.render(); window.scrollTo(0, 0); }
 
@@ -343,6 +345,10 @@
       Id.shareOptions() + msg + codesBox() +
       '<div class="setup-actions"><span></span><button class="btn btn-primary btn-lg" data-act="su-finish">' + I("check") + "Finish</button></div>";
   };
+  STEP.restore = function () {
+    return "<h1>Restore a school from its online backup</h1><p class=\"muted\">For a school whose hub computer was lost, stolen or broke. This computer downloads the school's backup and becomes its hub. " +
+      "You need the school's School Assist key, Golden Technologies' approval (they phone the school to check), and the school's recovery key.</p>" + A.Backup.restoreHtml("setup");
+  };
   STEP.join = function (msg) {
     var d = W.d, eg = "192.168.1.20:8080";
     return "<h1>Join the school hub</h1><p class=\"muted\">For a computer at a school that already uses School Assist. The hub's address is on the hub computer, in Settings → Offline &amp; sync. Easier: use the copy of School Assist your school shares, which joins by itself.</p>" +
@@ -357,6 +363,8 @@
     var msg = W.msg ? '<p class="form-msg" role="alert">' + I("alert") + esc(W.msg) + "</p>" : "";
     var links = W.step === "school" ? '<p class="setup-links">This school already uses School Assist? <button class="link" data-act="su-to" data-step="join">Join the school hub</button>' +
       (desk() && desk().pack ? ' or <button class="link" data-act="su-packfile">open the school file</button>' : "") +
+      // the hub computer was lost, stolen or broke: this computer can become the hub from the online backup (js/backup.js)
+      (desk() && desk().backup && A.Backup ? '<span class="sep"></span>Lost the hub computer? <button class="link" data-act="su-to" data-step="restore">Restore from the online backup</button>' : "") +
       (A.edition === "teacher" ? "" : '<span class="sep"></span>Just looking? <button class="link" data-act="su-demo">Open the demo school</button>') + "</p>" : "";
     return '<div class="setup-card">' + bar + STEP[W.step](msg) + "</div>" + links;
   }

@@ -20,6 +20,7 @@
     if (admin && A.Licence && A.Licence.applies()) sections.push(["licence", "Plan & licence", "key"]);
     if (admin && A.SchoolId && A.SchoolId.applies() && A.SchoolId.id()) sections.push(["share", "Share the app", "download"]);
     if (admin) sections.push(["data", "Backup & data", "database"]);
+    if (admin && A.Backup && A.Backup.applies() && A.SchoolId && A.SchoolId.id()) sections.push(["backup", "Online backup", "upload"]);
     if (A.Updates) sections.push(["updates", "App updates", "download"]);
     sections.push(["account", me.role === "student" || A.Cloud ? "My password" : "My PIN", "lock"]);
     var sec = sections.some(function (s) { return s[0] === q.s; }) ? q.s : sections[0][0];
@@ -35,6 +36,7 @@
   SECTIONS.primary = function (me) { return A.Primary.settingsSection(me); };
   SECTIONS.licence = function (me) { return A.Licence.section(me); };
   SECTIONS.share = function () { return A.SchoolId.shareSection(); };
+  SECTIONS.backup = function (me) { return A.Backup.section(me); };
 
   /* ------------------------------------------------------------ appearance */
   SECTIONS.appearance = function (me) {
