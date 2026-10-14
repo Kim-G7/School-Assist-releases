@@ -86,6 +86,72 @@
     var key = String(no || "").trim().toLowerCase();
     return key ? S().find("users", function (u) { return u.role === "student" && String(u.studentNo || "").toLowerCase() === key; }) : null;
   };
+
+  /* ------------------------------------------------------------ ID numbers
+     Students: school abbreviation, form, number in that form: KHS-FM1-001 (Form 1), KHS-GR4-012 (Grade 4).
+     The number counts the students given an ID in that form, and stays the student's ID when they move up.
+     Staff: KHS-TC1, KHS-TC2 for teachers, KHS-AD1 for admins. The school hub hands numbers out
+     (server.cjs /api/next-id), so two computers never give the same one; without the hub this device counts. */
+  var LEVEL_WORDS = { form: "FM", grade: "GR", year: "YR", standard: "ST", class: "CL", level: "LV" };
+  /** "Form 1" → FM1, "Grade 4" → GR4, "ECD A" → ECDA, "Upper 6" → U6. */
+  M.formCode = function (level) {
+    var s = String(level || "").trim(), m = /^([A-Za-z]+)\s*(\d+)$/.exec(s);
+    if (m && LEVEL_WORDS[m[1].toLowerCase()]) return LEVEL_WORDS[m[1].toLowerCase()] + m[2];
+    var code = s.split(/\s+/).map(function (w) { return /^\d+$/.test(w) ? w : w.length <= 3 ? w.toUpperCase() : w[0].toUpperCase(); }).join("").replace(/[^A-Z0-9]/g, "");
+    return code.slice(0, 5) || "ST";
+  };
+  M.idAbbr = function () { return (A.SchoolId && A.SchoolId.abbr && A.SchoolId.abbr()) || M.schoolAbbr(A.Theme.get().name); };
+  /** What a student's ID starts with in this form: KHS-FM1- */
+  M.studentPrefix = function (level) { return M.idAbbr() + "-" + M.formCode(level) + "-"; };
+  /** What a staff number starts with: KHS-TC (teachers) or KHS-AD (admins). */
+  M.staffPrefix = function (admin) { return M.idAbbr() + "-" + (admin ? "AD" : "TC"); };
+  /** The next number after the ones this device knows: { field: "studentNo" | "staffNo", pad: 3 | 0 }. */
+  M.nextNumber = function (prefix, field, pad) {
+    var top = 0;
+    S().filter("users", function (u) { return String(u[field] || "").indexOf(prefix) === 0; }).forEach(function (u) {
+      var n = parseInt(String(u[field]).slice(prefix.length), 10); if (n > top) top = n;
+    });
+    return prefix + (pad ? String(top + 1).padStart(pad, "0") : String(top + 1));
+  };
+  /** The next number from the school hub when it answers (it remembers what it has handed out), else this device's. */
+  M.claimNumber = function (prefix, field, pad) {
+    var local = M.nextNumber(prefix, field, pad), c = A.Sync ? A.Sync.config() : {};
+    if (!c.url || c.cloud || A.Cloud || typeof fetch !== "function") return Promise.resolve(local);
+    var ctl = typeof AbortController === "function" ? new AbortController() : null, t = setTimeout(function () { if (ctl) ctl.abort(); }, 4000);
+    var num = function (no) { return parseInt(String(no).slice(prefix.length), 10) || 0; };
+    return fetch(String(c.url).replace(/\/+$/, "") + "/api/next-id", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prefix: prefix, field: field, pad: pad, school: A.SchoolId ? A.SchoolId.id() : null }), signal: ctl ? ctl.signal : undefined })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      // a hub older than 1.3.3 only knows the old pattern and refuses: this device counts then
+      .then(function (j) { clearTimeout(t); var no = j && (j.number || j.studentNo); return no && String(no).indexOf(prefix) === 0 && num(no) >= num(local) ? no : local; })
+      .catch(function () { clearTimeout(t); return local; });
+  };
+  M.claimStudentNo = function (level) { return M.claimNumber(M.studentPrefix(level), "studentNo", 3); };
+  M.claimStaffNo = function (admin) { return M.claimNumber(M.staffPrefix(admin), "staffNo", 0); };
+  /** Give one person their staff number. A second call while the first is still asking the hub (approving someone
+      redraws the People list, which numbers anyone without one) waits for it instead of using up another number. */
+  var numbering = {};
+  M.giveStaffNo = function (u) {
+    if (!u || u.staffNo || A.Cloud) return Promise.resolve(u && u.staffNo);
+    if (!numbering[u.id]) {
+      numbering[u.id] = M.claimStaffNo(u.isAdmin).then(function (no) {
+        var cur = S().get("users", u.id);
+        if (cur && !cur.staffNo) S().patch("users", u.id, { staffNo: no });
+        delete numbering[u.id];
+        return (cur && cur.staffNo) || no;
+      }, function (e) { delete numbering[u.id]; throw e; });
+    }
+    return numbering[u.id];
+  };
+  /** Staff without a number yet (teachers from before 1.3.3): given one each, in the order they joined. Admins only. */
+  M.numberStaff = function () {
+    if (A.Cloud) return Promise.resolve(0);
+    var list = S().filter("users", function (u) { return u.role === "teacher" && !u.staffNo && u.status !== "pending"; })
+      .sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
+    return list.reduce(function (p, u) {
+      return p.then(function (n) { return M.giveStaffNo(u).then(function () { return n + 1; }); });
+    }, Promise.resolve(0));
+  };
   M.sameName = function (a, b) {
     var n = function (x) { return String(x || "").toLowerCase().replace(/[^a-z]/g, ""); };
     return !!n(a) && n(a) === n(b);

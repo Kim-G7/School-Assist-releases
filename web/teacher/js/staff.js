@@ -137,8 +137,11 @@
           .then(function () { UI.toast(yes ? u.name + " can sign in now" : u.name + "'s registration was declined"); A.render(); })
           .catch(function (e) { UI.toast(e.message || String(e), "bad"); });
       }
-      if (yes) S().put("users", Object.assign({}, u, { status: "approved", approvedBy: me.id, approvedAt: Date.now() }));
-      else S().remove("users", id);
+      if (yes) {
+        S().put("users", Object.assign({}, u, { status: "approved", approvedBy: me.id, approvedAt: Date.now() }));
+        // approved staff get their number (KHS-TC4, KHS-AD2): only then, so declined registrations leave no gaps
+        if (!u.staffNo) M.giveStaffNo(u).then(function () { A.render(); });
+      } else S().remove("users", id);
       M.alertsDone(id);
       UI.toast(yes ? u.name + " can sign in now" : u.name + "'s registration was declined");
       A.render();

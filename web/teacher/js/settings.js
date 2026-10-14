@@ -338,7 +338,7 @@
   SECTIONS.people = function (me, q) {
     // School Assist Teacher: pupils are looked after in My class, so People is the teachers
     var role = A.edition === "teacher" ? "teacher" : q.r || "student", find = (q.q || "").toLowerCase();
-    var users = S().filter("users", function (u) { return u.role === role && (!find || (u.name + " " + (u.studentNo || "")).toLowerCase().indexOf(find) >= 0); })
+    var users = S().filter("users", function (u) { return u.role === role && (!find || (u.name + " " + (u.studentNo || "") + " " + (u.staffNo || "")).toLowerCase().indexOf(find) >= 0); })
       .sort(function (a, b) { return role === "student" ? M.levelIndex(a.level) - M.levelIndex(b.level) || M.streamIndex(a.stream) - M.streamIndex(b.stream) || a.name.localeCompare(b.name) : a.name.localeCompare(b.name); });
     var html = '<div class="row spread wrap mb">' + (A.edition === "teacher" ? '<p class="muted small" style="max-width:520px">The teachers who sign in on this device or the school hub. Pupils are added in <a href="#/t/pupils">My class</a>.</p><div class="hidden">' : '<div class="pill-tabs" style="margin:0">') + '<button class="' + (role === "student" ? "on" : "") + '" data-act="goto" data-href="#/t/settings?s=people&r=student">Students</button><button class="' + (role === "teacher" ? "on" : "") + '" data-act="goto" data-href="#/t/settings?s=people&r=teacher">Teachers</button></div>' +
       '<form data-submit="people-search" class="row"><input class="input sm" name="q" value="' + esc(q.q || "") + '" placeholder="Search name or ID" style="width:220px" aria-label="Search people"><button class="btn btn-sm" type="submit">' + I("search") + "</button></form>" +
@@ -360,7 +360,7 @@
     } else if (role === "student") {
       html += '<div class="callout mb">' + I("key") + '<div class="small">Students create their own password the first time they sign in. If a device is lost or stolen, look up the password here or reset it, then sign that device out under <b>Devices</b> so nobody can change the student\'s work.</div></div>';
     }
-    html += '<div class="card table-wrap"><table class="table"><thead><tr><th>Name</th>' + (role === "student" ? "<th>Student ID</th><th>Class</th><th>" + (A.Cloud ? "Status" : "Password") + "</th><th>Devices</th>" : "<th>Subjects</th><th>" + (A.Cloud ? "Sign-in" : "PIN") + "</th><th>Devices</th>") + "<th>Subject classes</th><th></th></tr></thead><tbody>" +
+    html += '<div class="card table-wrap"><table class="table"><thead><tr><th>Name</th>' + (role === "student" ? "<th>Student ID</th><th>Class</th><th>" + (A.Cloud ? "Status" : "Password") + "</th><th>Devices</th>" : (A.Cloud ? "" : "<th>Staff no.</th>") + "<th>Subjects</th><th>" + (A.Cloud ? "Sign-in" : "PIN") + "</th><th>Devices</th>") + "<th>Subject classes</th><th></th></tr></thead><tbody>" +
       users.map(function (u) {
         var cls = role === "student" ? M.classesForStudent(u.id) : M.classesForTeacher(u.id), dev = A.Devices.summary(u.id);
         var devCell = '<button class="btn btn-sm btn-ghost" data-act="person-devices" data-id="' + u.id + '">' + I(dev.phones ? "phone" : "laptop") + dev.count + (dev.phones ? ' <span class="badge warn">' + dev.phones + " phone" + (dev.phones > 1 ? "s" : "") + "</span>" : "") + "</button>";
@@ -377,14 +377,18 @@
             : '<span class="badge warn" data-tip="The student sets a password the first time they sign in">Not set yet</span>';
         }
         return '<tr><td><div class="row">' + A.avatar(u, "sm") + "<b>" + esc(u.name) + "</b>" + (u.isAdmin ? ' <span class="badge accent">Admin</span>' : "") + (u.example ? ' <span class="badge brand">Example</span>' : "") + "</div></td>" +
-          (role === "student" ? '<td class="small"><code>' + esc(u.studentNo || "") + '</code></td><td class="small">' + esc(M.studentHome(u)) + "</td><td>" + pw + "</td>" : '<td class="small">' + esc(A.Cloud && !u.isAdmin ? cls.map(function (c) { return c.subject; }).join(", ") || "No subjects yet" : u.subjects || "") + "</td><td>" + (A.Cloud ? '<span class="small muted">Email and password</span>' : '<code class="pw-mask" data-pw="' + esc(u.pin || "") + '">••••</code><button class="btn btn-ghost btn-icon btn-sm" data-act="reveal-pw" aria-label="Show PIN">' + I("eye") + "</button>") + "</td>") +
+          (role === "student" ? '<td class="small"><code>' + esc(u.studentNo || "") + '</code></td><td class="small">' + esc(M.studentHome(u)) + "</td><td>" + pw + "</td>" : (A.Cloud ? "" : '<td class="small"><code>' + esc(u.staffNo || "") + "</code></td>") + '<td class="small">' + esc(A.Cloud && !u.isAdmin ? cls.map(function (c) { return c.subject; }).join(", ") || "No subjects yet" : u.subjects || "") + "</td><td>" + (A.Cloud ? '<span class="small muted">Email and password</span>' : '<code class="pw-mask" data-pw="' + esc(u.pin || "") + '">••••</code><button class="btn btn-ghost btn-icon btn-sm" data-act="reveal-pw" aria-label="Show PIN">' + I("eye") + "</button>") + "</td>") +
           "<td>" + devCell + '</td><td class="small muted">' + cls.map(function (c) { return esc(c.subject); }).join(", ") + '</td><td class="num">' +
           (A.Cloud && role === "teacher" && !u.isAdmin
             ? '<div class="row" style="justify-content:flex-end;gap:6px"><button class="btn btn-sm" data-act="teacher-subjects" data-id="' + u.id + '">' + I("layers") + 'Subjects</button><button class="btn btn-sm btn-ghost" data-act="teacher-reset" data-id="' + u.id + '">' + I("key") + 'New password</button><button class="btn btn-sm btn-ghost" data-act="teacher-remove" data-id="' + u.id + '" aria-label="Remove ' + esc(u.name) + '">' + I("trash") + "</button></div>"
             : '<button class="btn btn-sm" data-act="person-edit" data-id="' + u.id + '">' + I("edit") + "Edit</button>") + "</td></tr>";
       }).join("") + "</tbody></table></div>";
     if (!users.length) html += '<div class="card mt">' + UI.empty("users", "Nobody matches") + "</div>";
-    return role === "teacher" ? { html: html, mount: function () { if (A.mountStaffCodes) A.mountStaffCodes(); } } : html;
+    // staff from before 1.3.3 get their number (KHS-TC1, KHS-AD1) the first time an admin opens this list
+    return role === "teacher" ? { html: html, mount: function () {
+      if (A.mountStaffCodes) A.mountStaffCodes();
+      if (me.isAdmin && !A.Cloud) M.numberStaff().then(function (n) { if (n && /s=people/.test(location.hash)) A.render(); });
+    } } : html;
   };
   A.act["people-search"] = function (form) { location.hash = "#/t/settings?s=people&r=" + (/r=teacher/.test(location.hash) ? "teacher" : "student") + "&q=" + encodeURIComponent(form.q.value.trim()); };
   A.act["reveal-pw"] = function (el) {
@@ -398,16 +402,23 @@
     var isNew = !u.id, me = M.me(), cr = u.id && M.credential(u.id);
     UI.modal({
       title: isNew ? "Add " + u.role : "Edit " + u.name,
+      onMount: function (el) {
+        // a new student's suggested ID follows the form chosen
+        var f = el.querySelector("#person-form");
+        if (isNew && f && f.studentNo && f.level) f.level.addEventListener("change", function () { f.studentNo.placeholder = M.nextNumber(M.studentPrefix(f.level.value), "studentNo", 3); });
+      },
       body: '<form id="person-form" class="form-grid"><label class="field full"><span>Full name</span><input class="input" name="name" value="' + esc(u.name) + '"></label>' +
         (u.role === "student"
-          ? '<label class="field"><span>Student ID</span><input class="input" name="studentNo" value="' + esc(u.studentNo || "") + '"></label>' +
+          ? '<label class="field"><span>Student ID</span><input class="input" name="studentNo" value="' + esc(u.studentNo || "") + '"' + (isNew ? ' placeholder="' + esc(M.nextNumber(M.studentPrefix(u.level), "studentNo", 3)) + '"' : "") + ">" +
+              (isNew ? '<span class="hint">Leave it empty for the next number in the form.</span>' : "") + "</label>" +
             '<label class="field"><span>' + esc(st.levelLabel) + '</span><select class="select" name="level">' + st.levels.map(function (l) { return "<option" + (l === u.level ? " selected" : "") + ">" + esc(l) + "</option>"; }).join("") + "</select></label>" +
             '<label class="field"><span>Class</span><select class="select" name="stream">' + st.streams.map(function (x) { return "<option" + (x === u.stream ? " selected" : "") + ">" + esc(x) + "</option>"; }).join("") + "</select></label>" +
             (A.Cloud ? '<div class="field full"><span class="label">Password</span><div class="row wrap"><button type="button" class="btn btn-sm" data-act="cloud-reset" data-id="' + u.id + '">' + I("refresh") + 'Give a new password</button></div><span class="hint">You get a new password to pass on. Their old one stops working.</span></div>'
               : isNew ? '<p class="field small muted">The student creates a password the first time they sign in.</p>'
               : '<div class="field full"><span class="label">Password</span><div class="row wrap">' + (cr && cr.password ? '<code class="pw-mask" data-pw="' + esc(cr.password) + '">••••••••</code><button type="button" class="btn btn-sm btn-ghost" data-act="reveal-pw">' + I("eye") + "</button>" : '<span class="badge warn">Not set yet</span>') +
                 '<button type="button" class="btn btn-sm" data-act="reset-pw" data-id="' + u.id + '">' + I("refresh") + 'Reset password</button></div><span class="hint">Resetting makes the student create a new password next time (they must enter their name and student ID).</span></div>')
-          : '<label class="field"><span>Subjects</span><input class="input" name="subjects" value="' + esc(u.subjects || "") + '"></label><label class="field"><span>Title</span><input class="input" name="title" value="' + esc(u.title || "") + '" placeholder="e.g. Head of Science"></label>' +
+          : (u.staffNo ? '<div class="field"><span class="label">Staff number</span><code style="font-size:16px">' + esc(u.staffNo) + "</code></div>" : "") +
+            '<label class="field"><span>Subjects</span><input class="input" name="subjects" value="' + esc(u.subjects || "") + '"></label><label class="field"><span>Title</span><input class="input" name="title" value="' + esc(u.title || "") + '" placeholder="e.g. Head of Science"></label>' +
             // hidden like a password (others may see the screen); the eye shows it when the admin needs to pass it on
             (A.Cloud ? "" : '<label class="field"><span>Sign-in PIN (4 digits)</span><div class="pw-wrap"><input class="input" type="password" name="pin" inputmode="numeric" maxlength="4" autocomplete="off" value="' + esc(u.pin || "") + '"><button type="button" class="btn btn-ghost btn-icon btn-sm" data-act="pw-toggle" aria-label="Show password">' + I("eye") + "</button></div></label>") +
             '<label class="check full"><input type="checkbox" name="isAdmin"' + (u.isAdmin ? " checked" : "") + ">Admin: can change branding, classes and streams, the timetable, people, devices and backups</label>") +
@@ -425,17 +436,23 @@
           var f = UI.formData(m.querySelector("#person-form"));
           if (!f.name.trim()) { UI.toast("Enter a name", "bad"); return false; }
           var rec = Object.assign({}, u, { name: f.name.trim() });
+          var save = function (msg) { S().put("users", rec); UI.toast(msg || "Saved"); A.render(); };
           if (u.role === "student") {
-            if (!f.studentNo.trim()) { UI.toast("Enter the student ID", "bad"); return false; }
-            var clash = M.studentById(f.studentNo);
+            var typed = f.studentNo.trim();
+            if (!typed && !isNew) { UI.toast("Enter the student ID", "bad"); return false; }
+            var clash = typed && M.studentById(typed);
             if (clash && clash.id !== u.id) { UI.toast("That student ID belongs to " + clash.name, "bad"); return false; }
-            rec.studentNo = f.studentNo.trim(); rec.level = f.level; rec.stream = f.stream;
+            rec.level = f.level; rec.stream = f.stream;
+            // empty for a new student: the next number in their form (KHS-FM1-004), from the school hub
+            if (!typed) return M.claimStudentNo(f.level).then(function (no) { rec.studentNo = no; save(rec.name + "'s student ID is " + no); });
+            rec.studentNo = typed;
           } else {
             if (!A.Cloud && !/^\d{4}$/.test(f.pin)) { UI.toast("The PIN must be 4 digits", "bad"); return false; }
             if (!A.Cloud) rec.pin = f.pin;
             rec.subjects = f.subjects; rec.title = f.title; rec.isAdmin = !!f.isAdmin; if (u.id === me.id) rec.isAdmin = true;
+            if (isNew && !A.Cloud) return M.claimStaffNo(rec.isAdmin).then(function (no) { rec.staffNo = no; save(rec.name + "'s staff number is " + no); });
           }
-          S().put("users", rec); UI.toast("Saved"); A.render();
+          save();
         },
       }]),
     });

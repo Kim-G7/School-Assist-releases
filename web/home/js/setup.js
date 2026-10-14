@@ -81,7 +81,7 @@
       S().put("settings", Object.assign({}, old, { id: "branding", name: o.name, shortName: o.shortName || o.name, motto: o.motto || "",
         vision: o.vision || "", mission: o.mission || "", aims: o.aims || "", logo: o.logo || old.logo || "" },
         o.primary ? { primary: o.primary, secondary: o.secondary || o.primary } : {}));
-      var admin = S().put("users", { id: A.uid("t"), role: "teacher", isAdmin: true, name: o.admin, title: o.title || "Admin",
+      var admin = S().put("users", { id: A.uid("t"), role: "teacher", isAdmin: true, staffNo: o.abbr + "-AD1", name: o.admin, title: o.title || "Admin",
         subjects: A.edition === "teacher" ? (o.cls ? "Class teacher" : "") : "All subjects", pin: o.pin });
       S().put("settings", { id: "school", schoolId: newId(), name: o.name, abbr: o.abbr, createdBy: admin.id });
       S().put("settings", { id: "staffcodes", prefix: o.abbr, admin: M.makeStaffCode(o.abbr), teacher: M.makeStaffCode(o.abbr), madeAt: Date.now() });
@@ -301,7 +301,7 @@
       '<div class="form-grid mt">' +
       field("School name", "name", d.name, { full: true, ph: teacher ? "e.g. Sunrise Primary School" : "e.g. Kopje High School", attrs: 'autocomplete="organization"' }) +
       field("Short name", "short", d.short, { ph: teacher ? "e.g. Sunrise Primary" : "e.g. Kopje High" }, "Used where space is tight.") +
-      field("Abbreviation", "abbr", d.abbr, { ph: teacher ? "e.g. SPS" : "e.g. KHS", attrs: 'maxlength="6" autocapitalize="characters"' }, "2 to 6 letters. Starts student numbers (" + esc(d.abbr || "KHS") + "-26-001) and staff codes.") +
+      field("Abbreviation", "abbr", d.abbr, { ph: teacher ? "e.g. SPS" : "e.g. KHS", attrs: 'maxlength="6" autocapitalize="characters"' }, "2 to 6 letters. Starts every ID: students " + esc(d.abbr || "KHS") + "-FM1-001 (Form 1, student 1), teachers " + esc(d.abbr || "KHS") + "-TC1, admins " + esc(d.abbr || "KHS") + "-AD1, and the staff codes.") +
       field("Motto", "motto", d.motto, { full: true, ph: "e.g. Knowledge is power" }) +
       '<div class="field full"><span class="label">School colours</span>' + coloursHtml() + "</div>" +
       field("Vision <span class=\"muted\">(optional)</span>", "vision", d.vision, { full: true, area: true, ph: "What the school wants to become" }) +

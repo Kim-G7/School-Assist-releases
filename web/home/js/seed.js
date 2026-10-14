@@ -152,10 +152,11 @@
       var seq = 0;
 
       /* staff, students and student passwords */
-      TEACHERS.forEach(function (t) { put("users", Object.assign({ role: "teacher", pin: PIN }, t)); });
+      var staffN = { AD: 0, TC: 0 }, formN = {};
+      TEACHERS.forEach(function (t) { var k = t.isAdmin ? "AD" : "TC"; put("users", Object.assign({ role: "teacher", pin: PIN, staffNo: "GHS-" + k + (++staffN[k]) }, t)); });
       var S = STUDENTS.map(function (row, i) {
         var id = "s" + A.pad(i + 1);
-        var no = i < 14 ? "GHS-22-" + A.pad(i + 1) + "7" : i < 24 ? "GHS-23-" + A.pad(i - 13) + "4" : "GHS-22-5" + A.pad(i - 23);
+        var fc = M.formCode(row[1]), no = "GHS-" + fc + "-" + String((formN[fc] = (formN[fc] || 0) + 1)).padStart(3, "0");
         var u = put("users", { id: id, role: "student", name: row[0], level: row[1], stream: row[2], studentNo: no, example: i === 0 });
         if (id !== "s01") put("credentials", { id: "cr_" + id, userId: id, password: A.firstName(row[0]).toLowerCase() + "2026", setAt: at(-40 + i, 9), setBy: id });
         return u;

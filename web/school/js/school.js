@@ -1,7 +1,7 @@
 /* Home features for the school edition (no cloud): what the home edition does online, done on the
  * device and the school hub instead.
  *   - Students register themselves: name, level and password, then their exam board and subjects.
- *     They get the next student ID (school initials, year, number: GHS-26-118) and an admin approves
+ *     They get the next student ID (school abbreviation, form, number in the form: KHS-FM1-018) and an admin approves
  *     the account in Settings → People; each subject is then approved by its teacher (Subject requests).
  *   - "Forgot your password?" asks the admin, who sets a new one in Settings → People.
  *   - AI marking of written answers goes through the school hub (server.cjs), which keeps the
@@ -61,34 +61,9 @@
 
   /* ------------------------------------------------------------------ students registering themselves */
   var School = (A.School = {});
-  /** The next student ID: the letters the school's IDs already use (else its initials), the year and a number (GHS-26-118). */
-  School.nextId = function () {
-    var seen = {}, letters = A.SchoolId ? A.SchoolId.abbr() : M.schoolAbbr(A.Theme.get().name), most = 0;
-    S().filter("users", function (u) { return u.role === "student"; }).forEach(function (u) {
-      var m = /^([A-Z]{2,6})-\d{2}-\d{2,4}$/.exec(String(u.studentNo || "")); if (m) seen[m[1]] = (seen[m[1]] || 0) + 1;
-    });
-    Object.keys(seen).forEach(function (k) { if (seen[k] > most) { most = seen[k]; letters = k; } });
-    var prefix = letters + "-" + String(new Date().getFullYear()).slice(2) + "-", top = 0;
-    S().filter("users", function (u) { return u.role === "student" && String(u.studentNo || "").indexOf(prefix) === 0; }).forEach(function (u) {
-      var n = parseInt(String(u.studentNo).slice(prefix.length), 10); if (n > top) top = n;
-    });
-    return prefix + String(top + 1).padStart(3, "0");
-  };
-  /** The next student number, from the school hub when it answers (so two devices never give out the same
-      one), else worked out on this device. */
-  School.claimId = function () {
-    var local = School.nextId(), prefix = local.replace(/\d+$/, ""), c = A.Sync ? A.Sync.config() : {};
-    if (!c.url || c.cloud || typeof fetch !== "function") return Promise.resolve(local);
-    var ctl = typeof AbortController === "function" ? new AbortController() : null, t = setTimeout(function () { if (ctl) ctl.abort(); }, 4000);
-    var num = function (no) { return parseInt(String(no).slice(prefix.length), 10) || 0; };
-    return fetch(String(c.url).replace(/\/+$/, "") + "/api/next-id", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prefix: prefix, school: A.SchoolId ? A.SchoolId.id() : null }), signal: ctl ? ctl.signal : undefined })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (j) { clearTimeout(t); return j && j.studentNo && num(j.studentNo) >= num(local) ? j.studentNo : local; })
-      .catch(function () { clearTimeout(t); return local; });
-  };
+  /** A new student's ID is the next one in their form (KHS-FM1-018), from the school hub (js/model.js M.claimStudentNo). */
   School.register = function (name, level, pw, subjectIds) {
-    return School.claimId().then(function (studentNo) { return registerAs(name, level, pw, subjectIds, studentNo); });
+    return M.claimStudentNo(level).then(function (studentNo) { return registerAs(name, level, pw, subjectIds, studentNo); });
   };
   function registerAs(name, level, pw, subjectIds, studentNo) {
     var now = Date.now();

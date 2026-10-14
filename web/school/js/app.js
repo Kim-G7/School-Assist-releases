@@ -178,7 +178,7 @@
       var short = it.label.replace(/^My /, "").split(" ")[0];
       return '<a href="' + it.href + '" class="' + (on ? "active" : "") + '">' + I(it.icon) + "<span>" + esc(short.charAt(0).toUpperCase() + short.slice(1)) + "</span>" + (it.count ? '<span class="count">' + it.count + "</span>" : "") + "</a>";
     }).join("");
-    var sub = me.role === "student" ? M.studentHome(me) || "Student" : me.title || "Teacher";
+    var sub = me.role === "student" ? M.studentHome(me) || "Student" : (me.title || "Teacher") + (me.staffNo ? " · " + me.staffNo : "");
     var bellN = me.role === "teacher" ? (A.Alerts ? A.Alerts.unread(me.id) : 0) : M.unreadCount(me.id);
     var bell = me.role === "teacher"
       ? '<button class="btn btn-ghost btn-icon bell" data-act="open-alerts" data-tip="Notifications" aria-label="Notifications">' + I("bell") + '<span class="bell-n' + (bellN ? "" : " hidden") + '" id="bell-count">' + bellN + "</span></button>"
@@ -235,7 +235,8 @@
   };
   var L = blank();
   var MINPW = Number(CFG.minPasswordLength) || 6;
-  var ID_EG = "e.g. " + (A.edition === "home" ? ((CFG.home || {}).student || {}).studentNo || "HOME-001" : "GHS-22-017");
+  /** An example student ID for the sign-in boxes: the school's own pattern (KHS-FM1-001). */
+  var idEg = function () { return "e.g. " + (A.edition === "home" ? ((CFG.home || {}).student || {}).studentNo || "HOME-001" : (M.idAbbr ? M.idAbbr() : "KHS") + "-FM1-001"); };
   /** "Continue as …": whoever signed in last on this device (js/staff.js remembers it). */
   function lastUserCard() {
     var last = A.LastUser && A.LastUser.get();
@@ -325,7 +326,7 @@
       if (L.step === "student") {
         return back + '<h2 class="mt" style="font-size:24px">Student sign in</h2><p class="muted small mt-sm">Use your student ID and your password.</p>' +
           '<form data-submit="student-login" class="mt">' +
-          '<label class="field"><span>Student ID</span><input class="input" name="sid" value="' + esc(L.sid) + '" autocomplete="username" autocapitalize="characters" spellcheck="false" placeholder="' + esc(ID_EG) + '"></label>' +
+          '<label class="field"><span>Student ID</span><input class="input" name="sid" value="' + esc(L.sid) + '" autocomplete="username" autocapitalize="characters" spellcheck="false" placeholder="' + esc(idEg()) + '"></label>' +
           '<label class="field"><span>Password</span><div class="pw-wrap"><input class="input" type="password" name="pw" autocomplete="current-password"><button type="button" class="btn btn-ghost btn-icon btn-sm" data-act="pw-toggle" aria-label="Show password">' + I("eye") + "</button></div></label>" +
           msg + '<button class="btn btn-primary btn-lg btn-block mt" type="submit">Sign in</button></form>' +
           (A.School ? '<div class="row mt-sm" style="justify-content:center"><button class="btn btn-ghost btn-sm" data-act="login-goto" data-step="forgotask">' + I("key") + "Forgot your password?</button></div>" : "") +
@@ -337,7 +338,7 @@
         return back + '<h2 class="mt" style="font-size:24px">Set up your account</h2><p class="muted small mt-sm">Enter your full name and your student ID exactly as the school has them.</p>' +
           '<form data-submit="student-setup" class="mt">' +
           '<label class="field"><span>Full name</span><input class="input" name="name" value="' + esc(L.name) + '" autocomplete="name" placeholder="e.g. Tafadzwa Mhlanga"></label>' +
-          '<label class="field"><span>Student ID</span><input class="input" name="sid" value="' + esc(L.sid) + '" autocapitalize="characters" spellcheck="false" placeholder="' + esc(ID_EG) + '"></label>' +
+          '<label class="field"><span>Student ID</span><input class="input" name="sid" value="' + esc(L.sid) + '" autocapitalize="characters" spellcheck="false" placeholder="' + esc(idEg()) + '"></label>' +
           msg + '<button class="btn btn-primary btn-lg btn-block mt" type="submit">Continue</button></form>' + Login.example();
       }
       if (L.step === "setpw") {
@@ -368,9 +369,9 @@
       }
       if (L.step === "student" || L.step === "who") {
         if (L.role === "teacher") return null;
-        return back + '<h2 class="mt" style="font-size:24px">Student sign in</h2><p class="muted small mt-sm">Use your student ID (for example ' + esc(ID_EG.replace(/^e\.g\. /, "")) + ") and your password.</p>" +
+        return back + '<h2 class="mt" style="font-size:24px">Student sign in</h2><p class="muted small mt-sm">Use your student ID (for example ' + esc(idEg().replace(/^e\.g\. /, "")) + ") and your password.</p>" +
           '<form data-submit="cloud-student-login" class="mt">' +
-          '<label class="field"><span>Student ID</span><input class="input" name="sid" value="' + esc(L.sid) + '" autocomplete="username" autocapitalize="characters" spellcheck="false" placeholder="' + esc(ID_EG) + '"></label>' +
+          '<label class="field"><span>Student ID</span><input class="input" name="sid" value="' + esc(L.sid) + '" autocomplete="username" autocapitalize="characters" spellcheck="false" placeholder="' + esc(idEg()) + '"></label>' +
           pw("pw", "Password", "current-password") + msg + busy + submit("Sign in") + "</form>" +
           '<div class="row mt-sm" style="justify-content:center"><button class="btn btn-ghost btn-sm" data-act="login-goto" data-step="forgot">' + I("key") + "Forgot your password?</button></div>" +
           '<div class="divider"></div><div class="row wrap spread"><span class="small">New here?</span><button class="btn" data-act="login-goto" data-step="register">' + I("plus") + "Register</button></div>";

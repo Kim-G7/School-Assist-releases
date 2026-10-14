@@ -835,26 +835,34 @@
     UI.modal({
       title: "Add students to " + M.className(c), size: "wide",
       body: '<div class="label">Students already at the school</div>' + UI.picker({ students: others, id: "add-picker", empty: "Every student is already in this class." }) +
-        '<div class="divider"></div><div class="label">New students <span class="muted">(one per line: full name, student ID)</span></div>' +
+        '<div class="divider"></div><div class="label">New students <span class="muted">(one per line: full name. Each gets the next student ID in the form; type an ID after a comma only if they already have one)</span></div>' +
         '<div class="form-grid"><label class="field"><span>' + esc(st.levelLabel) + '</span><select class="select" id="new-level">' + st.levels.map(function (l) { return "<option" + (l === c.level ? " selected" : "") + ">" + esc(l) + "</option>"; }).join("") + "</select></label>" +
         '<label class="field"><span>Class</span><select class="select" id="new-stream">' + st.streams.map(function (s) { return "<option" + (s === c.stream ? " selected" : "") + ">" + esc(s) + "</option>"; }).join("") + "</select></label></div>" +
-        '<textarea class="textarea mt-sm" id="new-studs" rows="4" placeholder="Tendai Moyo, GHS-26-001&#10;Grace Banda, GHS-26-002"></textarea>' +
+        '<textarea class="textarea mt-sm" id="new-studs" rows="4" placeholder="Tendai Moyo&#10;Grace Banda"></textarea>' +
         '<p class="hint small muted mt-sm">New students sign in the first time with their name and student ID, then create their own password.</p>',
       foot: [{ label: "Cancel" }, {
         label: "Add to class", cls: "btn-primary", onClick: function (m) {
           var ids = UI.pickerValue(m.querySelector("#add-picker")), bad = [];
           var lv = m.querySelector("#new-level").value, sm = m.querySelector("#new-stream").value;
-          m.querySelector("#new-studs").value.split("\n").map(function (l) { return l.trim(); }).filter(Boolean).forEach(function (line) {
-            var parts = line.split(","), name = parts[0].trim(), no = (parts[1] || "").trim();
-            if (!no) { bad.push(name + " (no student ID)"); return; }
-            if (M.studentById(no)) { bad.push(no + " (ID already used)"); return; }
-            ids.push(S().put("users", { role: "student", name: name, studentNo: no, level: lv, stream: sm }).id);
+          var rows = m.querySelector("#new-studs").value.split("\n").map(function (l) { return l.trim(); }).filter(Boolean).map(function (line) {
+            var parts = line.split(","); return { name: parts[0].trim(), no: (parts[1] || "").trim() };
           });
-          if (bad.length) UI.toast("Skipped: " + bad.join(", "), "bad");
-          if (!ids.length) { if (!bad.length) UI.toast("Choose or type at least one student", "bad"); return false; }
-          S().patch("classes", c.id, { studentIds: uniq(c.studentIds.concat(ids)) });
-          UI.toast(ids.length + " student(s) added");
-          A.render();
+          // one after another: each student without an ID gets the next one in the form from the school hub
+          return rows.reduce(function (p, r) {
+            return p.then(function () {
+              if (!r.name) return;
+              if (r.no && M.studentById(r.no)) { bad.push(r.no + " (ID already used)"); return; }
+              return (r.no ? Promise.resolve(r.no) : M.claimStudentNo(lv)).then(function (no) {
+                ids.push(S().put("users", { role: "student", name: r.name, studentNo: no, level: lv, stream: sm }).id);
+              });
+            });
+          }, Promise.resolve()).then(function () {
+            if (bad.length) UI.toast("Skipped: " + bad.join(", "), "bad");
+            if (!ids.length) { if (!bad.length) UI.toast("Choose or type at least one student", "bad"); return false; }
+            S().patch("classes", c.id, { studentIds: uniq(c.studentIds.concat(ids)) });
+            UI.toast(ids.length + " student(s) added");
+            A.render();
+          });
         },
       }],
     });
