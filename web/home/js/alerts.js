@@ -72,20 +72,67 @@
       '<div class="row mt-sm"><a class="btn btn-sm btn-primary" href="' + Al.href(a) + '" data-alert-open="' + a.id + '">' + (a.kind === "copy" ? "Review the paper" : a.kind === "due" ? "See who is missing" : a.kind === "register" ? "Approve or decline" : a.kind === "feature" ? "See your plan" : "Start marking") + "</a>" +
       '<button type="button" class="btn btn-sm btn-ghost" data-alert-dismiss="' + a.id + '">Dismiss</button></div></div>' +
       '<button type="button" class="btn btn-ghost btn-icon btn-sm" data-alert-dismiss="' + a.id + '" aria-label="Close">' + I("x") + "</button>";
-    root.appendChild(el);
-    while (root.children.length > 4) root.firstElementChild.remove();
+    add(root, el);
     if (document.hidden && window.Notification && Notification.permission === "granted") {
       try { new Notification(a.title, { body: a.body, icon: "assets/icon.svg", tag: a.id }); } catch (e) { /* not supported */ }
     }
   };
+  function markRead(id) {
+    var a = S().get("alerts", id);
+    if (a && !a.readAt) S().put("alerts", Object.assign({}, a, { readAt: Date.now() }));
+  }
   document.addEventListener("click", function (e) {
     var t = e.target.closest && e.target.closest("[data-alert-dismiss], [data-alert-open]");
     if (!t) return;
-    var id = t.getAttribute("data-alert-dismiss") || t.getAttribute("data-alert-open");
-    var a = S().get("alerts", id);
-    if (a && !a.readAt) S().put("alerts", Object.assign({}, a, { readAt: Date.now() }));
+    markRead(t.getAttribute("data-alert-dismiss") || t.getAttribute("data-alert-open"));
     var pop = t.closest(".alert-pop");
     if (pop) pop.remove();
+    Al.refreshBell();
+  });
+
+  /* More than three pop-ups at once layer into one stack: the newest in front, two more peeking out under
+     it, and a bar above with the count, "Show all" (spreads them out) and "Clear all". Three or fewer sit
+     one under another as before. Removing pop-ups (closed, timed out, signed out) restacks by itself. */
+  var STACK_FROM = 4, KEEP = 8;
+  function pops(root) { return Array.prototype.filter.call(root.children, function (c) { return c.classList.contains("alert-pop"); }); }
+  function add(root, el) {
+    if (!root._stack) { root._stack = new MutationObserver(function () { restack(root); }); root._stack.observe(root, { childList: true }); }
+    root.appendChild(el);
+  }
+  function restack(root) {
+    var list = pops(root);
+    while (list.length > KEEP) list.shift().remove();
+    var bar = root.querySelector(".alert-stackbar");
+    if (list.length < STACK_FROM) {
+      root.classList.remove("stacked", "open");
+      if (bar) bar.remove();
+      list.forEach(function (el) { el.classList.remove("deep"); });
+      return;
+    }
+    var open = root.classList.contains("open");
+    if (!bar) { bar = document.createElement("div"); bar.className = "alert-stackbar"; root.insertBefore(bar, root.firstChild); }
+    var html = "<b>" + list.length + " notifications</b>" +
+      '<button type="button" class="btn btn-sm btn-ghost" data-alert-spread aria-expanded="' + open + '">' + (open ? "Show less" : "Show all") + "</button>" +
+      '<button type="button" class="btn btn-sm btn-ghost" data-alert-clear>Clear all</button>';
+    if (bar.innerHTML !== html) bar.innerHTML = html;
+    root.classList.add("stacked");
+    list.forEach(function (el, i) {
+      var depth = list.length - 1 - i;
+      el.style.setProperty("--depth", Math.min(depth, 2));
+      el.classList.toggle("deep", depth > 2);
+    });
+    root.style.setProperty("--front-h", list[list.length - 1].offsetHeight + "px");
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest && e.target.closest("[data-alert-spread], [data-alert-clear]");
+    if (!t) return;
+    var root = document.getElementById("alert-root");
+    if (t.hasAttribute("data-alert-spread")) { root.classList.toggle("open"); restack(root); return; }
+    pops(root).forEach(function (el) {
+      var d = el.querySelector("[data-alert-dismiss]");
+      if (d) markRead(d.getAttribute("data-alert-dismiss")); // teachers' alerts count as read, like Dismiss
+      el.remove();
+    });
     Al.refreshBell();
   });
 
@@ -195,8 +242,7 @@
     el.innerHTML = '<div class="alert-ico">' + I(ev.icon || "bell") + '</div><div class="grow"><b>' + esc(ev.title) + "</b>" + (ev.body ? "<p>" + esc(ev.body) + "</p>" : "") +
       (ev.href ? '<div class="row mt-sm"><a class="btn btn-sm btn-primary" href="' + ev.href + '" data-news-close>Open</a></div>' : "") + "</div>" +
       '<button type="button" class="btn btn-ghost btn-icon btn-sm" data-news-close aria-label="Close">' + I("x") + "</button>";
-    root.appendChild(el);
-    while (root.children.length > 5) root.firstElementChild.remove();
+    add(root, el);
     var t = setTimeout(function () { el.classList.add("going"); setTimeout(function () { el.remove(); }, 300); }, 15000);
     el.addEventListener("mouseenter", function () { clearTimeout(t); });
     if (document.hidden && window.Notification && Notification.permission === "granted") {

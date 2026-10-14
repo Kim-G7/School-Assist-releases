@@ -121,10 +121,41 @@
     return '<div class="card stat"' + (tip ? ' data-tip="' + esc(tip) + '"' : "") + '><div class="ico ' + (accent ? "accent" : "") + '">' + I(icon) + '</div><div><div class="val tnum">' + value + '</div><div class="lbl">' + esc(label) + "</div></div></div>";
   };
   UI.tabs = function (items) {
-    return '<nav class="tabs" role="tablist">' + items.map(function (t) {
-      return '<a href="' + t.href + '" class="' + (t.on ? "on" : "") + '" role="tab" aria-selected="' + !!t.on + '">' + (t.icon ? I(t.icon) : "") + esc(t.label) + (t.n != null ? ' <span class="n">' + t.n + "</span>" : "") + "</a>";
-    }).join("") + "</nav>";
+    return '<div class="tabs-wrap"><button type="button" class="tabs-arrow back" data-tabs-scroll="-1" aria-label="Scroll the tabs back" tabindex="-1">' + I("left") + "</button>" +
+      '<nav class="tabs" role="tablist">' + items.map(function (t) {
+        return '<a href="' + t.href + '" class="' + (t.on ? "on" : "") + '" role="tab" aria-selected="' + !!t.on + '">' + (t.icon ? I(t.icon) : "") + esc(t.label) + (t.n != null ? ' <span class="n">' + t.n + "</span>" : "") + "</a>";
+      }).join("") + "</nav>" +
+      '<button type="button" class="tabs-arrow fwd" data-tabs-scroll="1" aria-label="Scroll the tabs forward" tabindex="-1">' + I("right") + "</button></div>";
   };
+
+  /* Tab strips wider than the screen (Settings has many sections) scroll properly with a mouse: arrows at
+     the ends show when there is more that way, the mouse wheel scrolls the strip sideways, and on a
+     computer a thin scrollbar shows (css .tabs-wrap). Phones and tablets swipe as before. */
+  function stripEnds(wrap) {
+    var s = wrap.querySelector(".tabs");
+    if (!s) return;
+    wrap.classList.toggle("more-back", s.scrollLeft > 2);
+    wrap.classList.toggle("more-fwd", s.scrollLeft + s.clientWidth < s.scrollWidth - 2);
+  }
+  UI.strips = function (root) { (root || document).querySelectorAll(".tabs-wrap").forEach(stripEnds); };
+  document.addEventListener("scroll", function (e) {
+    var w = e.target.closest && e.target.classList.contains("tabs") && e.target.closest(".tabs-wrap");
+    if (w) stripEnds(w);
+  }, true);
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-tabs-scroll]");
+    if (!b) return;
+    var s = b.parentNode.querySelector(".tabs");
+    s.scrollBy({ left: Number(b.getAttribute("data-tabs-scroll")) * Math.max(120, s.clientWidth * 0.7), behavior: "smooth" });
+  });
+  document.addEventListener("wheel", function (e) {
+    var s = e.target.closest && e.target.closest(".tabs, .pill-tabs");
+    if (!s || e.ctrlKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX) || s.scrollWidth <= s.clientWidth + 2) return;
+    var room = e.deltaY > 0 ? s.scrollWidth - s.clientWidth - s.scrollLeft : s.scrollLeft;
+    if (room <= 1) return; // at the end: the page scrolls as usual
+    e.preventDefault();
+    s.scrollLeft += e.deltaY * (e.deltaMode === 1 ? 32 : 1);
+  }, { passive: false });
   UI.bar = function (pct, tone, lg) {
     return '<div class="bar ' + (tone || "") + (lg ? " lg" : "") + '" role="progressbar" aria-valuenow="' + (pct || 0) + '" aria-valuemin="0" aria-valuemax="100"><i style="width:' + A.clamp(pct || 0, 0, 100) + '%"></i></div>';
   };
@@ -307,6 +338,7 @@
   }
   UI.hydrate = function (root) {
     (root || document).querySelectorAll(".js-line").forEach(drawLine);
+    UI.strips(root);
   };
   window.addEventListener("resize", A.debounce(function () { UI.hydrate(); }, 150));
 })(window.App);
