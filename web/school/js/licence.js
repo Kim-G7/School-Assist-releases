@@ -369,8 +369,10 @@
     var last = 0; try { last = Number(localStorage.getItem(LAST_CHECK)) || 0; } catch (e) { /* private mode */ }
     if (Date.now() - last < 12 * 3600000) return;
     try { localStorage.setItem(LAST_CHECK, String(Date.now())); } catch (e) { /* private mode */ }
-    return fetch(feed.replace(/\/?$/, "/") + encodeURIComponent(cur.data.no) + ".json", { cache: "no-store" })
-      .then(function (res) { return res.ok ? res.json() : null; })
+    var base = feed.replace(/\/?$/, "/"), get = function (name) { return fetch(base + name, { cache: "no-store" }).then(function (res) { return res.ok ? res.json() : null; }); };
+    // index.json lists the licences that have a renewal, so a key without one asks for nothing that isn't there
+    return get("index.json")
+      .then(function (index) { return index && index[cur.data.no] ? get(encodeURIComponent(cur.data.no) + ".json") : null; })
       .then(function (j) { var rr = j && j.renewal ? read(j.renewal) : null; return rr && rr.ok && rr.renewal ? applyRenewal(rr, false) : false; })
       .catch(function () { return false; });
   };

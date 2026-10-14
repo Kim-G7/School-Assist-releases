@@ -205,14 +205,19 @@
 
   function statusChip() {
     var s = A.Sync ? A.Sync.status() : { state: "local" }, online = navigator.onLine;
-    // just Online or Offline: what matters is whether new work can be sent and received
-    var cls = online ? (s.state === "error" ? "error" : "") : "offline", txt = online ? "Online" : "Offline";
+    // what matters is whether new work can be sent and received: a computer on the Wi-Fi whose school hub is off
+    // (or School Assist online can't be reached) is "Not connected", not "Online"
+    var cut = online && s.state === "error", where = A.Cloud ? "School Assist online" : "the school hub";
+    var cls = online ? (cut ? "error" : "") : "offline", txt = !online ? "Offline" : cut ? "Not connected" : "Online";
     var me = M.me(), href = me && me.role === "student" ? "#/s/settings?s=sync" : "#/t/settings?s=sync";
     // School Assist Teacher with no school hub: everything is simply on this device
     if (A.edition === "teacher" && s.state === "local") {
       return '<a class="status-chip" id="status-chip" href="' + href + '" data-tip="Saved on this device. To share with other teachers, set up a school hub in Settings → Offline &amp; sync."><span class="pip"></span><span class="txt">On this device</span></a>';
     }
-    return '<a class="status-chip ' + cls + '" id="status-chip" href="' + href + '" data-tip="' + (online ? "Online: your work is sent and new work arrives automatically." : "Offline: everything is saved on this device and is sent when you're back online.") + '"><span class="pip"></span>' + (online ? "" : I("wifiOff")) + '<span class="txt">' + esc(txt) + "</span></a>";
+    var tip = !online ? "Offline: everything is saved on this device and is sent when you're back online."
+      : cut ? "Can't reach " + where + " right now. Everything is saved on this device and is sent when it's back."
+      : "Online: your work is sent and new work arrives automatically.";
+    return '<a class="status-chip ' + cls + '" id="status-chip" href="' + href + '" data-tip="' + tip + '"><span class="pip"></span>' + (online && !cut ? "" : I("wifiOff")) + '<span class="txt">' + esc(txt) + "</span></a>";
   }
   A.refreshStatus = function () {
     var el = document.getElementById("status-chip");
@@ -395,7 +400,8 @@
       if (L.step === "registered") {
         var r = L.registered || {};
         return '<div style="text-align:center" class="mt"><div class="big-ico" style="margin:0 auto;color:var(--good)">' + I("checkCircle") + '</div><h2 class="mt-sm" style="font-size:22px">You\'re registered, ' + esc(A.firstName(r.name || "")) + '</h2>' +
-          '<p class="muted mt-sm">Your student ID is</p><div class="id-big">' + esc(r.studentNo || "") + '</div><p class="small mt-sm"><b>Write it down.</b> You sign in with this ID and your password.</p></div>' +
+          '<p class="muted mt-sm">Your student ID is</p><div class="id-big">' + esc(r.studentNo || "") + '</div><p class="small mt-sm"><b>Write it down.</b> You sign in with this ID and your password.</p>' +
+          (L.noSubjects ? '<p class="small muted mt-sm">Your school hasn\'t added its subjects yet. Once the admin has approved you, choose yours in My subjects.</p>' : "") + "</div>" +
           msg + busy + '<button class="btn btn-primary btn-lg btn-block mt" data-act="cloud-registered-continue"' + (L.busy ? " disabled" : "") + ">Continue</button>";
       }
       if (L.step === "pending" && (A.Cloud.profile() || {}).role && (A.Cloud.profile() || {}).role !== "student") {
@@ -454,7 +460,7 @@
       }
       if (L.step === "asked") {
         return '<div style="text-align:center" class="mt"><div class="big-ico" style="margin:0 auto">' + I("send") + '</div><h2 class="mt-sm" style="font-size:22px">The admin has been asked</h2>' +
-          '<p class="muted mt-sm">When they give you a new password, sign in with it. Then go to Settings, change it to one you choose, and make a recovery code so this is quicker next time.</p></div>' +
+          '<p class="muted mt-sm">When they give you a new password, sign in with it. Then go to Settings and change it to one you choose' + (A.Cloud ? ", and make a recovery code so this is quicker next time." : ".") + "</p></div>" +
           '<button class="btn btn-primary btn-lg btn-block mt" data-act="login-goto" data-step="' + (L.role === "teacher" ? "admin" : "student") + '">Back to sign in</button>';
       }
       if (L.step === "staffcode") return staffCodeStep(back, msg);
@@ -688,7 +694,15 @@
     (A.Cloud ? A.Cloud.subjects() : Promise.resolve(M.offeredSubjects())).then(function (list) {
       L.busy = false; L.offered = list || [];
       var boards = boardsOf(L.offered);
-      if (!boards.length) throw new Error("There are no subjects to choose yet. Ask the admin.");
+      // the school hasn't added its subjects yet (a new school hands out the app first): register now, and choose
+      // the subjects later in My subjects, once the admin has approved the account
+      if (!boards.length) {
+        L.busy = "Registering…"; redrawLogin();
+        return (A.Cloud ? A.Cloud.register(name, level, pw, []) : A.School.register(name, level, pw, [])).then(function (r) {
+          L = blank(); L.step = "registered"; L.registered = r; L.pw = pw; L.noSubjects = true;
+          redrawLogin();
+        });
+      }
       if (boards.length === 1) { L.board = boards[0].name; L.step = "regsubjects"; } else L.step = "regboard";
       redrawLogin();
     }).catch(loginFail);

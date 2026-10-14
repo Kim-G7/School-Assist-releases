@@ -95,7 +95,7 @@
     var u = S().put("users", { id: A.uid("s"), role: "student", name: name, level: level, stream: null, studentNo: studentNo, status: "pending", registeredAt: now, selfRegistered: true });
     M.setPassword(u.id, pw, u.id);
     return M.requestSubjects(u.id, subjectIds).then(function () {
-      M.alertAdmins({ kind: "register", title: "New student: " + name, body: name + " (" + studentNo + ", " + level + ") registered and is waiting for an admin to approve the account in Settings → People." });
+      M.alertAdmins({ kind: "register", aboutId: u.id, title: "New student: " + name, body: name + " (" + studentNo + ", " + level + ") registered and is waiting for an admin to approve the account in Settings → People." });
       if (A.Sync) A.Sync.maybe();
       return { studentNo: studentNo, name: name };
     });
@@ -105,6 +105,7 @@
     var u = M.user(el.getAttribute("data-id")), yes = el.getAttribute("data-yes") === "1";
     if (!u) return;
     S().patch("users", u.id, { status: yes ? "approved" : "declined", decidedAt: Date.now(), decidedBy: M.me().id });
+    M.alertsDone(u.id);
     UI.toast(yes ? u.name + " can sign in now. Their subjects wait for each teacher's approval." : u.name + " was declined");
     A.render();
   };
@@ -113,7 +114,7 @@
   School.askAdmin = function (login, name, note) {
     var u = M.studentById ? M.studentById(login) : null;
     S().put("pwrequests", { id: A.uid("pwr"), login: login, studentNo: u ? u.studentNo : login, appId: u ? u.id : null, name: u ? u.name : name, said: name, note: String(note || "").slice(0, 300), askedAt: Date.now() });
-    M.alertAdmins({ kind: "password", title: (u ? u.name : name || login) + " forgot their password", body: "Give them a new password in Settings → People. Check it really is them first." });
+    M.alertAdmins({ kind: "password", aboutId: u ? u.id : null, title: (u ? u.name : name || login) + " forgot their password", body: "Give them a new password in Settings → People. Check it really is them first." });
     if (A.Sync) A.Sync.maybe();
     return Promise.resolve();
   };
@@ -132,6 +133,7 @@
       var pw = newPassword();
       M.setPassword(u.id, pw, M.me().id);
       S().patch("pwrequests", r.id, { doneAt: Date.now() });
+      M.alertsDone(u.id);
       UI.modal({
         title: "New password for " + u.name,
         body: "<p>Give " + esc(A.firstName(u.name)) + ' these details. They can change the password later in Settings → My password.</p><dl class="kv mt"><dt>Student ID</dt><dd><b>' + esc(u.studentNo) + '</b></dd><dt>Password</dt><dd><code style="font-size:18px">' + esc(pw) + "</code></dd></dl>",
@@ -140,7 +142,12 @@
       A.render();
     });
   };
-  A.act["school-pw-done"] = function (el) { S().patch("pwrequests", el.getAttribute("data-id"), { doneAt: Date.now() }); A.render(); };
+  A.act["school-pw-done"] = function (el) {
+    var r = S().get("pwrequests", el.getAttribute("data-id"));
+    S().patch("pwrequests", el.getAttribute("data-id"), { doneAt: Date.now() });
+    if (r) M.alertsDone(r.appId);
+    A.render();
+  };
 
   /** Settings → People → Students: registrations waiting for approval, and forgotten passwords. */
   School.peopleHtml = function (me) {

@@ -89,6 +89,14 @@
       S().put("alerts", Object.assign({ id: "al_" + rec.kind + "_" + adm.id + "_" + now.toString(36), teacherId: adm.id, createdAt: now }, rec));
     });
   };
+  /** Someone an alert was about has been dealt with (approved, declined, given a new password): it counts as read
+      for every admin, so the bell doesn't keep showing done work. */
+  M.alertsDone = function (aboutId) {
+    if (!aboutId) return;
+    var now = Date.now();
+    S().filter("alerts", function (a) { return a.aboutId === aboutId && !a.readAt; }).forEach(function (a) { S().put("alerts", Object.assign({}, a, { readAt: now })); });
+    if (A.Alerts) A.Alerts.refreshBell();
+  };
   A.act["login-forget-last"] = function () { A.LastUser.forget(); if (A.redrawLogin) A.redrawLogin(); };
 
   /* ------------------------------------------------------------ offline: registering as staff */
@@ -115,7 +123,7 @@
     var u = S().put("users", { id: A.uid("t"), role: "teacher", isAdmin: role === "admin", status: "pending", name: f.name.trim().replace(/\s+/g, " "),
       title: role === "admin" ? "Admin" : "Teacher", subjects: f.subjects.trim(), pin: f.pin, registeredAt: Date.now() });
     typed = {};
-    M.alertAdmins({ kind: "staff", title: "New " + role + ": " + u.name, body: u.name + " registered as " + (role === "admin" ? "an admin" : "a teacher") + (u.subjects ? " (" + u.subjects + ")" : "") + " and is waiting for an admin to approve them in Settings → People." });
+    M.alertAdmins({ kind: "staff", aboutId: u.id, title: "New " + role + ": " + u.name, body: u.name + " registered as " + (role === "admin" ? "an admin" : "a teacher") + (u.subjects ? " (" + u.subjects + ")" : "") + " and is waiting for an admin to approve them in Settings → People." });
     A.loginDone("staffasked", u);
   };
 
@@ -131,6 +139,7 @@
       }
       if (yes) S().put("users", Object.assign({}, u, { status: "approved", approvedBy: me.id, approvedAt: Date.now() }));
       else S().remove("users", id);
+      M.alertsDone(id);
       UI.toast(yes ? u.name + " can sign in now" : u.name + "'s registration was declined");
       A.render();
     };

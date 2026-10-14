@@ -334,6 +334,8 @@
   STEP.hub = function (msg) {
     return "<h1>Make this computer the school hub</h1><p class=\"muted\">The hub keeps everyone's work. Teachers' computers and students' tablets and phones connect to it over the school Wi-Fi. Keep this computer on during school hours, and give it a fixed address on the network (ask whoever looks after the Wi-Fi), so the copies you share always find it.</p>" +
       '<div id="su-hub" class="callout mt">' + I("refresh") + "<div>Checking…</div></div>" + msg +
+      // another program on this computer may already use port 8080: the hub can use another one (devices are told it)
+      '<label class="field mt" style="max-width:220px"><span>Port</span><input class="input sm" id="su-hub-port" inputmode="numeric" maxlength="5" value="' + (W.port || 8080) + '"><span class="hint">Leave 8080 unless the hub says the port is in use.</span></label>' +
       '<div class="setup-actions"><span></span><button class="btn btn-lg" data-act="su-hub-on">' + I("monitor") + 'Turn on the hub</button><button class="btn btn-primary btn-lg" data-act="su-to" data-step="share">Next' + I("right") + "</button></div>";
   };
   STEP.share = function (msg) {
@@ -435,9 +437,11 @@
     });
   }
   A.act["su-hub-on"] = function () {
-    var d = desk();
-    d.hub.start(8080).then(function (h) {
-      if (h.error) return fail(h.error);
+    var d = desk(), box = document.getElementById("su-hub-port"), port = Number(box && box.value);
+    if (!(port >= 1024 && port <= 65535)) return fail("The port is a number from 1024 to 65535, for example 8080 or 8081.");
+    W.port = port;
+    d.hub.start(port).then(function (h) {
+      if (h.error) return fail(h.error.replace(/Try another port, for example (\d+)\./, "Type another port above, for example $1, and turn the hub on again."));
       A.Sync.setConfig({ url: "http://localhost:" + h.port, auto: true });
       return A.Sync.syncNow().catch(function () {}).then(function () { W.msg = ""; redraw(); });
     });
@@ -552,6 +556,12 @@
       return desk().pack.copy(p).then(function (r) {
         el.disabled = false;
         if (!r) { shareMsg("Nothing copied.", true); return; }
+        // School Assist 1.3.0 and 1.3.1 (installed, not portable) couldn't copy themselves; 1.3.2 can
+        if (r.error && /Invalid package|app\.asar/i.test(r.error)) {
+          shareMsg("This version of School Assist can't copy itself to a flash drive. Install School Assist 1.3.2 or newer on this computer " +
+            "(<b>github.com/Kim-G7/School-Assist-releases/releases</b>), then try again. Or copy the portable School Assist file to the flash drive together with the school file.", true);
+          return;
+        }
         if (r.error) { shareMsg(esc(r.error), true); return; }
         shareMsg("<b>Copied</b> to <code>" + esc(r.dir) + "</code> (" + Math.round(r.bytes / 1048576) + " MB). Teachers and students open <b>" + esc(r.exe) + "</b> in that folder, or copy the folder to their computer first. It joins the hub by itself on the school Wi-Fi.");
       });

@@ -753,6 +753,11 @@
 
   /* ============================================================ MODALS */
   /* ---- new / edit class: form → class (letters, colours, animals…) → subject → students */
+  /** Teachers and admins who can be given a class (approved ones), by name. */
+  function staffList() {
+    return S().filter("users", function (u) { return u.role === "teacher" && u.status !== "pending" && u.status !== "declined"; })
+      .sort(function (a, b) { return a.name.localeCompare(b.name); });
+  }
   function classModal(existing) {
     var me = M.me(), st = M.structure();
     var c = existing || { level: st.levels[0], stream: st.streams[0], subject: "", room: "", syllabusId: "", studentIds: [], currentTerm: 1 };
@@ -769,6 +774,10 @@
           return '<optgroup label="' + esc(l.level) + '">' + l.items.sort(function (x, y) { return x.subject.localeCompare(y.subject); }).map(function (s) { return '<option value="' + s.id + '"' + (s.id === c.syllabusId ? " selected" : "") + ">" + esc(s.subject + (s.code ? " " + s.code : "")) + "</option>"; }).join("") + "</optgroup>";
         }).join("") + '</select><span class="hint">Not listed? Add it in the Syllabus library first.</span></label>' +
         '<label class="field"><span>Room <span class="muted">(optional)</span></span><input class="input" name="room" value="' + esc(c.room || "") + '"></label>' +
+        // the admin sets classes up for the teachers who teach them (online, Home does this with "Subjects they teach")
+        (me.isAdmin && !A.Cloud ? '<label class="field"><span>Teacher</span><select class="select" name="teacherId">' + staffList().map(function (t) {
+          return '<option value="' + t.id + '"' + (t.id === (c.teacherId || me.id) ? " selected" : "") + ">" + esc(t.name + (t.id === me.id ? " (you)" : "")) + "</option>";
+        }).join("") + "</select></label>" : "") +
         '<div class="full"><div class="row wrap spread"><span class="label">Students</span><button type="button" class="btn btn-sm" id="cls-fill">' + I("users") + '<span id="cls-fill-label">Add the whole class</span></button></div>' +
         '<div id="cls-picker">' + UI.picker({ students: M.students(), selected: c.studentIds }) + "</div></div></form>",
       foot: (existing ? [{ label: "Delete class", cls: "btn-danger", onClick: function () {
@@ -783,7 +792,7 @@
           if (!f.stream && !f.group.trim()) { UI.toast("Give the mixed group a name", "bad"); return false; }
           var rec = Object.assign({}, c, {
             level: f.level, stream: f.stream || null, name: f.stream ? M.homeClassName(f.level, f.stream) : f.group.trim(),
-            subject: f.subject.trim(), room: f.room, syllabusId: f.syllabusId, studentIds: UI.pickerValue(el.querySelector("#cls-picker")), teacherId: c.teacherId || me.id,
+            subject: f.subject.trim(), room: f.room, syllabusId: f.syllabusId, studentIds: UI.pickerValue(el.querySelector("#cls-picker")), teacherId: f.teacherId || c.teacherId || me.id,
           });
           if (!existing) { rec.currentTerm = 1; rec.topicAccess = {}; rec.sequential = false; }
           rec = S().put("classes", rec);

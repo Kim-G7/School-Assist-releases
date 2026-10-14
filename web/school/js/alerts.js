@@ -210,7 +210,8 @@
           out.push({ id: "staff_" + u.id, at: u.registeredAt || u.createdAt, icon: "users", title: "New " + (u.isAdmin ? "admin" : "teacher") + " waiting: " + u.name, body: "Approve or decline them in Settings → People → Teachers.", href: "#/t/settings?s=people&r=teacher" });
         });
         (A.pwRequestList ? A.pwRequestList() : []).forEach(function (r) {
-          out.push({ id: "pw_" + r.id + "_" + r.askedAt, at: r.askedAt, icon: "key", tone: "bad", title: (r.name || r.login) + " forgot their password", body: "Give them a new one from your home page or Settings → People.", href: "#/t/home" });
+          out.push({ id: "pw_" + r.id + "_" + r.askedAt, at: r.askedAt, icon: "key", tone: "bad", title: (r.name || r.login) + " forgot their password", body: A.Cloud ? "Give them a new one from your home page or Settings → People." : "Give them a new one in Settings → People.",
+            href: A.Cloud ? "#/t/home" : "#/t/settings?s=people&r=" + (r.role === "teacher" ? "teacher" : "student") });
         });
       }
     }
