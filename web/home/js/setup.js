@@ -358,7 +358,12 @@
       (A.edition === "teacher" ? "" : '<span class="sep"></span>Just looking? <button class="link" data-act="su-demo">Open the demo school</button>') + "</p>" : "";
     return '<div class="setup-card">' + bar + STEP[W.step](msg) + "</div>" + links;
   }
-  function go(step) { W.step = step; W.msg = ""; redraw(); }
+  function go(step) {
+    W.step = step; W.msg = "";
+    // once the school exists, the remembered step moves too (wizardHtml goes back to it on every redraw)
+    if (meta().setupStep && Id.id()) { meta().setupStep = step; S().flush(); }
+    redraw();
+  }
   A.act["su-to"] = function (el) { go(el.getAttribute("data-step")); };
   A.act["su-back"] = function () { go(W.step === "key" ? "person" : "school"); };
   A.act["su-logo"] = function (el) {
