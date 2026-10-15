@@ -62,6 +62,16 @@
   };
 
   /* ---------------------------------------------------------------- pop-ups */
+  /** School Assist Teacher: every pop-up leaves after 10 seconds (it stays in the bell). A pointer resting on it
+   *  holds it; when the pointer leaves, it goes 3 seconds later. */
+  var POP_MS = A.edition === "teacher" ? 10000 : 0;
+  function autoClose(el, ms) {
+    if (!ms) return;
+    var t = null, go = function (wait) { clearTimeout(t); t = setTimeout(function () { el.classList.add("going"); setTimeout(function () { el.remove(); }, 300); }, wait); };
+    go(ms);
+    el.addEventListener("mouseenter", function () { clearTimeout(t); });
+    el.addEventListener("mouseleave", function () { go(3000); });
+  }
   Al.popup = function (a) {
     var root = document.getElementById("alert-root");
     if (!root) return;
@@ -73,6 +83,7 @@
       '<button type="button" class="btn btn-sm btn-ghost" data-alert-dismiss="' + a.id + '">Dismiss</button></div></div>' +
       '<button type="button" class="btn btn-ghost btn-icon btn-sm" data-alert-dismiss="' + a.id + '" aria-label="Close">' + I("x") + "</button>";
     add(root, el);
+    autoClose(el, POP_MS);
     if (document.hidden && window.Notification && Notification.permission === "granted") {
       try { new Notification(a.title, { body: a.body, icon: "assets/icon.svg", tag: a.id }); } catch (e) { /* not supported */ }
     }
@@ -244,8 +255,7 @@
       (ev.href ? '<div class="row mt-sm"><a class="btn btn-sm btn-primary" href="' + ev.href + '" data-news-close>Open</a></div>' : "") + "</div>" +
       '<button type="button" class="btn btn-ghost btn-icon btn-sm" data-news-close aria-label="Close">' + I("x") + "</button>";
     add(root, el);
-    var t = setTimeout(function () { el.classList.add("going"); setTimeout(function () { el.remove(); }, 300); }, 15000);
-    el.addEventListener("mouseenter", function () { clearTimeout(t); });
+    autoClose(el, POP_MS || 15000);
     if (document.hidden && window.Notification && Notification.permission === "granted") {
       try { new Notification(ev.title, { body: ev.body || "", icon: "assets/icon.svg", tag: ev.id }); } catch (e) { /* not supported */ }
     }

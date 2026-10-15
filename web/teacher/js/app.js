@@ -35,7 +35,25 @@
   }
 
   var lastPath = null;
+  /** Something failed: log it (the desktop app keeps logs/desktop.log), tell the person briefly, keep the page usable. */
+  var oopsAt = 0;
+  A.oops = function (e, where, quiet) {
+    var msg = (e && e.message) || String(e);
+    console.error(e);
+    try { if (window.desktop && window.desktop.logError) window.desktop.logError((where || "page") + " " + location.hash + ": " + ((e && e.stack) || msg)); } catch (x) { /* no log */ }
+    if (!quiet && Date.now() - oopsAt > 3000 && UI && UI.toast) { oopsAt = Date.now(); UI.toast("Something went wrong: " + msg.slice(0, 140), "bad"); }
+  };
   A.render = function () {
+    try { draw(); }
+    catch (e) {
+      A.oops(e, "render");
+      // never a blank page: say so, with a way back
+      var app = document.getElementById("app"), view = document.getElementById("view") || app;
+      if (view) view.innerHTML = '<div class="content">' + UI.empty("alert", "This page could not be shown", String((e && e.message) || e),
+        '<div class="row wrap" style="justify-content:center"><button class="btn" onclick="history.back()">Go back</button><button class="btn btn-primary" onclick="location.reload()">Reload</button></div>') + "</div>";
+    }
+  };
+  function draw() {
     var app = document.getElementById("app");
     if (!A.Store.state) return;
     if (A.cleanup) { var fn = A.cleanup; A.cleanup = null; try { fn(); } catch (e) { console.error(e); } }
@@ -77,11 +95,11 @@
       });
     });
     UI.hydrate(app);
-    if (view.mount) view.mount(app, m.params, h.query);
+    if (view.mount) { try { view.mount(app, m.params, h.query); } catch (e) { A.oops(e, "mount"); } }
     A.boxLists(app);
     window.scrollTo(0, samePage ? scroll : 0);
     if (me.role === "teacher" && A.Alerts) setTimeout(A.Alerts.check, 400);
-  };
+  }
 
   /* ------------------------------------------------------------------ long lists
      A list with many rows scrolls inside its own card (its heading stays on top) instead of
@@ -152,8 +170,9 @@
       { href: "#/t/syllabi", icon: "layers", label: "Syllabus library", key: "syllabi", match: ["syllabi", "syllabus"] },
       { href: "#/t/materials", icon: "library", label: "Learning materials", key: "materials" },
       { href: "#/t/tutor", icon: "cap", label: "Tutor content", key: "tutor" },
+    ].concat(me.isAdmin && A.Report && A.edition !== "home" ? [{ href: "#/t/reportcards", icon: "download", label: "Report cards", key: "reportcards" }] : []).concat([
       { href: me.isAdmin && A.pwRequestList && A.pwRequestList().length ? "#/t/settings?s=people" : "#/t/settings", icon: "sliders", label: "Settings", key: "settings", count: me.isAdmin && A.pwRequestList ? A.pwRequestList().length : 0 },
-    ];
+    ]);
   }
 
   function shell(me, view, h) {
@@ -844,7 +863,7 @@
     var el = e.target.closest("[data-act]");
     if (el && A.act[el.getAttribute("data-act")]) {
       if (el.tagName === "A" || el.tagName === "BUTTON") e.preventDefault();
-      A.act[el.getAttribute("data-act")](el, e);
+      try { A.act[el.getAttribute("data-act")](el, e); } catch (err) { A.oops(err, "act " + el.getAttribute("data-act")); }
       return;
     }
     var row = e.target.closest("[data-href]");
@@ -855,11 +874,11 @@
     if (!f) return;
     e.preventDefault();
     var fn = A.act[f.getAttribute("data-submit")];
-    if (fn) fn(f, e);
+    if (fn) { try { fn(f, e); } catch (err) { A.oops(err, "submit " + f.getAttribute("data-submit")); } }
   });
   document.addEventListener("change", function (e) {
     var el = e.target.closest("[data-change]");
-    if (el && A.act[el.getAttribute("data-change")]) A.act[el.getAttribute("data-change")](el, e);
+    if (el && A.act[el.getAttribute("data-change")]) { try { A.act[el.getAttribute("data-change")](el, e); } catch (err) { A.oops(err, "change " + el.getAttribute("data-change")); } }
   });
   document.addEventListener("input", function (e) {
     var el = e.target.closest("[data-input]");
@@ -882,6 +901,8 @@
   };
 
   /* ------------------------------------------------------------------- boot */
+  window.addEventListener("error", function (e) { if (e && e.error) A.oops(e.error, "uncaught", true); });
+  window.addEventListener("unhandledrejection", function (e) { var r = e && e.reason; if (r && !(r.name === "AbortError")) A.oops(r, "promise", true); });
   A.boot = function () {
     A.Theme.apply();
     // ask the browser to keep offline data even when the device is short of space
@@ -894,8 +915,9 @@
       if (A.Alerts) A.Alerts.start();
       A.render();
     }).catch(function (e) {
-      console.error(e);
-      document.getElementById("app").innerHTML = '<div class="content">' + UI.empty("alert", "The app could not start", String(e && e.message || e)) + "</div>";
+      A.oops(e, "boot");
+      document.getElementById("app").innerHTML = '<div class="content">' + UI.empty("alert", "The app could not start", String(e && e.message || e),
+        '<button class="btn btn-primary" onclick="location.reload()">Try again</button>') + "</div>";
     });
     if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
       navigator.serviceWorker.register("sw.js").catch(function (e) { console.warn("[sw]", e); });

@@ -19,14 +19,15 @@
   var COLLS = ["settings", "users", "credentials", "classes", "syllabi", "materials", "tasks", "submissions", "marks",
     "attendance", "messages", "receipts", "progress", "attempts", "timetable", "lessons", "alerts",
     "devices", "revocations", "netinfo", "enrolments", "pwrequests",
-    "assessments", "reports", "schemes", "pnotes"]; // the last four: School Assist Teacher (js/primary.js)
+    "assessments", "reports", "schemes", "pnotes", // School Assist Teacher (js/primary.js)
+    "reportmarks"]; // end-of-term marks and comments for the report cards (js/reportcards.js)
 
   /* who writes each collection (a user may also change their own PIN / password) */
   var OWNERS = {
     settings: "admin", users: "admin", credentials: "admin", timetable: "admin", revocations: "admin",
     classes: "teacher", syllabi: "teacher", materials: "teacher", tasks: "teacher", marks: "teacher",
     attendance: "teacher", messages: "teacher", lessons: "teacher", alerts: "teacher",
-    assessments: "teacher", reports: "teacher", schemes: "teacher", pnotes: "teacher",
+    assessments: "teacher", reports: "teacher", schemes: "teacher", pnotes: "teacher", reportmarks: "teacher",
     submissions: "student", receipts: "student", progress: "student", attempts: "student",
     devices: "device", netinfo: "server",
   };

@@ -1108,19 +1108,6 @@ details.mat-group:not([open]) > summary { border-bottom: 0; }
 .psch td { vertical-align: top; min-width: 140px; }
 .psch td:first-child, .psch td:nth-child(6), .psch td:last-child { min-width: 0; }
 .psch textarea { width: 100%; min-height: 54px; resize: vertical; font-size: 13.5px; }
-/* class screen: big and readable from the back of the classroom */
-.pscreen { display: grid; gap: 16px; background: var(--bg); }
-.pscreen:fullscreen { padding: 24px; overflow: auto; }
-.pscreen-stage { display: grid; place-items: center; gap: 24px; min-height: 60vh; padding: 24px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); text-align: center; }
-.pscreen:fullscreen .pscreen-stage { min-height: calc(100vh - 120px); }
-.pscr-big { font-size: clamp(56px, 13vw, 180px); font-weight: 800; line-height: 1.05; letter-spacing: -.02em; color: var(--text); word-break: break-word; }
-.pscr-big.done { color: var(--bad); animation: pscr-pulse 1s ease-in-out infinite; }
-.pscr-big.picked { color: var(--brand); }
-@keyframes pscr-pulse { 50% { opacity: .35; } }
-@media (prefers-reduced-motion: reduce) { .pscr-big.done { animation: none; } }
-.pscr-ans.hide { visibility: hidden; }
-.pscr-ctl { justify-content: center; gap: 10px; }
-.pscr-setup { width: min(560px, 100%); text-align: left; display: grid; gap: 8px; }
 /* printing: only the reports (or scheme) show, one A4 page each */
 #print-root { display: none; }
 @media print {
@@ -1147,4 +1134,11 @@ details.mat-group:not([open]) > summary { border-bottom: 0; }
 .preport-comment span { color: #444; font-size: 9.5pt; }
 .preport-foot { margin-top: 8px; font-size: 9pt; color: #444; }
 .pscheme { font-size: 9.5pt; }
-.pscreen-bar .pill-tabs button { display: inline-flex; align-items: center; gap: 7px; }
+/* report cards (js/reportcards.js): the end-of-term columns and bar, and the A4 preview */
+.rm-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.rm-bar > b { display: inline-flex; align-items: center; gap: 6px; }
+.table th.rm-col, .table td.rm-col { background: color-mix(in srgb, var(--brand) 6%, transparent); }
+.rm-comment { min-width: 150px; }
+.rc-preview { overflow: auto; max-height: 72vh; background: var(--surface-2); padding: 12px; border-radius: 10px; }
+.rc-scale-box { width: calc(210mm * .7); height: calc(297mm * .7); margin: 0 auto; }
+.rc-scale-box .rc { transform: scale(.7); transform-origin: top left; box-shadow: 0 2px 14px rgba(0, 0, 0, .18); }

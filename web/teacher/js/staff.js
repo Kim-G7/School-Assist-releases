@@ -167,7 +167,7 @@
         '<button class="btn btn-sm btn-ghost" data-act="staff-code-copy" data-code="' + esc(code) + '">' + I("copy") + "Copy</button>" +
         '<button class="btn btn-sm btn-ghost" data-act="staff-code-new" data-role="' + role + '">' + I("refresh") + "New code</button></div>";
     };
-    return "<h3>" + I("key") + " Staff sign-up codes</h3><p class=\"muted small mt-sm\">Teachers and admins register themselves on the sign-in screen with these codes, then wait for an admin to approve them. Give the teacher code to teachers only and the admin code to admins only. A teacher or admin signing in on a device a student used last must enter their code too.</p>" +
+    return "<h3>" + I("key") + " Staff sign-up codes</h3><p class=\"muted small mt-sm\">For registering on the sign-in screen. Give the admin code to admins only.</p>" +
       '<div class="mt">' + row("admin", c.admin) + row("teacher", c.teacher) + "</div>" +
       '<form class="row wrap mt" data-submit="staff-prefix" style="gap:8px"><label class="small" for="sp-in">School abbreviation</label><input id="sp-in" class="input sm" name="prefix" value="' + esc(c.prefix) + '" maxlength="6" style="width:110px;text-transform:uppercase" aria-label="School abbreviation"><button class="btn btn-sm" type="submit">Use it for new codes</button></form>';
   }

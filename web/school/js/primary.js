@@ -6,7 +6,7 @@
  *   Mark book      exercises, tests and continuous assessment per learning area, as a quick grid
  *   Reports        termly reports with marks, descriptors, position and attendance, printed for the class
  *   Schemes        scheme of work per learning area per term, and the record of work (what was taught)
- *   Class screen   for a projector or TV: timer, name picker, flash words, quick sums
+ *   Timetable      each class's week by learning area and teacher; "My timetable" across classes (the head sets it up)
  * Everything is kept on the device (and on a school hub, if the school runs one): no cloud.
  * Data: pupils are "users" with role student and pupil:true; a class is a "classes" record with
  * homeroom:true; "assessments", "reports", "schemes" and "pnotes" are this edition's own collections. */
@@ -97,12 +97,13 @@
       { href: "#/t/home", icon: "home", label: "Today", key: "home" },
       { href: "#/t/pupils", icon: "users", label: "My class", key: "pupils", match: ["pupils", "pupil"] },
       { href: "#/t/register", icon: "check", label: "Register", key: "register", count: c && !taken && M.isSchoolDay(Date.now()) ? "!" : 0 },
+      { href: "#/t/timetable", icon: "grid", label: "Timetable", key: "timetable" },
       { href: "#/t/markbook", icon: "edit", label: "Mark book", key: "markbook", match: ["markbook", "assessment"] },
       { href: "#/t/reports", icon: "file", label: "Reports", key: "reports" },
+      me.isAdmin && A.Report ? { href: "#/t/reportcards", icon: "download", label: "Report cards", key: "reportcards" } : null,
       { href: "#/t/schemes", icon: "book", label: "Schemes & records", key: "schemes" },
-      { href: "#/t/screen", icon: "tablet", label: "Class screen", key: "screen" },
       { href: "#/t/settings", icon: "sliders", label: "Settings", key: "settings" },
-    ];
+    ].filter(Boolean);
   };
 
   /* ------------------------------------------------------------------ first run: the school and the class */
@@ -233,8 +234,11 @@
       UI.stat("check", wk.n ? Math.round(wk.p / wk.n * 100) + "%" : "—", "Attendance, last 5 days") +
       UI.stat("edit", asTerm.length, "Marked this term") +
       UI.stat("cap", kids.filter(function (u) { return age(u.dob) != null; }).length ? Math.round(A.avg(kids.map(function (u) { return age(u.dob); }).filter(function (x) { return x != null; })) * 10) / 10 : "—", "Average age") + "</div>";
+    var lessons = P.todayLessons(me);
+    if (lessons.length) html += '<div class="card mb"><div class="card-head">' + I("grid") + "<h3>Today's lessons</h3><span class=\"grow\"></span><a class=\"btn btn-sm btn-ghost\" href=\"#/t/timetable\">Full week " + I("right") + "</a></div>" +
+      lessons.map(function (x) { return '<div class="list-row"><div class="tt-time"><b>' + x.p.start + "</b><span>" + x.p.end + '</span></div><div class="grow"><div class="title">' + esc(x.e.s.area) + '</div><div class="meta"><span>' + esc(x.e.c.name) + (x.e.s.room ? " · " + esc(x.e.s.room) : "") + "</span></div></div></div>"; }).join("") + "</div>";
     html += '<div class="grid g-main"><div class="card"><div class="card-head">' + I("bulb") + "<h3>Quick actions</h3></div><div class=\"card-body pquick\">" +
-      [["#/t/register", "check", "Take the register"], ["#/t/markbook?new=1", "edit", "Enter marks"], ["#/t/screen", "tablet", "Class screen"], ["#/t/reports", "file", "Term reports"], ["#/t/schemes", "book", "Scheme of work"], ["#/t/pupils?add=1", "plus", "Add pupils"]].map(function (x) {
+      [["#/t/register", "check", "Take the register"], ["#/t/markbook?new=1", "edit", "Enter marks"], ["#/t/timetable", "grid", "Timetable"], ["#/t/reports", "file", "Term reports"], ["#/t/schemes", "book", "Scheme of work"], ["#/t/pupils?add=1", "plus", "Add pupils"]].map(function (x) {
         return '<a class="pquick-btn" href="' + x[0] + '">' + I(x[1]) + "<span>" + esc(x[2]) + "</span></a>";
       }).join("") + "</div></div>";
     // birthdays in the next week
@@ -491,6 +495,15 @@
       return '<a class="list-row click" href="#/t/assessment/' + a.id + '"><div class="grow"><div class="title">' + esc(a.title) + '</div><div class="meta"><span>' + esc(a.area) + '</span><span class="sep"></span><span>' + esc(a.kind) +
         '</span><span class="sep"></span><span>' + esc(A.fmtDate(Date.parse(a.date + "T12:00:00"))) + '</span><span class="sep"></span><span>out of ' + a.outOf + '</span><span class="sep"></span><span>' + vals.length + " of " + kids.length + " marked</span></div></div>" + UI.scoreBadge(avg) + "</a>";
     }).join("") : UI.empty("edit", "Nothing marked yet", "Add an exercise, test, homework or CALA task and enter each pupil's mark.", '<button class="btn btn-primary" data-act="pas-new">' + I("plus") + "New marks</button>")) + "</div>";
+    // the end-of-term mark and comment for each learning area: they go on the report cards (js/reportcards.js)
+    if (A.Report && kids.length) {
+      var etArea = area || (conf.areas.indexOf(q.et) >= 0 ? q.et : conf.areas[0]);
+      var et = { year: String(conf.year), term: term, classId: c.id, subject: etArea };
+      html += '<div class="card mb"><div class="card-head">' + I("award") + "<h3>End of term · " + esc(etArea) + "</h3>" +
+        (area ? "" : '<select class="select sm" style="width:auto;margin-left:auto" data-change="pmb-et" data-term="' + term + '" aria-label="Learning area">' + conf.areas.map(function (a2) { return "<option" + (a2 === etArea ? " selected" : "") + ">" + esc(a2) + "</option>"; }).join("") + "</select>") +
+        '</div><div class="card-pad" style="padding-top:0"><p class="muted small mb">Each pupil\'s end-of-term mark and a comment in ' + esc(etArea) + ". They go on the report cards.</p>" +
+        A.Report.entryBar(et, "#/t/markbook?term={t}" + (area ? "&a=" + encodeURIComponent(area) : "&et=" + encodeURIComponent(etArea))) + A.Report.entryTable(et, kids) + "</div></div>";
+    }
     // the class at a glance: each pupil's % per learning area this term
     var areas = conf.areas.filter(function (a2) { return sc.list.some(function (x) { return x.area === a2; }); });
     if (areas.length && kids.length) {
@@ -506,6 +519,7 @@
   }, { role: "teacher" });
   function short(area) { return { "Science and Technology": "Science & Tech", "Indigenous Language": "Indigenous lang.", "Visual and Performing Arts": "VPA", "Family, Religion and Moral Education": "FAREME", "Physical Education": "PE" }[area] || area; }
   A.act["pmb-term"] = function (el) { location.hash = "#/t/markbook?term=" + el.value; };
+  A.act["pmb-et"] = function (el) { location.hash = "#/t/markbook?term=" + el.getAttribute("data-term") + "&et=" + encodeURIComponent(el.value); };
   A.act["pas-new"] = function () { assessmentModal(null); };
   function assessmentModal(a) {
     var me = M.me(), c = P.cls(me), conf = P.conf();
@@ -588,14 +602,15 @@
     var done = kids.filter(function (u) { return reportRec(u.id, conf.year, term).teacherComment; }).length;
     var html = '<div class="row wrap spread mb"><div><h2 style="font-size:22px">Term ' + term + " reports · " + esc(c.name) + '</h2><p class="muted">' + done + " of " + kids.length + " have the class teacher's comment</p></div>" +
       '<div class="row wrap">' + classSwitch(me, c, "reports") + '<select class="select sm" style="width:auto" data-change="prep-term" aria-label="Term">' + [1, 2, 3].map(function (t) { return '<option value="' + t + '"' + (t === term ? " selected" : "") + ">Term " + t + "</option>"; }).join("") + "</select>" +
-      '<button class="btn btn-primary" data-act="prep-print" data-term="' + term + '">' + I("download") + "Print all reports</button></div></div>";
-    html += '<div class="callout mb">' + I("info") + "<div>Marks come from the mark book: each learning area is the pupil's marks over the marks possible this term. Write each pupil's comment, then <b>Print all reports</b> (one A4 page each; choose <b>Microsoft Print to PDF</b> to save them as a file).</div></div>";
+      // the report cards (js/reportcards.js): PDFs in the desktop app, printed in a browser
+      '<button class="btn btn-primary" data-act="rc-make" data-scope="class" data-level="' + esc(c.level || "No grade") + '" data-key="' + esc(c.id) + '">' + I("download") + (window.desktop && window.desktop.reports ? "Make report cards" : "Print all reports") + "</button></div></div>";
+    html += '<div class="callout mb">' + I("info") + "<div>Write each pupil's comment, then <b>" + (window.desktop && window.desktop.reports ? "Make report cards" : "Print all reports") + "</b>.</div></div>";
     html += kids.length ? '<div class="card table-wrap"><table class="table"><thead><tr><th>Pupil</th><th class="num">Average</th><th class="num">Position</th><th class="num">Days present</th><th>Teacher\'s comment</th><th></th></tr></thead><tbody>' +
       kids.map(function (u) {
         var s = sc.by[u.id], r = reportRec(u.id, conf.year, term), att = termAttendance(c, u.id, term, conf);
         return "<tr><td><b>" + esc(u.name) + '</b></td><td class="num">' + UI.scoreBadge(s.avg) + '</td><td class="num tnum">' + (s.pos ? s.pos + " / " + sc.ranked : "—") + '</td><td class="num tnum">' + att.present + " / " + att.days + "</td>" +
           '<td class="small">' + (r.teacherComment ? esc(r.teacherComment) : '<span class="muted">Not written yet</span>') + "</td>" +
-          '<td class="nowrap"><button class="btn btn-sm" data-act="prep-edit" data-id="' + u.id + '" data-term="' + term + '">' + I("edit") + 'Comments</button> <button class="btn btn-sm btn-ghost" data-act="prep-print" data-id="' + u.id + '" data-term="' + term + '">' + I("download") + "Print</button></td></tr>";
+          '<td class="nowrap"><button class="btn btn-sm" data-act="prep-edit" data-id="' + u.id + '" data-term="' + term + '">' + I("edit") + 'Comments</button> <button class="btn btn-sm btn-ghost" data-act="rc-make" data-scope="student" data-level="' + esc(c.level || "No grade") + '" data-key="' + esc(c.id) + '" data-sid="' + u.id + '">' + I("download") + (window.desktop && window.desktop.reports ? "PDF" : "Print") + "</button></td></tr>";
       }).join("") + "</tbody></table></div>" : '<div class="card">' + UI.empty("users", "No pupils yet", "Add your class list first.") + "</div>";
     return { title: "Reports", html: html };
   }, { role: "teacher" });
@@ -666,7 +681,7 @@
       }).join("") + "</select>" +
       '<select class="select sm" style="width:auto" data-change="psch-term" data-a="' + esc(area) + '" aria-label="Term">' + [1, 2, 3].map(function (t) { return '<option value="' + t + '"' + (t === term ? " selected" : "") + ">Term " + t + "</option>"; }).join("") + "</select>" +
       '<button class="btn" data-act="psch-print">' + I("download") + "Print</button></div></div>";
-    html += '<div class="callout mb">' + I("info") + "<div>Plan each week before the term, then tick <b>Taught</b> and write the <b>evaluation</b> (what went well, who needs help) as you go: that is your record of work. It saves as you type.</div></div>";
+    html += '<div class="callout mb">' + I("info") + "<div>Tick <b>Taught</b> and write the <b>evaluation</b> as you go. It saves as you type.</div></div>";
     html += '<div class="card table-wrap"><table class="table psch" id="psch" data-id="' + schemeId(c, area, conf.year, term) + '" data-area="' + esc(area) + '" data-term="' + term + '"><thead><tr><th>Week</th><th>Topic / content</th><th>Objectives</th><th>Methods & activities</th><th>Resources</th><th>Taught</th><th>Evaluation (record of work)</th><th></th></tr></thead><tbody>' +
       rows.map(schemeRow).join("") + '</tbody></table><div class="card-foot"><button class="btn btn-sm" data-act="psch-add">' + I("plus") + "Add a week</button></div></div>";
     return {
@@ -717,94 +732,192 @@
       "</tbody></table></section>");
   };
 
-  /* ------------------------------------------------------------------ Class screen (projector or TV) */
-  var SCR = { tool: "timer", left: 0, total: 0, run: null, picked: [], words: [], wi: 0, sums: null };
-  A.route("t/screen", function (p, q, me) {
-    var c = P.cls(me), tool = q.tool || SCR.tool;
-    SCR.tool = tool;
-    var tabs = [["timer", "clock", "Timer"], ["names", "users", "Pick a name"], ["words", "book", "Flash words"], ["sums", "target", "Quick sums"]];
-    var html = '<div class="pscreen" data-no-refresh><div class="row wrap spread pscreen-bar"><div class="pill-tabs" style="margin:0">' + tabs.map(function (t) {
-      return '<button class="' + (t[0] === tool ? "on" : "") + '" data-act="goto" data-href="#/t/screen?tool=' + t[0] + '">' + I(t[1]) + t[2] + "</button>";
-    }).join("") + '</div><button class="btn" data-act="pscr-full">' + I("expand") + "Full screen</button></div>" + '<div class="pscreen-stage" id="pscr-stage">' + screenTool(tool, c) + "</div></div>";
-    return {
-      title: "Class screen", html: html,
-      mount: function () { if (tool === "timer") paintTimer(); A.cleanup = function () { clearInterval(SCR.run); SCR.run = null; }; if (tool === "timer" && SCR.left > 0 && SCR.going) startTimer(); },
-    };
+  /* ------------------------------------------------------------------ Timetable
+     Each class's week: which learning area in each period, and who teaches it (the class teacher, unless the head
+     names another teacher for that lesson, e.g. PE or ICT). "My timetable" is every lesson a teacher gives, in any
+     class. The head chooses how it works (settings "ttmode", shared with js/timetable.js): the same every week, one
+     for each month, or one for each term; a month or term without its own uses the usual week. Bell times: the
+     school's (settings "bells", js/timetable.js's Bell times), primary-school periods until the head sets them.
+     Slots are "timetable" records { classId, day 1–5, periodId, area, teacherId, room, scope }. */
+  P.BELLS = [
+    { id: "p1", label: "1", start: "07:30", end: "08:05" }, { id: "p2", label: "2", start: "08:05", end: "08:40" }, { id: "p3", label: "3", start: "08:40", end: "09:15" },
+    { id: "brk", label: "Break", start: "09:15", end: "09:45", isBreak: true }, { id: "p4", label: "4", start: "09:45", end: "10:20" }, { id: "p5", label: "5", start: "10:20", end: "10:55" },
+    { id: "p6", label: "6", start: "10:55", end: "11:30" }, { id: "lun", label: "Lunch", start: "11:30", end: "12:15", isBreak: true }, { id: "p7", label: "7", start: "12:15", end: "12:50" },
+    { id: "p8", label: "8", start: "12:50", end: "13:25" },
+  ];
+  var TT_MODES = { week: "Week by week", month: "Monthly", term: "By term" };
+  var WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+  function ttMode() { var m = A.TT ? A.TT.mode() : "week"; return TT_MODES[m] ? m : "week"; }
+  var monthKey = function (d) { return "m:" + d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2); };
+  /** The timetable shown: { key (null = the usual week), label, nav (moving between months or terms), now (it is the current one) }. */
+  function ttShown(q, base) {
+    var mode = ttMode(), conf = P.conf();
+    if (mode === "month") {
+      var mo = Number(q.m) || 0, d = new Date(); d.setDate(15); d.setMonth(d.getMonth() + mo);
+      var key = monthKey(d);
+      return { key: key, now: mo === 0, label: A.TT.keyLabel(key), nav: '<div class="seg">' + [[mo - 1, I("left") + "Previous"], [0, "This month"], [mo + 1, "Next " + I("right")]].map(function (x) {
+        return '<button class="' + (x[0] === mo && x[0] === 0 ? "on" : "") + '" data-act="goto" data-href="' + base + "&m=" + x[0] + '">' + x[1] + "</button>"; }).join("") + "</div>" };
+    }
+    if (mode === "term") {
+      var t = [1, 2, 3].indexOf(Number(q.t)) >= 0 ? Number(q.t) : conf.term;
+      return { key: "t:Term " + t, now: t === conf.term, label: "Term " + t, nav: '<div class="seg">' + [1, 2, 3].map(function (n) {
+        return '<button class="' + (n === t ? "on" : "") + '" data-act="goto" data-href="' + base + "&t=" + n + '">Term ' + n + "</button>"; }).join("") + "</div>" };
+    }
+    return { key: null, now: true, label: "Every week", nav: "" };
+  }
+  /** The key in force today (for Today's lessons). */
+  function ttKeyNow() { var m = ttMode(); return m === "month" ? monthKey(new Date()) : m === "term" ? "t:Term " + P.conf().term : null; }
+  function homerooms() { return S().filter("classes", function (c) { return c.homeroom; }).sort(function (a, b) { return M.levelIndex(a.level) - M.levelIndex(b.level) || a.name.localeCompare(b.name); }); }
+  function hasOwn(classId, key) { return !!key && S().filter("timetable", function (s) { return s.classId === classId && s.scope === key; }).length > 0; }
+  /** A class's lessons in force for `key`: its own for that month or term, or else its usual week. */
+  function slotsOf(classId, key) {
+    var all = S().filter("timetable", function (s) { return s.classId === classId; });
+    var own = key ? all.filter(function (s) { return s.scope === key; }) : [];
+    return own.length ? own : all.filter(function (s) { return !s.scope; });
+  }
+  var teacherOf = function (s, c) { return s.teacherId || (c && c.teacherId) || null; };
+  /** Every lesson a teacher gives, in any class. */
+  function lessonsOf(me, key) {
+    var out = [];
+    homerooms().forEach(function (c) { slotsOf(c.id, key).forEach(function (s) { if (teacherOf(s, c) === me.id) out.push({ s: s, c: c }); }); });
+    return out;
+  }
+  function ttGrid(entries, o) {
+    var today = new Date().getDay(), bells = A.TT.bells();
+    var head = "<tr><th></th>" + WEEKDAYS.map(function (d, i) { return '<th class="' + (o.now && i + 1 === today ? "today" : "") + '">' + d + "</th>"; }).join("") + "</tr>";
+    var body = bells.map(function (p) {
+      if (p.isBreak) return '<tr class="tt-break"><th>' + esc(p.label) + "<span>" + p.start + "–" + p.end + '</span></th><td colspan="5">' + esc(p.label) + "</td></tr>";
+      return "<tr><th><b>" + esc(p.label) + "</b><span>" + p.start + "–" + p.end + "</span></th>" + WEEKDAYS.map(function (d, i) {
+        var here = entries.filter(function (e) { return e.s.day === i + 1 && e.s.periodId === p.id; });
+        var cls = "tt-cell" + (o.now && i + 1 === today ? " today" : "");
+        var inner = here.map(function (e) {
+          var t = M.user(teacherOf(e.s, e.c)), other = e.c && t && t.id !== e.c.teacherId;
+          return '<div class="tt-lesson"><b>' + esc(e.s.area) + "</b><span>" + esc(o.mine ? e.c.name : other ? t.name : "") + (e.s.room ? (o.mine || other ? " · " : "") + esc(e.s.room) : "") + "</span></div>";
+        }).join("");
+        if (o.edit) return '<td class="' + cls + ' edit" data-act="ptt-cell" data-class="' + o.classId + '" data-day="' + (i + 1) + '" data-period="' + p.id + '" data-key="' + esc(o.key || "") + '" tabindex="0" role="button">' + (inner || '<span class="tt-empty">' + I("plus") + "</span>") + "</td>";
+        return '<td class="' + cls + '">' + inner + "</td>";
+      }).join("") + "</tr>";
+    }).join("");
+    return '<div class="table-wrap"><table class="tt"><thead>' + head + "</thead><tbody>" + body + "</tbody></table></div>";
+  }
+  A.route("t/timetable", function (p, q, me) {
+    var mode = ttMode(), all = homerooms();
+    // a teacher sees the classes they teach in; the head sees every class
+    var mineIds = {}; lessonsOf(me, null).forEach(function (e) { mineIds[e.c.id] = 1; });
+    var classes = all.filter(function (c) { return me.isAdmin || c.teacherId === me.id || mineIds[c.id]; });
+    var cur = q.c && classes.some(function (c) { return c.id === q.c; }) ? M.cls(q.c) : null;
+    var base = "#/t/timetable?" + (cur ? "c=" + cur.id : "v=mine") + (q.e === "1" ? "&e=1" : "");
+    var shown = ttShown(q, base), edit = !!(me.isAdmin && cur && q.e === "1");
+    var html = '<div class="row wrap spread mb"><div><h2 style="font-size:22px">Timetable</h2><p class="muted">' + esc(TT_MODES[mode]) + (shown.key ? " · " + esc(shown.label) : "") + "</p></div>" +
+      (me.isAdmin ? '<div class="seg" role="group" aria-label="How the timetable works">' + Object.keys(TT_MODES).map(function (m) { return '<button class="' + (m === mode ? "on" : "") + '" data-act="ptt-mode" data-mode="' + m + '">' + esc(TT_MODES[m]) + "</button>"; }).join("") + "</div>" : "") + "</div>";
+    html += '<div class="pill-tabs"><button class="' + (!cur ? "on" : "") + '" data-act="goto" data-href="#/t/timetable?v=mine">My timetable</button>' +
+      classes.map(function (c) { return '<button class="' + (cur && cur.id === c.id ? "on" : "") + '" data-act="goto" data-href="#/t/timetable?c=' + c.id + '">' + esc(c.name) + "</button>"; }).join("") + "</div>";
+    if (shown.nav) html += '<div class="row wrap mb">' + shown.nav + "</div>";
+    if (!cur) {
+      var mine = lessonsOf(me, shown.key);
+      html += mine.length ? '<div class="card">' + ttGrid(mine, { mine: true, now: shown.now }) + "</div>"
+        : '<div class="card">' + UI.empty("grid", "No lessons yet", me.isAdmin ? "Open a class above and choose Edit to set its timetable." : "The head sets up each class's timetable; your lessons show here.") + "</div>";
+      return { title: "Timetable", html: html };
+    }
+    var t = M.user(cur.teacherId), own = shown.key && hasOwn(cur.id, shown.key);
+    html += '<div class="row wrap mb"><h3 style="font-size:17px">' + esc(cur.name) + '</h3><span class="muted small">' + (t ? "Class teacher: " + esc(t.name) : "") + '</span><span class="grow"></span>' +
+      (me.isAdmin ? (edit ? '<button class="btn" data-act="tt-bells">' + I("clock") + 'Bell times</button><a class="btn btn-primary" href="#/t/timetable?c=' + cur.id + '">' + I("check") + "Done</a>"
+        : '<a class="btn btn-primary" href="#/t/timetable?c=' + cur.id + '&e=1">' + I("edit") + "Edit</a>") : "") + "</div>";
+    if (me.isAdmin && shown.key) html += '<div class="callout mb">' + I("info") + '<div class="grow">' + (own ? esc(shown.label) + " has its own timetable for " + esc(cur.name) + "." : esc(shown.label) + " uses the usual week for " + esc(cur.name) + ".") + "</div>" +
+      (own ? '<button class="btn btn-sm" data-act="ptt-drop" data-class="' + cur.id + '" data-key="' + esc(shown.key) + '">Use the usual week</button>'
+        : '<button class="btn btn-sm btn-primary" data-act="ptt-make" data-class="' + cur.id + '" data-key="' + esc(shown.key) + '">' + I("plus") + "Make one for " + esc(shown.label) + "</button>") + "</div>";
+    var entries = slotsOf(cur.id, shown.key).map(function (s) { return { s: s, c: cur }; });
+    html += '<div class="card">' + ttGrid(entries, { edit: edit, classId: cur.id, key: shown.key, now: shown.now }) + "</div>";
+    if (edit) html += '<p class="small muted mt">Click a period to choose its learning area. Lessons are the class teacher\'s unless you pick another teacher.</p>';
+    return { title: "Timetable", html: html };
   }, { role: "teacher" });
-  function screenTool(tool, c) {
-    if (tool === "timer") {
-      return '<div class="pscr-big tnum" id="pscr-time">0:00</div><div class="row wrap pscr-ctl">' + [1, 2, 3, 5, 10, 15].map(function (m) { return '<button class="btn btn-lg" data-act="pscr-set" data-m="' + m + '">' + m + " min</button>"; }).join("") +
-        '<button class="btn btn-lg btn-primary" data-act="pscr-go">' + I("play") + "Start / pause</button></div>";
-    }
-    if (tool === "names") {
-      var kids = P.pupils(c);
-      return '<div class="pscr-big" id="pscr-name">' + (kids.length ? "Who's next?" : "Add your class first") + '</div><div class="row wrap pscr-ctl"><button class="btn btn-lg btn-primary" data-act="pscr-pick"' + (kids.length ? "" : " disabled") + ">" + I("refresh") + "Pick a name</button>" +
-        '<span class="muted" id="pscr-left">' + (kids.length - SCR.picked.length) + " not picked yet</span><button class=\"btn btn-ghost\" data-act=\"pscr-reset\">Start again</button></div>";
-    }
-    if (tool === "words") {
-      return SCR.words.length ? '<div class="pscr-big" id="pscr-word">' + esc(SCR.words[SCR.wi] || "") + '</div><div class="row wrap pscr-ctl"><button class="btn btn-lg" data-act="pscr-word" data-d="-1">' + I("left") + 'Back</button><span class="muted tnum" id="pscr-wn">' + (SCR.wi + 1) + " / " + SCR.words.length + '</span><button class="btn btn-lg btn-primary" data-act="pscr-word" data-d="1">Next' + I("right") + '</button><button class="btn btn-ghost" data-act="pscr-words-new">New list</button></div>'
-        : '<div class="pscr-setup"><h3>Words to flash</h3><p class="muted">Type or paste this week\'s spelling or sight words, one per line or separated by commas.</p><textarea class="input" id="pscr-list" rows="6" placeholder="because, friend, school, beautiful"></textarea><button class="btn btn-primary btn-lg mt" data-act="pscr-words-go">' + I("play") + "Show them</button></div>";
-    }
-    var lv = c ? Math.max(1, LEVELS.indexOf(c.level) - 1) : 3, s = SCR.sums || newSum(lv);
-    SCR.sums = s;
-    return '<div class="pscr-big tnum" id="pscr-sum">' + esc(s.q) + ' = <span class="pscr-ans' + (s.shown ? "" : " hide") + '">' + s.a + '</span></div><div class="row wrap pscr-ctl"><button class="btn btn-lg" data-act="pscr-ans">Show the answer</button><button class="btn btn-lg btn-primary" data-act="pscr-sum-next">Next sum' + I("right") + '</button><span class="muted">Sums for ' + esc(c ? c.level : "Grade 3") + "</span></div>";
+
+  function copyWeek(classId, key) {
+    S().filter("timetable", function (s) { return s.classId === classId && !s.scope; }).forEach(function (s) {
+      S().put("timetable", Object.assign({}, s, { id: A.uid("tt"), scope: key, copiedFrom: s.id }));
+    });
   }
-  function newSum(grade) {
-    var r = function (n) { return 1 + Math.floor(Math.random() * n); }, ops = grade <= 2 ? ["+", "−"] : grade <= 4 ? ["+", "−", "×"] : ["+", "−", "×", "÷"];
-    var op = ops[Math.floor(Math.random() * ops.length)], top = grade <= 1 ? 10 : grade <= 2 ? 20 : grade <= 4 ? 100 : 1000, x, y, a;
-    if (op === "+") { x = r(top); y = r(top); a = x + y; }
-    else if (op === "−") { x = r(top); y = r(x); a = x - y; }
-    else if (op === "×") { x = r(grade <= 4 ? 10 : 12); y = r(grade <= 4 ? 10 : 12); a = x * y; }
-    else { y = r(12); a = r(12); x = a * y; }
-    return { q: x + " " + op + " " + y, a: a, shown: false };
-  }
-  function paintTimer() {
-    var el = document.getElementById("pscr-time"); if (!el) return;
-    var m = Math.floor(SCR.left / 60), s = SCR.left % 60;
-    el.textContent = m + ":" + A.pad(s);
-    el.classList.toggle("done", SCR.total > 0 && SCR.left === 0);
-  }
-  function startTimer() {
-    clearInterval(SCR.run);
-    SCR.going = true;
-    SCR.run = setInterval(function () { if (SCR.left > 0) SCR.left--; paintTimer(); if (SCR.left === 0) { clearInterval(SCR.run); SCR.going = false; } }, 1000);
-  }
-  A.act["pscr-set"] = function (el) { clearInterval(SCR.run); SCR.going = false; SCR.total = SCR.left = Number(el.getAttribute("data-m")) * 60; paintTimer(); };
-  A.act["pscr-go"] = function () { if (SCR.going) { clearInterval(SCR.run); SCR.going = false; } else if (SCR.left > 0) startTimer(); };
-  A.act["pscr-pick"] = function () {
-    var kids = P.pupils(P.cls(M.me())), left = kids.filter(function (u) { return SCR.picked.indexOf(u.id) < 0; });
-    if (!left.length) { SCR.picked = []; left = kids; }
-    var el = document.getElementById("pscr-name"), spins = 12, k = 0;
-    var spin = setInterval(function () {
-      var u = left[Math.floor(Math.random() * left.length)];
-      el.textContent = u.name;
-      if (++k >= spins) { clearInterval(spin); SCR.picked.push(u.id); el.classList.add("picked"); document.getElementById("pscr-left").textContent = (kids.length - SCR.picked.length) + " not picked yet"; }
-      else el.classList.remove("picked");
-    }, 70);
+  A.act["ptt-cell"] = function (el) {
+    if (!M.me().isAdmin) return;
+    var cid = el.getAttribute("data-class"), day = Number(el.getAttribute("data-day")), pid = el.getAttribute("data-period"), key = el.getAttribute("data-key") || null;
+    var c = M.cls(cid), per = A.TT.period(pid), conf = P.conf();
+    if (!c || !per) return;
+    // a month or term without its own timetable gets one (a copy of the usual week) when it's changed
+    if (key && !hasOwn(cid, key)) copyWeek(cid, key);
+    var here = S().filter("timetable", function (s) { return s.classId === cid && s.day === day && s.periodId === pid && (s.scope || null) === key; });
+    var staff = S().filter("users", function (u) { return u.role === "teacher" && u.status !== "pending" && u.status !== "declined"; }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+    var clash = function (tid) {
+      var other = null;
+      homerooms().forEach(function (c2) {
+        if (other || c2.id === cid) return;
+        slotsOf(c2.id, key).forEach(function (s) { if (!other && s.day === day && s.periodId === pid && teacherOf(s, c2) === tid) other = c2; });
+      });
+      var u = M.user(tid);
+      return other && u ? u.name + " already teaches " + other.name + " then." : "";
+    };
+    UI.modal({
+      title: c.name + " · " + WEEKDAYS[day - 1] + ", period " + per.label, sub: per.start + "–" + per.end + (key ? " · " + A.TT.keyLabel(key) : ""),
+      body: (here.length ? here.map(function (s) {
+        var u = M.user(teacherOf(s, c));
+        return '<div class="list-row" style="padding:10px 0"><div class="grow"><b>' + esc(s.area) + '</b><div class="small muted">' + esc(u ? u.name : "") + (s.room ? " · " + esc(s.room) : "") + '</div></div><button type="button" class="btn btn-sm btn-danger" data-remove="' + s.id + '">' + I("trash") + "Remove</button></div>";
+      }).join("") + '<div class="divider"></div>' : "") +
+        '<form id="ptt-form" class="form-grid"><label class="field"><span>Learning area</span><select class="select" name="area">' + conf.areas.map(function (a) { return "<option>" + esc(a) + "</option>"; }).join("") + '<option value="">Something else…</option></select></label>' +
+        '<label class="field"><span>Or type it</span><input class="input" name="other" placeholder="e.g. Assembly, Library, Clubs"></label>' +
+        '<label class="field"><span>Teacher</span><select class="select" name="teacherId">' + staff.map(function (u) { return '<option value="' + u.id + '"' + (u.id === c.teacherId ? " selected" : "") + ">" + esc(u.name) + (u.id === c.teacherId ? " (class teacher)" : "") + "</option>"; }).join("") + "</select></label>" +
+        '<label class="field"><span>Room <span class="muted">(optional)</span></span><input class="input" name="room" placeholder="e.g. Computer lab"></label></form><p class="small bad-text mt-sm" id="ptt-clash"></p>',
+      foot: [{ label: "Close" }, { label: here.length ? "Add another" : "Save", cls: "btn-primary", onClick: function (m) {
+        var f = UI.formData(m.querySelector("#ptt-form")), area = (f.other || "").trim() || f.area;
+        if (!area) { UI.toast("Choose a learning area or type one", "bad"); return false; }
+        S().put("timetable", { id: A.uid("tt"), classId: cid, day: day, periodId: pid, area: area.slice(0, 60), teacherId: f.teacherId || c.teacherId || null, room: (f.room || "").trim().slice(0, 40), scope: key || undefined });
+        UI.toast(c.name + ": " + area + ", " + WEEKDAYS[day - 1] + " period " + per.label);
+        A.render();
+      } }],
+      onMount: function (m) {
+        var sel = m.querySelector("[name=teacherId]"), note = m.querySelector("#ptt-clash");
+        var check = function () { note.textContent = clash(sel.value); };
+        sel.addEventListener("change", check); check();
+        m.querySelectorAll("[data-remove]").forEach(function (b) {
+          b.addEventListener("click", function () { S().remove("timetable", b.getAttribute("data-remove")); b.closest(".list-row").remove(); A.render(); });
+        });
+      },
+    });
   };
-  A.act["pscr-reset"] = function () { SCR.picked = []; A.render(); };
-  A.act["pscr-words-go"] = function () {
-    SCR.words = document.getElementById("pscr-list").value.split(/[\n,;]+/).map(function (w) { return w.trim(); }).filter(Boolean); SCR.wi = 0;
-    if (!SCR.words.length) { UI.toast("Type some words first", "bad"); return; }
+  A.act["ptt-make"] = function (el) {
+    copyWeek(el.getAttribute("data-class"), el.getAttribute("data-key"));
+    UI.toast(A.TT.keyLabel(el.getAttribute("data-key")) + " has its own timetable now: change it here");
     A.render();
   };
-  A.act["pscr-words-new"] = function () { SCR.words = []; A.render(); };
-  A.act["pscr-word"] = function (el) {
-    SCR.wi = Math.max(0, Math.min(SCR.words.length - 1, SCR.wi + Number(el.getAttribute("data-d"))));
-    document.getElementById("pscr-word").textContent = SCR.words[SCR.wi]; document.getElementById("pscr-wn").textContent = (SCR.wi + 1) + " / " + SCR.words.length;
+  A.act["ptt-drop"] = function (el) {
+    var key = el.getAttribute("data-key"), cid = el.getAttribute("data-class");
+    UI.confirm("Go back to the usual week for " + A.TT.keyLabel(key) + "? Its own changes are removed.", { ok: "Use the usual week" }).then(function (ok) {
+      if (!ok) return;
+      S().filter("timetable", function (s) { return s.classId === cid && s.scope === key; }).forEach(function (s) { S().remove("timetable", s.id); });
+      A.render();
+    });
   };
-  A.act["pscr-ans"] = function () { if (SCR.sums) SCR.sums.shown = true; var a = document.querySelector(".pscr-ans"); if (a) a.classList.remove("hide"); };
-  A.act["pscr-sum-next"] = function () { var c = P.cls(M.me()); SCR.sums = newSum(c ? Math.max(1, LEVELS.indexOf(c.level) - 1) : 3); A.render(); };
-  A.act["pscr-full"] = function () {
-    var el = document.querySelector(".pscreen");
-    if (document.fullscreenElement) document.exitFullscreen(); else if (el && el.requestFullscreen) el.requestFullscreen().catch(function () { UI.toast("Full screen isn't available here", "bad"); });
+  A.act["ptt-mode"] = function (el) {
+    var m = el.getAttribute("data-mode");
+    if (!M.me().isAdmin || m === ttMode()) return;
+    UI.confirm("Change the school's timetable to " + TT_MODES[m].toLowerCase() + "? Every teacher sees the change.", { ok: "Change it" }).then(function (ok) {
+      if (!ok) return;
+      S().put("settings", { id: "ttmode", mode: m, by: M.me().id });
+      UI.toast("Timetable: " + TT_MODES[m]);
+      A.go("#/t/timetable?v=mine");
+    });
+  };
+  /** Today's lessons for the Today page (none on a weekend or with no timetable). */
+  P.todayLessons = function (me) {
+    var wd = new Date().getDay(), bells = A.TT ? A.TT.bells() : [];
+    if (wd < 1 || wd > 5) return [];
+    return lessonsOf(me, ttKeyNow()).filter(function (e) { return e.s.day === wd; }).map(function (e) { return { e: e, p: bells.filter(function (b) { return b.id === e.s.periodId; })[0] }; })
+      .filter(function (x) { return x.p; }).sort(function (a, b) { return A.hm(a.p.start) - A.hm(b.p.start); });
   };
 
   /* ------------------------------------------------------------------ Settings → Learning areas & terms */
   P.settingsSection = function (me) {
     var conf = P.conf();
     var html = '<div class="card card-pad" style="max-width:760px"><h3>' + I("book") + " Learning areas and terms</h3>" +
-      '<p class="muted small mt-sm">The learning areas in the mark book, the reports and the schemes of work, the term dates (they decide which term a register or a mark belongs to), and the descriptors on the reports.</p>' +
+      '<p class="muted small mt-sm">Used in the mark book, reports and schemes.</p>' +
       '<form id="pconf" class="form-grid mt"><label class="field"><span>School year</span><input class="input" name="year" value="' + esc(conf.year) + '"></label>' +
       '<label class="field"><span>Current term</span><select class="select" name="term">' + [1, 2, 3].map(function (t) { return '<option value="' + t + '"' + (t === conf.term ? " selected" : "") + ">Term " + t + "</option>"; }).join("") + "</select></label>" +
       [1, 2, 3].map(function (t) {
@@ -818,6 +931,7 @@
     return html;
   };
   A.act["pconf-save"] = function () {
+    if (!M.me() || !M.me().isAdmin) return;
     var f = UI.formData(document.getElementById("pconf")), terms = {};
     [1, 2, 3].forEach(function (t) { if (f["opens" + t] || f["closes" + t]) terms[t] = { opens: f["opens" + t], closes: f["closes" + t] }; });
     var areas = f.areas.split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean);

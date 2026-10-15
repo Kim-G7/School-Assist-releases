@@ -12,11 +12,11 @@
     var sections = [["appearance", "Appearance", "sun"]];
     if (admin) sections.push(["branding", "School branding", "palette"], ["structure", "Classes & streams", "layers"]);
     if (me.role === "teacher" && A.edition !== "teacher") sections.push(["subjects", "My subjects", "layers"]);
-    if (A.Primary) sections.push(["primary", "Learning areas & terms", "book"]);
-    sections.push(["sync", "Offline & sync", "refresh"]);
+    if (A.Primary && admin) sections.push(["primary", "Learning areas & terms", "book"]);
+    if (A.edition !== "teacher" || admin) sections.push(["sync", "Offline & sync", "refresh"]); // School Assist Teacher: admins only
     if (admin) sections.push(["people", "People", "users"], ["devices", "Devices", "phone"]);
     if (me.role === "teacher" && A.edition !== "teacher") sections.push(["integrity", "Exam integrity", "shield"]);
-    if (admin && A.edition !== "teacher" && A.AI) sections.push(["ai", "AI marking", "bulb"]); // online, or through the school hub
+    if (admin && A.edition !== "teacher" && A.AI && (!A.Licence || A.Licence.has("ai-marking"))) sections.push(["ai", "AI marking", "bulb"]); // Premium (hidden on Standard); online, or through the school hub
     if (admin && A.Licence && A.Licence.applies()) sections.push(["licence", "Plan & licence", "key"]);
     if (admin && A.SchoolId && A.SchoolId.applies() && A.SchoolId.id()) sections.push(["share", "Share the app", "download"]);
     if (admin) sections.push(["data", "Backup & data", "database"]);
@@ -41,7 +41,7 @@
   /* ------------------------------------------------------------ appearance */
   SECTIONS.appearance = function (me) {
     var mode = A.Theme.mode();
-    return '<div class="card card-pad" style="max-width:640px"><h3>Light or dark</h3><p class="muted small mt-sm">Dark mode is easier on the eyes at night. This setting only affects this device.</p>' +
+    return '<div class="card card-pad" style="max-width:640px"><h3>Light or dark</h3><p class="muted small mt-sm">For this device only.</p>' +
       '<div class="seg mt">' + [["light", "Light", "sun"], ["dark", "Dark", "moon"], ["system", "Match device", "sliders"]].map(function (m) {
         return '<button class="' + (mode === m[0] ? "on" : "") + '" data-act="set-mode" data-m="' + m[0] + '">' + I(m[2]) + m[1] + "</button>";
       }).join("") + "</div></div>" + (A.Screen ? screenCard(me) : "");
@@ -50,23 +50,17 @@
   /* Full screen: this device, and (admins) whether students can leave it */
   function screenCard(me) {
     var Sc = A.Screen, admin = me.role === "teacher" && me.isAdmin, locked = Sc.locked();
-    var how = {
-      desktop: "School Assist opens full screen with no title bar, like a kiosk, with no Windows kiosk account to set up. Use the buttons at the top right to minimise, leave full screen or close the app, or press F11.",
-      browser: "Browsers only allow full screen after a tap, so it starts with your first tap or key press. Added to an Android tablet's home screen, it opens full screen straight away.",
-      native: "The tablet app always runs full screen with the status and navigation bars hidden. Swipe in from the edge of the screen to show them for a moment.",
-    }[Sc.kind];
     var row = function (act, on, title, text) {
       return '<label class="row top small mt" style="gap:12px;cursor:pointer"><span class="toggle"><input type="checkbox" data-change="' + act + '"' + (on ? " checked" : "") + ' aria-label="' + esc(title) + '"><span></span></span><span><b>' + esc(title) + "</b> " + esc(text) + "</span></label>";
     };
-    var html = '<div class="card card-pad mt" style="max-width:640px"><h3>Full screen</h3><p class="muted small mt-sm">' + esc(how) + "</p>";
+    var html = '<div class="card card-pad mt" style="max-width:640px"><h3>Full screen</h3>';
     if (Sc.kind !== "native") {
       html += locked
         ? '<div class="callout mt">' + I("lock") + "<div>Your school keeps students in full screen.</div></div>"
-        : row("screen-open-full", Sc.openFull(), "Open in full screen on this device.", "Turn off to use School Assist in a normal window.");
+        : row("screen-open-full", Sc.openFull(), "Open in full screen on this device.", "");
     }
-    if (admin) {
-      html += '<div class="divider"></div>' + row("screen-student-lock", Sc.studentLock(), "Keep students in full screen.", "While a student is signed in there is no exit or minimise button and F11 does nothing, on every device in the school.") +
-        '<p class="muted small mt-sm">The Windows key and Alt+Tab still work, because only a Windows kiosk account can block those. On tablets, use <b>App pinning</b> (Android: Settings → Security) or <b>Guided Access</b> (iPad: Settings → Accessibility) to keep a student inside the app during a test.</p>';
+    if (admin && A.edition !== "teacher") { // School Assist Teacher has no student sign-ins
+      html += '<div class="divider"></div>' + row("screen-student-lock", Sc.studentLock(), "Keep students in full screen.", "No exit or minimise button while a student is signed in.");
     }
     return html + "</div>";
   }
@@ -85,7 +79,7 @@
       '<label class="field full"><span>Aims <span class="muted">(one per line)</span></span><textarea class="textarea" name="aims" rows="3">' + esc(b.aims) + "</textarea></label></div>" +
       '<div class="divider"></div><h3>Logo / crest</h3><div class="row wrap mt"><div id="brand-logo" style="width:84px;height:84px">' + A.Theme.logoHTML() + "</div>" +
       '<div class="grow"><label class="btn">' + I("upload") + 'Upload logo<input type="file" accept="image/*" id="brand-logo-in" hidden></label> <button type="button" class="btn btn-ghost" id="brand-logo-clear">Remove uploaded logo</button>' +
-      '<p class="tiny muted mt-sm">PNG or SVG with a transparent background works best, square, under 500 KB. With no logo, the app draws a crest from your initials and colours. The logo (or crest) is also the app icon on the school computers, and on tablets and phones that add the app from the school hub.</p></div></div>' +
+      '<p class="tiny muted mt-sm">PNG or SVG, square, under 500 KB. It is also the app\'s icon.</p></div></div>' +
       '<input type="hidden" name="logo" value="' + esc(saved && saved.logo != null ? saved.logo : "") + '">' +
       '<div class="divider"></div><h3>Colours</h3><p class="muted small mt-sm">Pick a preset or your school\'s exact colours. Text colours adjust automatically so everything stays readable.</p>' +
       '<div class="swatches mt">' + A.Theme.presets.map(function (p) {
@@ -168,12 +162,7 @@
     if (A.Cloud) return cloudSyncSection();
     var st = A.Sync.status(), cfg = A.Sync.config();
     var hubCard = window.desktop && M.me().role === "teacher" ? '<div class="card card-pad mb" id="hub-card"><h3>' + I("monitor") + " School hub on this computer</h3><p class=\"muted small mt-sm\">Loading…</p></div>" : "";
-    var html = hubCard + '<div class="grid g-main"><div class="card card-pad"><h3>How offline works</h3>' +
-      '<ul class="small mt-sm" style="padding-left:18px;line-height:1.8"><li><b>Everything is saved on this device first</b>: registers, marks, tasks, study progress and test results. No internet is needed to use the app.</li>' +
-      "<li>PDFs and textbooks are stored on the device too, so students can read them offline.</li>" +
-      "<li>When a connection to the school sync server is available, changes are sent and received automatically. Each record belongs to one person (teacher or student), so offline changes never overwrite each other.</li>" +
-      "<li>No network at all? Use <b>Backup & data</b> to move a file by USB stick or shared folder.</li></ul>" +
-      '<div class="divider"></div><h3>School sync server</h3><p class="muted small mt-sm">Run <code>npm start</code> on one school computer and enter its address here (for example <code>http://192.168.1.20:8080</code>). Leave it empty to keep everything on this device only.</p>' +
+    var html = hubCard + '<div class="grid g-main"><div class="card card-pad"><h3>School hub address</h3><p class="muted small mt-sm">Empty: this device only.</p>' +
       '<form data-submit="sync-save" class="mt"><div class="row wrap"><input class="input grow" name="url" value="' + esc(cfg.url) + '" placeholder="http://192.168.1.20:8080" aria-label="Sync server address">' +
       '<button class="btn" type="submit">Save</button></div><label class="check mt-sm"><input type="checkbox" name="auto"' + (cfg.auto ? " checked" : "") + ">Sync automatically when online (every 30 to 45 seconds)</label></form></div>" +
       '<div class="card card-pad" style="align-self:start"><h3>Status</h3><dl class="kv mt">' +
@@ -267,9 +256,9 @@
     var draw = function (h) {
       var admin = M.me().isAdmin;
       card.innerHTML = '<div class="row wrap top"><div class="grow"><h3 class="row">' + I("monitor") + "School hub on this computer " + (h.running ? '<span class="badge good">' + I("wifi") + "Running</span>" : '<span class="badge">Off</span>') + "</h3>" +
-        '<p class="muted small mt-sm" style="max-width:680px">Turn this on for the one computer that stays at school, for example in the office or staff room. Tablets, phones and other laptops on the school Wi-Fi then sync through it, with no internet needed.</p>' +
+        '<p class="muted small mt-sm" style="max-width:680px">Only on the one computer that stays at school.</p>' +
         (h.running ? '<div class="label mt">Addresses for other devices</div>' + h.urls.slice(1).map(function (u) { return '<code class="pw-mask" style="display:inline-block;margin:0 8px 6px 0;font-size:14px">' + esc(u) + "</code>"; }).join("") +
-          (h.urls.length < 2 ? '<p class="small">This computer is not on a network yet. Connect it to the school Wi-Fi.</p>' : '<p class="tiny muted">On each tablet or phone: open this address in the browser, or enter it in Settings → Offline & sync.</p>') : "") +
+          (h.urls.length < 2 ? '<p class="small">This computer is not on a network yet. Connect it to the school Wi-Fi.</p>' : '<p class="tiny muted">Other devices use this address.</p>') : "") +
         (h.error ? '<p class="form-msg">' + I("alert") + esc(h.error) + "</p>" : "") +
         '<p class="tiny muted mt-sm">Hub data folder: ' + esc(h.dataDir) + ". Back it up regularly. Windows may ask to allow School Assist on your network: choose <b>Private networks</b>.</p></div>" +
         '<div class="stack" style="min-width:220px">' + (admin ? (h.running
@@ -307,8 +296,7 @@
   function cloudSyncSection() {
     var st = A.Sync.status(), p = A.Cloud.profile() || {}, me = M.me();
     return { mount: mountOffline, html: '<div class="grid g-main"><div class="card card-pad"><h3>Online and offline</h3>' +
-      '<ul class="small mt-sm" style="padding-left:18px;line-height:1.8"><li><b>Everything is saved on this device first</b>, so School Assist works with no internet.</li>' +
-      "<li>When you are online it sends your changes straight away and fetches new ones every 30 to 45 seconds: " + (me.role === "student" ? "new notes, tests and files from your admin, and your progress for the admin to see." : "students' progress and test results, and everything you add for them.") + "</li>" +
+      '<ul class="small mt-sm" style="padding-left:18px;line-height:1.8"><li>Saved on this device first; sent when online.</li>' +
       "<li>Signed in online as <b>" + esc(p.name || me.name) + "</b>" + (p.student_no ? " (" + esc(p.student_no) + ")" : "") + ".</li></ul></div>" +
       '<div class="card card-pad" style="align-self:start"><h3>Status</h3><dl class="kv mt">' +
       "<dt>Connection</dt><dd>" + (navigator.onLine ? '<span class="badge good">' + I("wifi") + "Online</span>" : '<span class="badge warn">' + I("wifiOff") + "Offline</span>") + "</dd>" +
@@ -350,7 +338,7 @@
     if (A.Cloud) {
       html += A.pwRequestsHtml ? A.pwRequestsHtml(me) : "";
       users.sort(function (a, b) { return (a.status === "pending" ? 0 : 1) - (b.status === "pending" ? 0 : 1); });
-      if (role === "student") html += '<div class="callout mb">' + I("users") + '<div class="small">Students register themselves, get the next student ID and choose their subjects. <b>Approve</b> their account here; each subject is then approved by its teacher (or by you) in <a href="#/t/requests">Subject requests</a>. Forgotten password? Open <b>Edit</b> and give them a new one. You can\'t see passwords: they are stored scrambled online.</div></div>';
+      if (role === "student") html += '<div class="callout mb">' + I("users") + '<div class="small"><b>Approve</b> new students here; their subjects in <a href="#/t/requests">Subject requests</a>. Forgotten password: <b>Edit</b>.</div></div>';
       else html += '<div class="callout mb">' + I("school") + '<div class="small">Teachers sign in with their email address. They see only the subjects they teach, and approve the students who ask to take them. Subjects without a teacher are yours.</div></div>';
     }
     if (role === "teacher" && A.staffAdminHtml) {
@@ -360,7 +348,7 @@
     if (A.Cloud) {
       // (handled above)
     } else if (role === "student") {
-      html += '<div class="callout mb">' + I("key") + '<div class="small">Students create their own password the first time they sign in. If a device is lost or stolen, look up the password here or reset it, then sign that device out under <b>Devices</b> so nobody can change the student\'s work.</div></div>';
+      html += '<div class="callout mb">' + I("key") + '<div class="small">Lost or stolen device: reset the password here, then sign the device out under <b>Devices</b>.</div></div>';
     }
     html += '<div class="card table-wrap"><table class="table"><thead><tr><th>Name</th>' + (role === "student" ? "<th>Student ID</th><th>Class</th><th>" + (A.Cloud ? "Status" : "Password") + "</th><th>Devices</th>" : (A.Cloud ? "" : "<th>Staff no.</th>") + "<th>Subjects</th><th>" + (A.Cloud ? "Sign-in" : "PIN") + "</th><th>Devices</th>") + "<th>Subject classes</th><th></th></tr></thead><tbody>" +
       users.map(function (u) {
@@ -585,11 +573,11 @@
   SECTIONS.integrity = function (me) {
     var th = M.copyThreshold(me.id);
     return '<div class="card card-pad" style="max-width:720px"><h3>Copying from the marking scheme</h3>' +
-      '<p class="muted small mt-sm">After every online test, each written (structured) answer is compared with the marking scheme. An answer counts as <b>identical</b> when at least ' + Math.round(M.IDENTICAL * 100) + '% of its wording matches. You are shown how many answers were identical, and the paper is flagged when the share reaches your limit.</p>' +
+      '<p class="muted small mt-sm">A paper is flagged when this share of its written answers matches the marking scheme word for word (' + Math.round(M.IDENTICAL * 100) + '% or more of the wording).</p>' +
       '<form data-submit="save-integrity" class="mt"><label class="field"><span>Flag a paper when this share of written answers is identical</span>' +
       '<div class="row"><input type="range" min="10" max="100" step="5" name="th" value="' + th + '" style="flex:1;accent-color:var(--brand)" oninput="this.form.thv.value=this.value+\'%\'"><output name="thv" class="bold tnum" style="width:48px;text-align:right">' + th + "%</output></div></label>" +
       '<button class="btn btn-primary mt" type="submit">' + I("check") + "Save</button></form>" +
-      '<div class="divider"></div><h3>Pop-up notifications</h3><p class="muted small mt-sm">You get pop-ups inside the app when everyone has submitted, 5 minutes before work is due, and when a paper looks copied. You can also get them from your computer or tablet while the app is in the background.</p>' +
+      '<div class="divider"></div><h3>Pop-up notifications</h3><p class="muted small mt-sm">Also when the app is in the background.</p>' +
       '<button class="btn mt" data-act="notif-permission">' + I("bell") + (window.Notification && Notification.permission === "granted" ? "Device notifications are on" : "Turn on device notifications") + "</button></div>";
   };
   A.act["save-integrity"] = function (form) {
@@ -612,12 +600,11 @@
     var on = !!(S().get("settings", "ai") || {}).enabled, hub = A.AI.where() !== "cloud";
     return {
       html: '<div class="card card-pad" style="max-width:760px"><h3>AI marking for written answers</h3>' +
-        '<p class="muted small mt-sm">The app already marks multiple choice, numbers, algebra and short answers. Written explanations and essays are left for students to mark with the scheme. ' +
-        'With AI marking on, those answers are also marked against the marking scheme by Claude (Anthropic), with a line of feedback on each. Students can still change any mark.</p>' +
+        '<p class="muted small mt-sm">Marks written answers against the marking scheme, with a line of feedback. Students can still change any mark.</p>' +
         '<ul class="small mt"><li>Students\' answers, the questions and the marking scheme are sent to Anthropic to be marked. Names are not sent.</li>' +
         '<li>It needs an Anthropic API key, billed by Anthropic per use: roughly US$0.05–0.30 per paper, depending on how much is written.</li>' +
         '<li>Each person can have up to 40 marking requests a day.</li>' +
-        (hub ? "<li>It runs through the <b>school hub</b>: the key is kept on the hub computer, never on students' devices, and marking works on any device connected to the hub (Settings → Offline &amp; sync). Save the key on the hub computer itself.</li>" : "") + "</ul>" +
+        (hub ? "<li>Save the key on the hub computer.</li>" : "") + "</ul>" +
         '<div id="ai-status" class="callout mt">' + I("refresh") + "<div>Checking…</div></div>" +
         '<label class="check mt"><input type="checkbox" id="ai-on"' + (on ? " checked" : "") + '> <b>Mark written answers with AI</b></label>' +
         '<form data-submit="ai-key" class="mt"><label class="field"><span>Anthropic API key</span><div class="pw-wrap"><input class="input" type="password" name="key" autocomplete="off" placeholder="sk-ant-…"><button type="button" class="btn btn-ghost btn-icon btn-sm" data-act="pw-toggle" aria-label="Show key">' + I("eye") + "</button></div>" +
@@ -656,7 +643,7 @@
   /* ------------------------------------------------------------------ data */
   SECTIONS.data = function (me) {
     var counts = S().COLLS.map(function (c) { return [c, S().all(c).length]; }).filter(function (x) { return x[1]; });
-    var html = '<div class="grid g-2"><div class="card card-pad"><h3>Back up</h3><p class="muted small mt-sm">Save everything on this device to a single file. Keep it on a USB stick or another computer, or use it to move data to a device with no network.</p>' +
+    var html = '<div class="grid g-2"><div class="card card-pad"><h3>Back up</h3><p class="muted small mt-sm">Everything on this device in one file, for a flash drive.</p>' +
       '<label class="check mt"><input type="checkbox" id="bk-files" checked>Include uploaded PDFs and files (bigger file)</label>' +
       '<button class="btn btn-primary mt" data-act="backup">' + I("download") + "Download backup</button>" +
       '<div class="divider"></div><h3>Restore or merge</h3><p class="muted small mt-sm"><b>Merge</b> adds newer records from the file and keeps everything else. <b>Replace</b> makes this device an exact copy of the backup.</p>' +
@@ -680,7 +667,7 @@
       return '<div class="divider"></div><h3>The school on this device</h3><p class="muted small mt-sm">This device belongs to <b>' + esc(rec.name || A.Theme.get().name) + "</b>. Its records come from, and go to, the school hub; a hub of another school turns it away.</p>" +
         '<button class="btn btn-danger mt" data-act="leave-school">' + I("logout") + "Remove the school from this device</button>";
     }
-    return '<div class="divider"></div><h3>Demo data</h3><p class="muted small mt-sm">The app ships with a demo school so you can try every feature. It never goes to a school hub. When you are ready for real use, set your school up (on the hub computer), or join the school hub (on every other computer).</p>' +
+    return '<div class="divider"></div><h3>Demo data</h3><p class="muted small mt-sm">A demo school to try things. It never goes to a school hub.</p>' +
       '<div class="row wrap mt"><button class="btn" data-act="reset-demo">' + I("refresh") + 'Reset demo data</button>' +
       (Id && Id.applies() ? '<button class="btn btn-primary" data-act="su-leave-demo">' + I("school") + "Set up my school</button>"
         : '<button class="btn btn-danger" data-act="start-empty">' + I("trash") + "Start empty</button>") + "</div>";

@@ -52,7 +52,8 @@
     if (!st.enabled) {
       var lic = S().get("settings", "licence");
       return '<div class="card card-pad"><h3>' + I("upload") + " Online backup</h3>" + explain() +
-        (lic && lic.key ? '<div class="setup-actions" style="justify-content:flex-start"><button class="btn btn-primary" data-act="bk-enable">' + I("shield") + "Turn on the online backup</button></div>"
+        (lic && lic.key && A.Licence && A.Licence.isMaster() ? '<div class="callout warn mt">' + I("key") + '<div class="small">The school is using Golden Technologies\' temporary master key. The online backup needs the school\'s own key: enter it in <a href="#/t/settings?s=licence">Plan &amp; licence</a> when it arrives.</div></div>'
+          : lic && lic.key ? '<div class="setup-actions" style="justify-content:flex-start"><button class="btn btn-primary" data-act="bk-enable">' + I("shield") + "Turn on the online backup</button></div>"
           : '<div class="callout warn mt">' + I("key") + '<div class="small">The online backup comes with the school\'s plan. Enter the school\'s School Assist key in <a href="#/t/settings?s=licence">Plan &amp; licence</a> first.</div></div>') +
         '<div id="bk-msg"></div></div>';
     }

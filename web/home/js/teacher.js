@@ -341,14 +341,19 @@
   }
 
   /* ---- gradebook */
-  CLASS_TABS.gradebook = function (c) {
+  CLASS_TABS.gradebook = function (c, q) {
     var tasks = M.tasksForClass(c.id).filter(function (t) { return t.maxMarks; }).sort(function (a, b) { return (a.dueAt || 0) - (b.dueAt || 0); });
     var studs = M.studentsOf(c);
-    if (!tasks.length) return '<div class="card">' + UI.empty("award", "Nothing to grade yet", "Tasks with a mark total appear here as columns.") + "</div>";
-    var html = '<div class="row spread wrap mb"><p class="muted small">Type a mark and press Tab to save it. Online tests fill in automatically (grey), and you can overwrite them.</p><div class="row"><button class="btn btn-sm" data-act="new-task" data-class="' + c.id + '" data-kind="test">' + I("plus") + "Record a test</button><button class=\"btn btn-sm\" data-act=\"gb-csv\" data-class=\"" + c.id + '">' + I("download") + "Export CSV</button></div></div>" +
+    if (!studs.length) return '<div class="card">' + UI.empty("award", "No students in this class yet", "Add students to the class, then their marks go here.") + "</div>";
+    // the end-of-term mark and comment for the report cards (js/reportcards.js), for the term chosen (now, by default)
+    var R = A.Report, now = R.termNow(), et = { year: String((q && q.year) || now.year), term: Number(q && q.term) || now.term, classId: c.id, subject: c.subject };
+    var rc = A.edition !== "home"; // home study has no report cards
+    if (!rc) { var none = function () { return ""; }; R = { entryBar: none, datalist: none, entryHead: none, entryCells: none, entryFoot: none }; }
+    var html = '<div class="row spread wrap mb"><p class="muted small">Type a mark and press Tab to save it. Online tests fill in automatically (grey), and you can overwrite them.' + (rc ? ' At the end of term, fill in the <b>End of term</b> mark and a <b>Comment</b> for every student: they go on the report cards.' : "") + '</p><div class="row"><button class="btn btn-sm" data-act="new-task" data-class="' + c.id + '" data-kind="test">' + I("plus") + "Record a test</button><button class=\"btn btn-sm\" data-act=\"gb-csv\" data-class=\"" + c.id + '">' + I("download") + "Export CSV</button></div></div>" +
+      R.entryBar(et, "#/t/class/" + c.id + "/gradebook?term={t}&year=" + et.year) + R.datalist() +
       '<div class="card table-wrap"><table class="table"><thead><tr><th class="sticky">Student</th>' +
       tasks.map(function (t) { return '<th class="num" data-tip="' + esc(t.title + " · " + M.KINDS[t.kind].label + " · due " + A.fmtDate(t.dueAt)) + '"><a href="#/t/task/' + t.id + '">' + esc(t.title.length > 16 ? t.title.slice(0, 15) + "…" : t.title) + '</a><div class="tiny">/ ' + t.maxMarks + "</div></th>"; }).join("") +
-      '<th class="num">Average</th></tr></thead><tbody>' +
+      '<th class="num">Average</th>' + R.entryHead(et) + "</tr></thead><tbody>" +
       studs.map(function (u) {
         var pcts = [];
         var cells = tasks.map(function (t) {
@@ -360,12 +365,13 @@
           return '<td class="num"><input class="cell" inputmode="decimal" value="' + val + '" placeholder="' + ph + '" data-change="gb-score" data-task="' + t.id + '" data-sid="' + u.id + '" data-max="' + t.maxMarks + '" aria-label="' + esc(u.name + " " + t.title) + '"></td>';
         }).join("");
         var avg = pcts.length ? Math.round(A.avg(pcts)) : null;
-        return '<tr><td class="sticky"><a href="#/t/student/' + u.id + "/" + c.id + '" class="row">' + A.avatar(u, "sm") + esc(u.name) + "</a></td>" + cells + '<td class="num">' + UI.scoreBadge(avg) + "</td></tr>";
+        return '<tr><td class="sticky"><a href="#/t/student/' + u.id + "/" + c.id + '" class="row">' + A.avatar(u, "sm") + esc(u.name) + "</a></td>" + cells + '<td class="num">' + UI.scoreBadge(avg) + "</td>" + R.entryCells(et, u) + "</tr>";
       }).join("") +
       '<tr><td class="sticky bold">Class average</td>' + tasks.map(function (t) {
         var sc = M.assignees(t).map(function (u) { var e = M.effectiveScore(t, u.id); return e ? (e.score / t.maxMarks) * 100 : null; }).filter(function (x) { return x != null; });
         return '<td class="num">' + UI.scoreBadge(sc.length ? Math.round(A.avg(sc)) : null) + "</td>";
-      }).join("") + "<td></td></tr></tbody></table></div>";
+      }).join("") + "<td></td>" + R.entryFoot(et) + "</tr></tbody></table></div>" +
+      (tasks.length ? "" : '<p class="muted small mt">Tasks with a mark total (tests, homework) appear here as columns too.</p>');
     return html;
   };
   A.act["gb-score"] = function (el) {

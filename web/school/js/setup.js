@@ -424,7 +424,9 @@
     var o = { name: d.name, shortName: d.short || d.name, abbr: d.abbr, motto: d.motto, vision: (d.vision || "").trim(), mission: (d.mission || "").trim(), aims: (d.aims || "").trim(),
       logo: d.logo || "", primary: d.primary || "", secondary: d.secondary || "", admin: d.admin, title: d.title, pin: d.pin, key: lic ? lic.key : "",
       cls: A.edition === "teacher" && d.level ? { level: d.level, stream: d.stream, sample: d.sample } : null };
-    if (lic) { o.name = lic.data.name; o.abbr = lic.data.abbr; if (!d.short || d.short === d.name) o.shortName = lic.data.name; } // the key's name and abbreviation win
+    if (lic && lic.renewal) return fail("That is a renewal code. Enter the school's key (it starts SA1.), or leave this empty for now.");
+    // the key's name and abbreviation win (a temporary master key has none: the school keeps what was typed)
+    if (lic && !lic.master) { o.name = lic.data.name; o.abbr = lic.data.abbr; if (!d.short || d.short === d.name) o.shortName = lic.data.name; }
     Id.create(o).then(function (admin) {
       M.signIn(admin.id);
       if (A.LastUser) A.LastUser.set(admin, {});

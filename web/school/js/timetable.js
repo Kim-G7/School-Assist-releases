@@ -15,6 +15,11 @@
   var esc = A.esc, I = A.icon, M = A.M, UI = A.UI, S = function () { return A.Store; };
   var CFG = window.SCHOOL_CONFIG || {};
   var TT = (A.TT = {});
+  // School Assist Teacher has its own timetable page (js/primary.js): the bells, modes and keys here, not these routes
+  var route = A.edition === "teacher" ? function () {} : A.route;
+  // the school day the bell times must fit in (primary schools start earlier)
+  TT.DAY_START = A.edition === "teacher" ? "07:00" : "08:00";
+  TT.DAY_END = A.edition === "teacher" ? "17:00" : "16:00";
   var DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
   TT.TYPES = CFG.lessonTypes || ["Theory", "Discussion", "Practical", "Mock test"];
   var TYPE_ICON = { Theory: "book", Discussion: "message", Practical: "beaker", "Mock test": "clock" };
@@ -23,7 +28,7 @@
 
   TT.bells = function () {
     var rec = S().get("settings", "bells");
-    return (rec && rec.periods && rec.periods.length ? rec.periods : A.DEFAULT_BELLS || [
+    return (rec && rec.periods && rec.periods.length ? rec.periods : (A.edition === "teacher" && A.Primary && A.Primary.BELLS) || A.DEFAULT_BELLS || [
       { id: "p1", label: "1", start: "08:00", end: "08:40" }, { id: "p2", label: "2", start: "08:40", end: "09:20" }, { id: "p3", label: "3", start: "09:20", end: "10:00" },
       { id: "brk", label: "Break", start: "10:00", end: "10:30", isBreak: true }, { id: "p4", label: "4", start: "10:30", end: "11:10" }, { id: "p5", label: "5", start: "11:10", end: "11:50" },
       { id: "p6", label: "6", start: "11:50", end: "12:30" }, { id: "lun", label: "Lunch", start: "12:30", end: "13:15", isBreak: true }, { id: "p7", label: "7", start: "13:15", end: "13:55" },
@@ -36,7 +41,7 @@
   TT.MODES = { day: "Day to day", week: "Week by week", month: "Monthly", term: "By term" };
   TT.mode = function () { var r = S().get("settings", "ttmode"); return r && TT.MODES[r.mode] ? r.mode : "week"; };
   var monthKey = function (ts) { var d = new Date(ts); return "m:" + d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2); };
-  var termNow = function () { return (S().get("settings", "term") || {}).term || CFG.term || M.termName(1); };
+  var termNow = function () { return A.edition === "teacher" && A.Primary ? "Term " + A.Primary.conf().term : (S().get("settings", "term") || {}).term || CFG.term || M.termName(1); };
   /** The scope in force on a day (null: the usual weekly timetable). */
   TT.keyFor = function (dayTs) {
     var m = TT.mode();
@@ -205,13 +210,13 @@
   }
   function legend() { return '<div class="legend">' + TT.TYPES.map(function (t) { return TT.typeChip(t); }).join("") + "</div>"; }
 
-  A.route("s/timetable", function (p, q, me) {
+  route("s/timetable", function (p, q, me) {
     var v = timeView(q, "#/s/timetable", "");
     return { title: "Timetable", html: v.nav + '<div class="card">' + weekGrid(function (ts) { return TT.forStudent(me, v.keyOf(ts)); }, v.monday, v) + "</div>" +
       '<p class="small muted mt">' + esc(M.studentHome(me)) + " · lessons run Monday to Friday, 08:00 to 16:00. The label under a lesson tells you what your teacher has planned.</p>" };
   }, { role: "student" });
 
-  A.route("t/timetable", function (p, q, me) {
+  route("t/timetable", function (p, q, me) {
     var st = M.structure();
     var view = q.v || "mine", lv = q.l || st.levels[3] || st.levels[0], sm = q.s || st.streams[0];
     var homes = homeClasses();
@@ -375,11 +380,11 @@
   A.act["tt-bells"] = function () {
     var rows = TT.bells();
     var row = function (p) {
-      return '<tr><td><input class="input sm" name="label" value="' + esc(p.label) + '" style="width:110px" aria-label="Name"></td><td><input class="input sm" type="time" name="start" value="' + p.start + '" min="08:00" max="16:00" aria-label="Starts"></td><td><input class="input sm" type="time" name="end" value="' + p.end + '" min="08:00" max="16:00" aria-label="Ends"></td>' +
+      return '<tr><td><input class="input sm" name="label" value="' + esc(p.label) + '" style="width:110px" aria-label="Name"></td><td><input class="input sm" type="time" name="start" value="' + p.start + '" min="' + TT.DAY_START + '" max="' + TT.DAY_END + '" aria-label="Starts"></td><td><input class="input sm" type="time" name="end" value="' + p.end + '" min="' + TT.DAY_START + '" max="' + TT.DAY_END + '" aria-label="Ends"></td>' +
         '<td><label class="check small"><input type="checkbox" name="isBreak"' + (p.isBreak ? " checked" : "") + '>Break</label><input type="hidden" name="id" value="' + (p.id || A.uid("p")) + '"></td><td><button type="button" class="btn btn-ghost btn-icon btn-sm" data-del aria-label="Remove">' + I("trash") + "</button></td></tr>";
     };
     UI.modal({
-      title: "Bell times", sub: "School day: Monday to Friday, 08:00 to 16:00", size: "wide",
+      title: "Bell times", sub: "School day: Monday to Friday, " + TT.DAY_START + " to " + TT.DAY_END, size: "wide",
       body: '<table class="table"><thead><tr><th>Name</th><th>Starts</th><th>Ends</th><th></th><th></th></tr></thead><tbody id="bell-rows">' + rows.map(row).join("") + '</tbody></table><button type="button" class="btn btn-sm mt-sm" id="bell-add">' + I("plus") + "Add period</button>",
       foot: [{ label: "Cancel" }, {
         label: "Save bell times", cls: "btn-primary", onClick: function (m) {
@@ -387,7 +392,7 @@
           m.querySelectorAll("#bell-rows tr").forEach(function (tr) {
             var g = function (n) { return tr.querySelector("[name=" + n + "]"); };
             var p = { id: g("id").value, label: g("label").value.trim() || "Period", start: g("start").value, end: g("end").value, isBreak: g("isBreak").checked };
-            if (A.hm(p.start) < A.hm("08:00") || A.hm(p.end) > A.hm("16:00") || A.hm(p.end) <= A.hm(p.start)) bad = p.label + " must be between 08:00 and 16:00 and end after it starts.";
+            if (A.hm(p.start) < A.hm(TT.DAY_START) || A.hm(p.end) > A.hm(TT.DAY_END) || A.hm(p.end) <= A.hm(p.start)) bad = p.label + " must be between " + TT.DAY_START + " and " + TT.DAY_END + " and end after it starts.";
             out.push(p);
           });
           if (bad) { UI.toast(bad, "bad"); return false; }
