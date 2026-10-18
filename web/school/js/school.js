@@ -25,7 +25,7 @@
     return d.status().then(function (h) { return h && h.running ? "http://127.0.0.1:" + h.port : ""; }).catch(function () { return ""; });
   }
   function hubCall(base, path, body) {
-    return fetch(base + path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {})
+    return fetch(base + path, body ? { method: "POST", headers: A.Sync.headers({ "Content-Type": "application/json" }), body: JSON.stringify(body) } : { headers: A.Sync.headers() })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || "The school hub replied " + r.status); return j; }); });
   }
   A.AI = {
@@ -100,6 +100,7 @@
     var words = ["river", "maple", "sunny", "tiger", "cloud", "green", "lucky", "stone", "happy", "eagle"], r = function (n) { return Math.floor(Math.random() * n); };
     return words[r(words.length)] + "-" + words[r(words.length)] + "-" + (10 + r(90));
   }
+  A.newPassword = newPassword; // Settings → People → Give a new password
   A.act["school-pw-reset"] = function (el) {
     var r = S().get("pwrequests", el.getAttribute("data-id")), u = r && M.user(r.appId);
     if (!u) { UI.toast("There's no student with that ID. Dismiss the request.", "bad"); return; }

@@ -363,11 +363,11 @@
           if (waiting) pw += ' <a class="badge warn" href="#/t/requests">' + waiting + " subject request" + (waiting === 1 ? "" : "s") + " waiting</a>";
         } else if (role === "student") {
           var cr = M.credential(u.id);
-          pw = cr && cr.password ? '<span class="pw-cell"><code class="pw-mask" data-pw="' + esc(cr.password) + '">••••••••</code><button class="btn btn-ghost btn-icon btn-sm" data-act="reveal-pw" aria-label="Show password" data-tip="Show password">' + I("eye") + "</button></span>"
+          pw = M.hasPassword(u.id) ? '<span class="badge good" data-tip="Kept scrambled: nobody can read it. Edit gives a new one.">' + I("check") + "Set</span>"
             : '<span class="badge warn" data-tip="The student sets a password the first time they sign in">Not set yet</span>';
         }
         return '<tr><td><div class="row">' + A.avatar(u, "sm") + "<b>" + esc(u.name) + "</b>" + (u.isAdmin ? ' <span class="badge accent">Admin</span>' : "") + (u.example ? ' <span class="badge brand">Example</span>' : "") + "</div></td>" +
-          (role === "student" ? '<td class="small"><code>' + esc(u.studentNo || "") + '</code></td><td class="small">' + esc(M.studentHome(u)) + "</td><td>" + pw + "</td>" : (A.Cloud ? "" : '<td class="small"><code>' + esc(u.staffNo || "") + "</code></td>") + '<td class="small">' + esc(A.Cloud && !u.isAdmin ? cls.map(function (c) { return c.subject; }).join(", ") || "No subjects yet" : u.subjects || "") + "</td><td>" + (A.Cloud ? '<span class="small muted">Email and password</span>' : '<code class="pw-mask" data-pw="' + esc(u.pin || "") + '">••••</code><button class="btn btn-ghost btn-icon btn-sm" data-act="reveal-pw" aria-label="Show PIN">' + I("eye") + "</button>") + "</td>") +
+          (role === "student" ? '<td class="small"><code>' + esc(u.studentNo || "") + '</code></td><td class="small">' + esc(M.studentHome(u)) + "</td><td>" + pw + "</td>" : (A.Cloud ? "" : '<td class="small"><code>' + esc(u.staffNo || "") + "</code></td>") + '<td class="small">' + esc(A.Cloud && !u.isAdmin ? cls.map(function (c) { return c.subject; }).join(", ") || "No subjects yet" : u.subjects || "") + "</td><td>" + (A.Cloud ? '<span class="small muted">Email and password</span>' : M.hasPassword(u.id) ? '<span class="badge good">' + I("check") + "PIN set</span>" : '<span class="badge warn">No PIN</span>') + "</td>") +
           "<td>" + devCell + '</td><td class="small muted">' + cls.map(function (c) { return esc(c.subject); }).join(", ") + '</td><td class="num">' +
           (A.Cloud && role === "teacher" && !u.isAdmin
             ? '<div class="row" style="justify-content:flex-end;gap:6px"><button class="btn btn-sm" data-act="teacher-subjects" data-id="' + u.id + '">' + I("layers") + 'Subjects</button><button class="btn btn-sm btn-ghost" data-act="teacher-reset" data-id="' + u.id + '">' + I("key") + 'New password</button><button class="btn btn-sm btn-ghost" data-act="teacher-remove" data-id="' + u.id + '" aria-label="Remove ' + esc(u.name) + '">' + I("trash") + "</button></div>"
@@ -388,7 +388,7 @@
   };
   A.act["person-edit"] = function (el) {
     var st = M.structure();
-    var u = S().get("users", el.getAttribute("data-id")) || { role: el.getAttribute("data-role"), name: "", pin: CFG.demoPin || "1234", level: st.levels[0], stream: st.streams[0] };
+    var u = S().get("users", el.getAttribute("data-id")) || { role: el.getAttribute("data-role"), name: "", level: st.levels[0], stream: st.streams[0] };
     var isNew = !u.id, me = M.me(), cr = u.id && M.credential(u.id);
     UI.modal({
       title: isNew ? "Add " + u.role : "Edit " + u.name,
@@ -405,12 +405,12 @@
             '<label class="field"><span>Class</span><select class="select" name="stream">' + st.streams.map(function (x) { return "<option" + (x === u.stream ? " selected" : "") + ">" + esc(x) + "</option>"; }).join("") + "</select></label>" +
             (A.Cloud ? '<div class="field full"><span class="label">Password</span><div class="row wrap"><button type="button" class="btn btn-sm" data-act="cloud-reset" data-id="' + u.id + '">' + I("refresh") + 'Give a new password</button></div><span class="hint">You get a new password to pass on. Their old one stops working.</span></div>'
               : isNew ? '<p class="field small muted">The student creates a password the first time they sign in.</p>'
-              : '<div class="field full"><span class="label">Password</span><div class="row wrap">' + (cr && cr.password ? '<code class="pw-mask" data-pw="' + esc(cr.password) + '">••••••••</code><button type="button" class="btn btn-sm btn-ghost" data-act="reveal-pw">' + I("eye") + "</button>" : '<span class="badge warn">Not set yet</span>') +
-                '<button type="button" class="btn btn-sm" data-act="reset-pw" data-id="' + u.id + '">' + I("refresh") + 'Reset password</button></div><span class="hint">Resetting makes the student create a new password next time (they must enter their name and student ID).</span></div>')
+              : '<div class="field full"><span class="label">Password</span><div class="row wrap">' + (M.hasPassword(u.id) ? '<span class="badge good">' + I("check") + "Set</span>" : '<span class="badge warn">Not set yet</span>') +
+                '<button type="button" class="btn btn-sm" data-act="give-pw" data-id="' + u.id + '">' + I("key") + 'Give a new password</button><button type="button" class="btn btn-sm btn-ghost" data-act="reset-pw" data-id="' + u.id + '">' + I("refresh") + 'Let them choose one</button></div><span class="hint">Passwords are kept scrambled, so nobody can read them.</span></div>')
           : (u.staffNo ? '<div class="field"><span class="label">Staff number</span><code style="font-size:16px">' + esc(u.staffNo) + "</code></div>" : "") +
             '<label class="field"><span>Subjects</span><input class="input" name="subjects" value="' + esc(u.subjects || "") + '"></label><label class="field"><span>Title</span><input class="input" name="title" value="' + esc(u.title || "") + '" placeholder="e.g. Head of Science"></label>' +
-            // hidden like a password (others may see the screen); the eye shows it when the admin needs to pass it on
-            (A.Cloud ? "" : '<label class="field"><span>Sign-in PIN (4 digits)</span><div class="pw-wrap"><input class="input" type="password" name="pin" inputmode="numeric" maxlength="4" autocomplete="off" value="' + esc(u.pin || "") + '"><button type="button" class="btn btn-ghost btn-icon btn-sm" data-act="pw-toggle" aria-label="Show password">' + I("eye") + "</button></div></label>") +
+            // PINs are kept scrambled: a new one can be set, the old one can't be read
+            (A.Cloud ? "" : '<label class="field"><span>' + (isNew ? "Sign-in PIN (4 digits)" : "New PIN") + '</span><div class="pw-wrap"><input class="input" type="password" name="pin" inputmode="numeric" maxlength="4" autocomplete="off" value=""' + (isNew ? "" : ' placeholder="Empty: keep the PIN"') + '><button type="button" class="btn btn-ghost btn-icon btn-sm" data-act="pw-toggle" aria-label="Show PIN">' + I("eye") + "</button></div></label>") +
             '<label class="check full"><input type="checkbox" name="isAdmin"' + (u.isAdmin ? " checked" : "") + ">Admin: can change branding, classes and streams, the timetable, people, devices and backups</label>") +
         "</form>",
       foot: (isNew || u.id === me.id ? [] : A.Cloud ? [{ label: "Remove", cls: "btn-danger", onClick: function () {
@@ -426,7 +426,9 @@
           var f = UI.formData(m.querySelector("#person-form"));
           if (!f.name.trim()) { UI.toast("Enter a name", "bad"); return false; }
           var rec = Object.assign({}, u, { name: f.name.trim() });
-          var save = function (msg) { S().put("users", rec); UI.toast(msg || "Saved"); A.render(); };
+          var pin = u.role === "student" || A.Cloud ? "" : String(f.pin || "").trim();
+          delete rec.pin; // PINs from before 1.6 lived on the user
+          var save = function (msg) { S().put("users", rec); if (pin) M.setPin(rec.id, pin, me.id); UI.toast(msg || "Saved"); A.render(); };
           if (u.role === "student") {
             var typed = f.studentNo.trim();
             if (!typed && !isNew) { UI.toast("Enter the student ID", "bad"); return false; }
@@ -437,14 +439,27 @@
             if (!typed) return M.claimStudentNo(f.level).then(function (no) { rec.studentNo = no; save(rec.name + "'s student ID is " + no); });
             rec.studentNo = typed;
           } else {
-            if (!A.Cloud && !/^\d{4}$/.test(f.pin)) { UI.toast("The PIN must be 4 digits", "bad"); return false; }
-            if (!A.Cloud) rec.pin = f.pin;
+            if (!A.Cloud && (isNew || pin) && !/^\d{4}$/.test(pin)) { UI.toast(isNew ? "Give them a 4-digit PIN" : "The new PIN must be 4 digits", "bad"); return false; }
             rec.subjects = f.subjects; rec.title = f.title; rec.isAdmin = !!f.isAdmin; if (u.id === me.id) rec.isAdmin = true;
             if (isNew && !A.Cloud) return M.claimStaffNo(rec.isAdmin).then(function (no) { rec.staffNo = no; save(rec.name + "'s staff number is " + no); });
           }
           save();
         },
       }]),
+    });
+  };
+  /** A new password for a student, shown once to pass on (it can't be looked up later). */
+  A.act["give-pw"] = function (el) {
+    var u = M.user(el.getAttribute("data-id"));
+    UI.confirm("Give " + u.name + " a new password? Their old one stops working.", { ok: "New password" }).then(function (ok) {
+      if (!ok) return;
+      var pw = A.newPassword();
+      M.setPassword(u.id, pw, M.me().id);
+      document.querySelectorAll(".modal-back").forEach(function (x) { x.remove(); });
+      UI.modal({ title: "New password for " + u.name,
+        body: "<p>Give " + esc(A.firstName(u.name)) + ' these details now: the password is kept scrambled, so it can\'t be shown again.</p><dl class="kv mt"><dt>Student ID</dt><dd><b>' + esc(u.studentNo || "") + '</b></dd><dt>Password</dt><dd><code style="font-size:18px">' + esc(pw) + "</code></dd></dl>",
+        foot: [{ label: "Done", cls: "btn-primary" }] });
+      A.render();
     });
   };
   A.act["reset-pw"] = function (el) {
@@ -495,7 +510,53 @@
       '<div class="pill-tabs mt">' + [["all", "Signed in"], ["phones", "Phones"], ["students", "Students only"], ["out", "Signed out"]].map(function (x) { return '<button class="' + (f === x[0] ? "on" : "") + '" data-act="goto" data-href="#/t/settings?s=devices&f=' + x[0] + '">' + x[1] + "</button>"; }).join("") + "</div>" +
       '<div class="card">' + (list.length ? list.map(deviceRow).join("") : UI.empty("laptop", "No devices here")) + "</div>" +
       '<p class="tiny muted mt">A device is recorded each time someone signs in. The network address shows once the device has synced with the school server. Rows marked "sample" are demo data.</p>';
-    return html;
+    var hub = A.Sync && A.Sync.hubMode();
+    if (hub) html = '<div class="card card-pad mb" id="hub-devices">' + hubDevicesHead() + '<p class="small mt">' + I("refresh") + " Asking the school hub…</p></div>" + html;
+    return { html: html, mount: hub ? mountHubDevices : null };
+  };
+  /* The hub's own list (1.6): only a registered device reaches the school's data. */
+  function hubDevicesHead() {
+    return "<h3>Registered with the school hub</h3>" +
+      '<p class="muted small mt-sm">Only devices on this list can reach the school\'s data. A device joins with the school file, a staff code, or a code shown on its screen that an admin lets in here. The computer that runs the hub is always allowed.</p>';
+  }
+  function mountHubDevices() {
+    Promise.all([A.Sync.hubPost("/api/joins"), A.Sync.hubPost("/api/devices")]).then(function (r) {
+      var box = document.getElementById("hub-devices");
+      if (!box) return;
+      var joins = r[0].joins || [], devs = (r[1].devices || []).sort(function (a, b) { return (b.seenAt || 0) - (a.seenAt || 0); });
+      var thisId = A.Devices ? A.Devices.id() : null;
+      box.innerHTML = hubDevicesHead() +
+        '<div class="label mt">Waiting to join</div>' + (joins.length ? joins.map(function (j) {
+          return '<div class="list-row"><div class="grow"><div class="title"><span class="join-code sm">' + esc(j.code) + "</span> " + esc(j.label || "A device") + "</div>" +
+            '<div class="tiny muted">Asked ' + A.relTime(j.at) + (j.ip ? " · " + esc(j.ip) : "") + " · check the code matches the one on its screen</div></div>" +
+            '<button class="btn btn-sm btn-primary" data-act="hub-join" data-code="' + esc(j.code) + '" data-ok="1">' + I("check") + "Let it in</button>" +
+            '<button class="btn btn-sm btn-ghost" data-act="hub-join" data-code="' + esc(j.code) + '">Decline</button></div>';
+        }).join("") : '<p class="small muted">No devices waiting.</p>') +
+        '<div class="label mt">Registered (' + devs.length + ")</div>" + (devs.length ? devs.map(function (d) {
+          var who = (d.users || []).map(function (id) { var u = M.user(id); return u ? u.name : null; }).filter(Boolean);
+          return '<div class="list-row"><div class="grow"><div class="title">' + esc(d.label || d.deviceId) + (d.deviceId === thisId ? ' <span class="badge brand">This device</span>' : "") + "</div>" +
+            '<div class="tiny muted">Joined ' + A.relTime(d.at) + " (" + esc(d.how || "") + ") · last seen " + A.relTime(d.seenAt) + (d.ip ? " · " + esc(d.ip) : "") + "</div>" +
+            (who.length ? '<div class="tiny">' + esc(who.slice(0, 6).join(", ")) + (who.length > 6 ? " and " + (who.length - 6) + " more" : "") + "</div>" : "") + "</div>" +
+            (d.deviceId === thisId ? "" : '<button class="btn btn-sm btn-danger" data-act="hub-remove" data-id="' + esc(d.deviceId) + '" data-label="' + esc(d.label || "this device") + '">' + I("trash") + "Remove</button>") + "</div>";
+        }).join("") : '<p class="small muted">No other devices yet.</p>');
+    }, function (e) {
+      var box = document.getElementById("hub-devices");
+      if (box) box.innerHTML = hubDevicesHead() + '<div class="callout warn mt">' + I("wifiOff") + "<div>" + esc(e.message || String(e)) + "</div></div>";
+    });
+  }
+  A.act["hub-join"] = function (el) {
+    var ok = !!el.getAttribute("data-ok"), code = el.getAttribute("data-code");
+    A.Sync.hubPost("/api/joins/decide", { code: code, ok: ok, by: M.me().name }).then(function () {
+      UI.toast(ok ? "Let in. The device carries on by itself." : "Declined.");
+      mountHubDevices();
+    }, function (e) { UI.toast(e.message, "error"); });
+  };
+  A.act["hub-remove"] = function (el) {
+    var id = el.getAttribute("data-id"), label = el.getAttribute("data-label");
+    UI.confirm("Remove " + label + " from the school hub? It stops reaching the school's data at once. To use it again it has to join again.", { danger: true, ok: "Remove device" }).then(function (ok) {
+      if (!ok) return;
+      A.Sync.hubPost("/api/devices/block", { deviceId: id, by: M.me().name }).then(function () { UI.toast("Removed from the hub"); mountHubDevices(); }, function (e) { UI.toast(e.message, "error"); });
+    });
   };
 
   /* ------------------------------------------------------ classes & streams */
@@ -755,15 +816,15 @@
   };
   A.act["change-pin"] = function (form) {
     var me = M.me(), f = UI.formData(form);
-    if (f.old !== String(me.pin)) { UI.toast("Your current PIN is not right", "bad"); return; }
+    if (M.checkSecret(me.id, f.old) !== true) { UI.toast("Your current PIN is not right", "bad"); return; }
     if (!/^\d{4}$/.test(f.pin)) { UI.toast("The new PIN must be 4 digits", "bad"); return; }
-    S().patch("users", me.id, { pin: f.pin });
+    M.setPin(me.id, f.pin, me.id);
     UI.toast("PIN changed");
     form.reset();
   };
   A.act["change-password"] = function (form) {
     var me = M.me(), f = UI.formData(form), cr = M.credential(me.id), min = Number(CFG.minPasswordLength) || 6;
-    if (!cr || cr.password !== f.old) { UI.toast("Your current password is not right", "bad"); return; }
+    if (M.checkSecret(me.id, f.old) !== true) { UI.toast("Your current password is not right", "bad"); return; }
     if (f.pw.length < min) { UI.toast("Use at least " + min + " characters", "bad"); return; }
     if (f.pw !== f.pw2) { UI.toast("The two new passwords are different", "bad"); return; }
     M.setPassword(me.id, f.pw, me.id);

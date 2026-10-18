@@ -1142,3 +1142,7 @@ details.mat-group:not([open]) > summary { border-bottom: 0; }
 .rc-preview { overflow: auto; max-height: 72vh; background: var(--surface-2); padding: 12px; border-radius: 10px; }
 .rc-scale-box { width: calc(210mm * .7); height: calc(297mm * .7); margin: 0 auto; }
 .rc-scale-box .rc { transform: scale(.7); transform-origin: top left; box-shadow: 0 2px 14px rgba(0, 0, 0, .18); }
+
+/* 1.6: the code a device shows while it waits for an admin to let it join the hub */
+.join-code { font: 700 30px/1.2 var(--font-mono, ui-monospace, Consolas, monospace); letter-spacing: .12em; margin: 10px 0 6px; color: var(--text); }
+.join-code.sm { font-size: 15px; letter-spacing: .08em; margin: 0 6px 0 0; padding: 2px 8px; border-radius: 6px; background: var(--surface-2, rgba(0,0,0,.06)); display: inline-block; }

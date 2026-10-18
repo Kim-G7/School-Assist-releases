@@ -71,16 +71,37 @@
   M.levelIndex = function (level) { var i = M.structure().levels.indexOf(level); return i < 0 ? 99 : i; };
   M.streamIndex = function (stream) { var i = M.structure().streams.indexOf(stream); return i < 0 ? 99 : i; };
 
-  /* -------------------------------------------------- student passwords
-     Students sign in with their student ID and a password they create the
-     first time. Admins can see and reset passwords (Settings → People). */
+  /* -------------------------------------------------- passwords and PINs (js/secret.js)
+     Students sign in with their student ID and a password they create the first time; staff with a 4-digit PIN.
+     Both are kept only scrambled, in the credentials record "cr_<user id>" { hash }: nobody can read them, admins
+     included; an admin gives a new one instead (Settings → People). The school hub checks them too (server.cjs) and
+     sends a device someone's record only after they have signed in there. Records from before 1.6 may still hold the
+     plain password, or the PIN on the user: they are checked as they are, then scrambled on this device. */
   M.credential = function (uid) { return S().get("credentials", "cr_" + uid); };
-  M.hasPassword = function (uid) { var c = M.credential(uid); return !!(c && c.password); };
+  M.hasPassword = function (uid) { var c = M.credential(uid), u = M.user(uid); return !!(c && (c.hash || c.password)) || !!(u && u.pin != null && u.pin !== ""); };
   M.setPassword = function (uid, pw, by) {
-    return S().put("credentials", { id: "cr_" + uid, userId: uid, password: pw, setAt: Date.now(), setBy: by || uid });
+    var rec = S().put("credentials", { id: "cr_" + uid, userId: uid, hash: A.Secret.hash(pw), setAt: Date.now(), setBy: by || uid });
+    var u = S().get("users", uid);
+    if (u && u.pin != null) { var plain = Object.assign({}, u); delete plain.pin; S().put("users", plain); } // a PIN from before 1.6
+    return rec;
   };
+  M.setPin = M.setPassword;
   M.resetPassword = function (uid, by) {
-    return S().put("credentials", { id: "cr_" + uid, userId: uid, password: null, resetAt: Date.now(), setBy: by });
+    return S().put("credentials", { id: "cr_" + uid, userId: uid, hash: null, resetAt: Date.now(), setBy: by });
+  };
+  /** Does the password or PIN match? true or false; null when this device doesn't hold that person's record (ask the hub). */
+  M.checkSecret = function (uid, secret) {
+    var c = M.credential(uid), u = M.user(uid), ok;
+    if (c && c.hash) return A.Secret.verify(secret, c.hash);
+    if (c && c.password) ok = c.password === String(secret);
+    else if (u && u.pin != null && u.pin !== "") ok = String(u.pin) === String(secret);
+    else return null;
+    if (ok) { // from before 1.6: keep it scrambled on this device from now on (the hub scrambles its own copy)
+      S().replace("credentials", "cr_" + uid, Object.assign({}, c || { id: "cr_" + uid, userId: uid }, { hash: A.Secret.hash(secret), password: undefined }));
+      if (u && u.pin != null) { var plain = Object.assign({}, u); delete plain.pin; S().replace("users", uid, plain); }
+      S().flush();
+    }
+    return ok;
   };
   M.studentById = function (no) {
     var key = String(no || "").trim().toLowerCase();
@@ -117,14 +138,20 @@
   M.claimNumber = function (prefix, field, pad) {
     var local = M.nextNumber(prefix, field, pad), c = A.Sync ? A.Sync.config() : {};
     if (!c.url || c.cloud || A.Cloud || typeof fetch !== "function") return Promise.resolve(local);
-    var ctl = typeof AbortController === "function" ? new AbortController() : null, t = setTimeout(function () { if (ctl) ctl.abort(); }, 4000);
     var num = function (no) { return parseInt(String(no).slice(prefix.length), 10) || 0; };
-    return fetch(String(c.url).replace(/\/+$/, "") + "/api/next-id", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prefix: prefix, field: field, pad: pad, school: A.SchoolId ? A.SchoolId.id() : null }), signal: ctl ? ctl.signal : undefined })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      // a hub older than 1.3.3 only knows the old pattern and refuses: this device counts then
-      .then(function (j) { clearTimeout(t); var no = j && (j.number || j.studentNo); return no && String(no).indexOf(prefix) === 0 && num(no) >= num(local) ? no : local; })
-      .catch(function () { clearTimeout(t); return local; });
+    var refused = function (msg) { var e = new Error(msg || "This device hasn't joined the school hub yet, so it can't give out IDs. Ask an admin to let it in (Settings → Devices)."); e.refused = true; return e; };
+    // 1.6: this device's key (or the hub computer's token) first. Waiting for an admin or turned away: no number is
+    // made up here, it could be someone else's. The hub not reachable: this device counts, as before.
+    var asked = A.Sync && A.Sync.ready ? A.Sync.ready().catch(function (e) { if (e && e.code && e.code !== "offline") throw refused(e.message); }) : Promise.resolve();
+    return asked.then(function () {
+      var ctl = typeof AbortController === "function" ? new AbortController() : null, t = setTimeout(function () { if (ctl) ctl.abort(); }, 4000);
+      return fetch(String(c.url).replace(/\/+$/, "") + "/api/next-id", { method: "POST", headers: A.Sync.headers({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ prefix: prefix, field: field, pad: pad, school: A.SchoolId ? A.SchoolId.id() : null }), signal: ctl ? ctl.signal : undefined })
+        .then(function (r) { if (r.status === 401 || r.status === 403) throw refused(); return r.ok ? r.json() : null; })
+        // a hub older than 1.3.3 only knows the old pattern and refuses: this device counts then
+        .then(function (j) { clearTimeout(t); var no = j && (j.number || j.studentNo); return no && String(no).indexOf(prefix) === 0 && num(no) >= num(local) ? no : local; })
+        .catch(function (e) { clearTimeout(t); if (e && e.refused) throw e; return local; });
+    });
   };
   M.claimStudentNo = function (level) { return M.claimNumber(M.studentPrefix(level), "studentNo", 3); };
   M.claimStaffNo = function (admin) { return M.claimNumber(M.staffPrefix(admin), "staffNo", 0); };

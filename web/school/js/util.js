@@ -59,6 +59,13 @@ window.App = window.App || {};
   A.fmtDateLong = function (ts) { if (!ts) return "—"; var d = new Date(ts); return d.getDate() + " " + MON[d.getMonth()] + " " + d.getFullYear(); };
   A.fmtTime = function (ts) { var d = new Date(ts); return A.pad(d.getHours()) + ":" + A.pad(d.getMinutes()); };
   A.fmtDateTime = function (ts) { return ts ? A.fmtDate(ts) + ", " + A.fmtTime(ts) : "—"; };
+  /** A website that only serves the app's pages (no school hub behind it): GitHub Pages, Vercel, Netlify, Cloudflare
+      Pages, Firebase, a claude.ai preview, or a school's website (<school>.school-assist.app; its hub is hub.<school>…). */
+  A.staticHost = function (host) {
+    host = String(host == null ? location.host : host).toLowerCase();
+    if (/(^|\.)school-assist\.app(:\d+)?$/.test(host)) return !/^hub\./.test(host);
+    return /(^|\.)(github\.io|claude\.ai|vercel\.app|netlify\.app|pages\.dev|web\.app|firebaseapp\.com)(:\d+)?$/.test(host);
+  };
   A.relTime = function (ts) {
     if (!ts) return "never";
     var s = Math.round((Date.now() - ts) / 1000);

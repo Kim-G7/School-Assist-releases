@@ -3,7 +3,10 @@
    Merge rule: newest `updatedAt` wins per record; records have a single owner role.
    Schools: a device sends its school id with every sync. A device with no school yet (the demo, or a new
    install) sends nothing and, the first time it reaches a hub that has a school, joins it: its own copy is
-   replaced by the school's (js/setup.js). A hub turns away a device of another school (server.cjs). */
+   replaced by the school's (js/setup.js). A hub turns away a device of another school (server.cjs).
+   Registered devices (1.6, hub-access.cjs): a device joins the hub once and sends its key (X-SA-Key) with every
+   request; the hub computer's own app sends the hub's local token instead. People sign in through the hub when
+   this device doesn't hold their record, and the hub sends each device only its people's share. */
 (function (A) {
   "use strict";
   var KEY = "sca-sync";
@@ -18,15 +21,158 @@
     try { c = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { c = {}; }
     if (c.url == null) {
       // served by server.cjs? then sync with it by default
-      c.url = /^https?:$/.test(location.protocol) && !/github\.io|claude\.ai/.test(location.host) ? location.origin : "";
+      c.url = /^https?:$/.test(location.protocol) && !A.staticHost() ? location.origin : "";
       c.auto = true;
       c.probe = true;
     }
     return c;
   }
 
+  /* ------------------------------------------------------------ the hub's lock (1.6) */
+  var localToken = null, localAsked = 0;
+  function meta() { return (A.Store.state && A.Store.state.meta) || {}; }
+  function err(code, msg) { var e = new Error(msg || code); e.code = code; return e; }
+  // the desktop app knows the computer's name ("LAB-PC-07"): it leads the label admins see under Settings → Devices
+  var computer = null;
+  if (window.desktop && window.desktop.info) window.desktop.info().then(function (i) { computer = (i && i.computer) || null; }).catch(function () {});
+  function deviceLabel() {
+    var d = A.Devices && A.Devices.detect ? A.Devices.detect() : {};
+    return [computer, d.model, d.os, d.browser].filter(Boolean).join(" · ") || "A device";
+  }
+  /** The hub computer's own app: the hub's local token, from the desktop app (asked again once a minute). */
+  function prepLocal(c) {
+    var d = window.desktop;
+    if (!d || !d.hub || !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(c.url || "")) { localToken = null; return Promise.resolve(); }
+    if (localToken && Date.now() - localAsked < 60000) return Promise.resolve();
+    localAsked = Date.now();
+    return d.hub.status().then(function (h) { localToken = (h && h.running && h.token) || null; }).catch(function () { localToken = null; });
+  }
+  /** Headers that tell the hub which device this is. */
+  function headers(extra) {
+    var h = Object.assign({}, extra || {}), m = meta();
+    if (localToken) h["X-SA-Local"] = localToken;
+    if (m.hubKey) h["X-SA-Key"] = m.hubKey;
+    return h;
+  }
+  function readJson(r) { return r.json().catch(function () { return {}; }); }
+  /** The school file's joining secret: the one this device took at set-up, or (a copy updated to 1.6 by copying the new
+      version over the old one) the school file now next to the app, when it is this school's. */
+  function packSecret(m) {
+    if (m.pack && m.pack.join) return Promise.resolve(m.pack.join);
+    var d = window.desktop, mine = A.SchoolId && A.SchoolId.id();
+    if (!d || !d.pack || !mine) return Promise.resolve("");
+    return d.pack.read().then(function (p) {
+      var s = p && p.school, j = p && p.hub && p.hub.join;
+      if (!j || !s || s.schoolId !== mine) return "";
+      m.pack = Object.assign({}, m.pack || {}, { join: j });
+      return j;
+    }).catch(function () { return ""; });
+  }
+  /** Register this device with the hub (once): the school file's secret, a staff code, or an admin's approval. */
+  function join(c, staffCode) {
+    var m = meta();
+    return packSecret(m).then(function (secret) {
+      return fetch(c.url + "/api/join", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId: A.Devices ? A.Devices.id() : m.deviceId, label: deviceLabel(), secret: secret || undefined, staffCode: staffCode || undefined }) });
+    })
+      .then(function (r) {
+        return readJson(r).then(function (j) {
+          if (r.status === 200 && j.key) { m.hubKey = j.key; m.joinCode = null; m.blocked = false; m.oldHub = null; return A.Store.flush().then(function () { return { key: true }; }); }
+          // a hub still on 1.5 has no /api/join (it answers 405, or 404): sync as before; once it is updated it
+          // answers 401 "join" and this device joins
+          if (r.status === 404 || r.status === 405) { m.oldHub = Date.now(); return { old: true }; }
+          if (r.status === 202 && j.pending) { m.joinCode = j.code; return { pending: true, code: j.code }; }
+          throw err(j.declined ? "declined" : "refused", j.error || "The school hub replied " + r.status + ".");
+        });
+      });
+  }
+  /** Before anything else: this device's key (or the hub computer's token). Rejects with code "pending" while an admin hasn't let it in. */
+  function ready(c, staffCode) {
+    return prepLocal(c).then(function () {
+      if (localToken || meta().hubKey || meta().oldHub) return;
+      return join(c, staffCode).then(function (r) {
+        if (r.pending) throw err("pending", "This device is waiting to join the school hub. Show an admin this code: " + r.code + " (Settings → Devices).");
+      });
+    });
+  }
+  /** Things the hub sends back besides the records: changes it refused (its own copy instead), and this device's share. */
+  function keepToShare(res) {
+    var S = A.Store;
+    (res.restore || []).forEach(function (x) { S.replace(x.coll, x.id, x.rec); });
+    if (!res.scope || res.scope === "admin") return;
+    var known = {}, m = meta(), sent = m.lastPushAt || 0;
+    (res.known || []).forEach(function (id) { known[id] = 1; });
+    var drop = function (coll, keep) {
+      var all = S.state.colls[coll] || {};
+      Object.keys(all).forEach(function (id) { var r = all[id]; if ((r.updatedAt || 0) <= sent && !keep(r)) delete all[id]; }); // never a change not yet sent
+    };
+    // passwords: only the people who sign in here; PINs from before 1.6 never stay on a device
+    drop("credentials", function (r) { return r._deleted || known[r.userId]; });
+    Object.keys(S.state.colls.users || {}).forEach(function (id) { var u = S.state.colls.users[id]; if (u && u.pin != null) { var p = Object.assign({}, u); delete p.pin; S.state.colls.users[id] = p; } });
+    if (res.scope !== "student") return;
+    // a student device keeps its own students' records only (a lab computer may hold others' from before 1.6)
+    ["submissions", "receipts", "progress", "attempts", "enrolments", "marks", "reportmarks"].forEach(function (coll) { drop(coll, function (r) { return r._deleted || known[r.studentId]; }); });
+    ["alerts", "netinfo", "assessments", "reports", "schemes", "pnotes"].forEach(function (coll) { drop(coll, function () { return false; }); });
+    drop("pwrequests", function (r) { return known[r.appId]; });
+    drop("devices", function (r) { return A.Devices && r.deviceId === A.Devices.id(); });
+    var codes = S.state.colls.settings && S.state.colls.settings.staffcodes;
+    if (codes && (codes.updatedAt || 0) <= sent) delete S.state.colls.settings.staffcodes;
+  }
+
+  function hubAuth(path, o) {
+    var c = cfg(), m = meta(), S = A.Store;
+    if (!c.url || A.Cloud) return Promise.reject(err("nohub", "No school hub."));
+    return ready(c, o.staffCode).then(function () {
+      return fetch(c.url + path, { method: "POST", headers: headers({ "Content-Type": "application/json" }), body: JSON.stringify(o) });
+    }).then(function (r) {
+      return readJson(r).then(function (j) {
+        if (r.status === 401 && j.join) { m.hubKey = null; m.oldHub = null; throw err("rejoin", "This device has to join the school hub again. Try once more."); }
+        if (!r.ok) throw err(j.locked ? "locked" : j.needCode ? "needCode" : j.wrong ? "wrong" : j.hasPassword ? "hasPassword" : j.pending ? "pending" : j.declined ? "declined" : j.blocked ? "blocked" : "refused", j.error || "The school hub replied " + r.status + ".");
+        if (j.user) S.merge("users", j.user);
+        if (j.credential) S.merge("credentials", j.credential);
+        if (j.added) m.serverSince = 0; // someone new here: everything they may see comes down at the next sync
+        return S.flush().then(function () { return j; });
+      });
+    }, function (e) {
+      if (e.code) throw e;
+      throw err("offline", "Can't reach the school hub. Connect to the school Wi-Fi to sign in on this device the first time.");
+    });
+  }
+
   var Sync = (A.Sync = {
     config: cfg,
+    headers: headers,
+    /** Does this device sync with a school hub (not the demo, not online, not on its own)? */
+    // (a hub still on 1.5 checks nothing itself: this device signs people in as 1.5 did, until the hub is updated)
+    hubMode: function () { var c = cfg(); return !A.Cloud && !!c.url && !!(A.SchoolId && A.SchoolId.id()) && !meta().oldHub; },
+    /** This device and the hub: { key, code } (code: the six letters an admin approves, while it waits). */
+    joinState: function () { var m = meta(); return { key: !!m.hubKey || !!localToken, code: m.joinCode || null, blocked: !!m.blocked }; },
+    /** Join with a staff code typed on this device (a teacher registering or signing in). */
+    joinWithCode: function (code) { var c = cfg(); return c.url ? join(c, code) : Promise.reject(err("nohub", "No school hub.")); },
+    /** Sign someone in through the hub: { userId | studentNo, secret, staffCode }. Resolves with { user, credential }; the
+        error's code says why not: wrong, locked, needCode, pending, declined, offline. */
+    hubSignIn: function (o) { return hubAuth("/api/signin", o); },
+    /** "Set up your account" on a device that doesn't hold the student's record: the hub checks the name and ID and keeps the password. */
+    hubSetup: function (o) { return hubAuth("/api/setup-password", o); },
+    /** A staff code typed on this device: the hub says which role it is ("teacher" or "admin"). */
+    checkStaffCode: function (code) {
+      var c = cfg();
+      if (!c.url || A.Cloud) return Promise.reject(err("nohub", "No school hub."));
+      return ready(c, code).then(function () {
+        return fetch(c.url + "/api/staffcode", { method: "POST", headers: headers({ "Content-Type": "application/json" }), body: JSON.stringify({ code: code }) });
+      }).then(function (r) { return readJson(r).then(function (j) { if (!r.ok) throw err("refused", j.error || "The school hub replied " + r.status + "."); return j.role; }); },
+        function (e) { if (e.code) throw e; throw err("offline", "Can't reach the school hub. Connect to the school Wi-Fi to register."); });
+    },
+    /** An admin's request to the hub: devices waiting to join, the registered ones, approving, removing. */
+    /** This device's key to the hub (or the hub computer's token) before asking it anything else (js/model.js claimNumber). */
+    ready: function () { var c = cfg(); return c.url && !A.Cloud ? ready(c) : Promise.resolve(); },
+    hubPost: function (path, body) {
+      var c = cfg();
+      if (!c.url || A.Cloud) return Promise.reject(err("nohub", "No school hub."));
+      return ready(c).then(function () {
+        return fetch(c.url + path, { method: "POST", headers: headers({ "Content-Type": "application/json" }), body: JSON.stringify(body || {}) });
+      }).then(function (r) { return readJson(r).then(function (j) { if (!r.ok) throw err("refused", j.error || "The school hub replied " + r.status + "."); return j; }); });
+    },
     setConfig: function (c) {
       if (A.Cloud) return;
       try { localStorage.setItem(KEY, JSON.stringify({ url: c.url, auto: !!c.auto })); } catch (e) { /* ignore */ }
@@ -77,12 +223,15 @@
       Object.keys(changes).forEach(function (k) { sent += changes[k].length; });
       var request = c.cloud
         ? A.Cloud.rpc("sync", { p_since: meta.serverSince || 0, p_changes: changes })
-        : fetch(c.url + "/api/sync", {
-          method: "POST", headers: { "Content-Type": "application/json" },
+        : ready(c).then(function () { return fetch(c.url + "/api/sync", {
+          method: "POST", headers: headers({ "Content-Type": "application/json" }),
           body: JSON.stringify({ deviceId: A.Devices ? A.Devices.id() : meta.deviceId, since: school === null ? 0 : meta.serverSince || 0, changes: changes,
             school: school, schoolName: school ? (A.SchoolId.record() || {}).name || A.Theme.get().name : undefined }),
-        }).then(function (r) {
+        }); }).then(function (r) {
           return r.json().catch(function () { return {}; }).then(function (j) {
+            // its key no longer works (the hub was replaced, or it joined again elsewhere): join again next time
+            if (r.status === 401 && j.join) { meta.hubKey = null; meta.oldHub = null; throw err("rejoin", j.error || "This device has to join the school hub again."); }
+            if (r.status === 403 && j.blocked) { meta.hubKey = null; meta.blocked = true; throw err("blocked", j.error); }
             if (!r.ok) throw new Error(j.error || "Server replied " + r.status);
             return j;
           });
@@ -104,6 +253,7 @@
         Object.keys(res.changes || {}).forEach(function (coll) {
           (res.changes[coll] || []).forEach(function (rec) { if (S.merge(coll, rec)) received++; });
         });
+        if (!c.cloud) { if ((res.restore || []).length) received++; keepToShare(res); }
         if (A.SchoolId && A.SchoolId.hubOk) A.SchoolId.hubOk();
         meta.lastPushAt = startedAt;
         meta.serverSince = res.now;
@@ -127,7 +277,8 @@
         }
         // the hub didn't answer at all (not an error reply): maybe its address changed (js/setup.js looks for it)
         if (!c.cloud && e && e.name === "TypeError" && A.SchoolId && A.SchoolId.lostHub) A.SchoolId.lostHub(c.url);
-        if (quiet) { state = "local"; } else { state = "error"; lastError = e.message || String(e); }
+        if (e && e.code === "pending") { state = "pending"; lastError = e.message; }
+        else if (quiet) { state = "local"; } else { state = "error"; lastError = e.message || String(e); }
         A.refreshStatus();
         throw e;
       }).then(function (r) { running = null; return r; }, function (e) { running = null; throw e; });
@@ -154,7 +305,7 @@
             }
             return fetch(c.url + "/api/files/" + encodeURIComponent(f.id), {
               method: "PUT", body: f.blob,
-              headers: { "Content-Type": f.type || "application/octet-stream", "X-File-Name": encodeURIComponent(f.name || f.id) },
+              headers: headers({ "Content-Type": f.type || "application/octet-stream", "X-File-Name": encodeURIComponent(f.name || f.id) }),
             }).then(function (r) { if (r.ok) { f.uploaded = true; return A.Files.put(f); } });
           });
         }, Promise.resolve());
@@ -173,7 +324,7 @@
           return persist === false ? rec : A.Files.put(rec);
         }).catch(function () { return null; });
       }
-      return fetch(c.url + "/api/files/" + encodeURIComponent(id)).then(function (r) {
+      return fetch(c.url + "/api/files/" + encodeURIComponent(id), { headers: headers() }).then(function (r) {
         if (!r.ok) return null;
         var name = decodeURIComponent(r.headers.get("X-File-Name") || id);
         return r.blob().then(function (blob) {

@@ -141,7 +141,8 @@
     if (err) { A.loginMessage(err); return; }
     var now = Date.now(), b = S().get("settings", "branding") || { id: "branding" };
     S().put("settings", Object.assign({}, b, { name: f.school.trim(), shortName: f.school.trim().replace(/\s+(primary|junior)?\s*school$/i, "") || f.school.trim() }));
-    var me = S().put("users", { id: A.uid("t"), role: "teacher", name: f.name.trim(), title: "Teacher", isAdmin: true, staffNo: M.schoolAbbr(f.school.trim()) + "-AD1", pin: f.pin, subjects: "Class teacher" });
+    var me = S().put("users", { id: A.uid("t"), role: "teacher", name: f.name.trim(), title: "Teacher", isAdmin: true, staffNo: M.schoolAbbr(f.school.trim()) + "-AD1", subjects: "Class teacher" });
+    M.setPin(me.id, f.pin, me.id);
     if (A.SchoolId) S().put("settings", { id: "school", schoolId: A.SchoolId.newId(), name: f.school.trim(), abbr: M.schoolAbbr(f.school.trim()), createdBy: me.id });
     var c = S().put("classes", { id: A.uid("cls"), homeroom: true, name: M.homeClassName(f.level, f.stream.trim()), level: f.level, stream: f.stream.trim() || null,
       subject: "Class", teacherId: me.id, studentIds: [], syllabusId: null, createdAt: now });
@@ -149,6 +150,7 @@
     A.Theme.apply();
     A.loginDone("who");
     M.signIn(me.id);
+    A.schoolFolder(me);
     if (A.LastUser) A.LastUser.set(me, {});
     location.hash = "#/t/home";
     A.render();

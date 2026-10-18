@@ -230,6 +230,9 @@
     var cls = online ? (cut ? "error" : "") : "offline", txt = !online ? "Offline" : cut ? "Not connected" : "Online";
     var me = M.me(), href = me && me.role === "student" ? "#/s/settings?s=sync" : "#/t/settings?s=sync";
     // School Assist Teacher with no school hub: everything is simply on this device
+    if (s.state === "pending") {
+      return '<a class="status-chip error" id="status-chip" href="' + href + '" data-tip="' + esc(s.lastError || "Waiting for an admin to let this device join the school hub.") + '"><span class="pip"></span>' + I("lock") + '<span class="txt">Waiting to join</span></a>';
+    }
     if (A.edition === "teacher" && s.state === "local") {
       return '<a class="status-chip" id="status-chip" href="' + href + '" data-tip="Saved on this device. To share with other teachers, set up a school hub in Settings → Offline &amp; sync."><span class="pip"></span><span class="txt">On this device</span></a>';
     }
@@ -534,9 +537,32 @@
     var inputs = box.querySelectorAll("form input:not([hidden])");
     for (var i = 0; i < inputs.length; i++) if (!inputs[i].value) { inputs[i].focus(); break; }
   }
+  /** The hub knows who signs in where (1.6): told in the background when this device checked the password itself. */
+  function tellHub(u, secret, staffCode) {
+    if (!secret || !A.Sync || !A.Sync.hubMode()) return;
+    A.Sync.hubSignIn({ userId: u.id, secret: secret, staffCode: staffCode || undefined }).catch(function (e) {
+      // the hub says it's wrong now (changed elsewhere): sign out again
+      if (e.code === "wrong" && M.me() && M.me().id === u.id) { A.loginNotice = "Your password or PIN was changed. Sign in with the new one."; A.act.signout(); }
+    });
+  }
+  /** This device doesn't hold this person's record: the hub checks it and sends it. Resolves with the user, or shows why not. */
+  function viaHub(o, after) {
+    if (!A.Sync || !A.Sync.hubMode()) { after(null, { code: "wrong" }); return; }
+    L.busy = "Checking with the school hub…"; L.msg = ""; redrawLogin();
+    A.Sync.hubSignIn(o).then(function (r) { L.busy = false; after(M.user(r.user.id), null); }, function (e) { L.busy = false; after(null, e); });
+  }
+  /** The school's folder in Documents ("<School>-School Assist App": Report Cards, and Backups on the hub), made for
+      admins on the desktop app at set-up, when they sign in and when the app starts (electron/main.cjs). */
+  A.schoolFolder = function (u) {
+    var d = window.desktop;
+    if (!d || !d.school || !u || u.role !== "teacher" || !u.isAdmin || A.edition === "home" || A.Cloud) return;
+    var name = (A.Theme.get() || {}).name || "";
+    if (name) d.school.folder(name).catch(function () { /* the folder is made again next time */ });
+  };
   function finishSignIn(u) {
     if (A.LastUser) A.LastUser.set(u, { email: A.Cloud && u.role !== "student" ? L.email || null : null });
     M.signIn(u.id);
+    A.schoolFolder(u);
     if (A.Devices) A.Devices.signIn(u);
     A.loginNotice = "";
     L = blank();
@@ -590,11 +616,17 @@
       }).catch(loginFail);
     }
     var codes = M.staffCodes && M.staffCodes(), want = u.isAdmin ? "admin" : "teacher";
+    if (!codes && A.Sync && A.Sync.hubMode()) { // a student device (1.6): it doesn't keep the codes, the hub checks them
+      L.busy = "Checking the code…"; L.msg = ""; redrawLogin();
+      return A.Sync.hubSignIn({ userId: u.id, secret: L.lastPin || "", staffCode: code }).then(function () {
+        L.busy = false; var done = L.codeDone; L.codeDone = null; done(code);
+      }, function (e) { L.busy = false; L.step = "who"; loginFail(new Error(e.code === "needCode" ? "That code isn't right." : e.message)); });
+    }
     var ok = !codes || M.codeRole(code) === want || (want === "teacher" && M.codeRole(code) === "admin");
     M.alertAdmins({ kind: "device", title: (ok ? "Signed in on a student's device: " : "Wrong staff code: ") + u.name,
       body: (ok ? u.name + " signed in" : "Someone tried to sign in as " + u.name) + " on a device last used by " + (last.name || "a student") + (last.studentNo ? " (" + last.studentNo + ")" : "") + "." });
     if (!ok) { L.step = "who"; return loginFail(new Error("That code isn't right. The admins have been told.")); }
-    var done = L.codeDone; L.codeDone = null; done();
+    var done = L.codeDone; L.codeDone = null; done(code);
   };
   A.act["cloud-staffreg"] = function () {
     L.step = "cloudstaffreg"; L.msg = ""; L.busy = "Fetching the subjects…"; redrawLogin();
@@ -632,17 +664,24 @@
     var sid = form.sid.value.trim(), pw = form.pw.value, u = M.studentById(sid);
     L.sid = sid;
     if (!sid || !pw) { L.msg = "Enter your student ID and password."; redrawLogin(); return; }
-    if (u && !M.hasPassword(u.id)) { L.msg = "This account has no password yet. Choose \u201cSet up your account\u201d below."; redrawLogin(); return; }
+    var hubbed = A.Sync && A.Sync.hubMode(); // with the hub, it knows whether there's a password
+    if (u && !hubbed && !M.hasPassword(u.id)) { L.msg = "This account has no password yet. Choose \u201cSet up your account\u201d below."; redrawLogin(); return; }
     if (u && u.status === "pending") { L.msg = "Your account is waiting for an admin to approve it. Try again once they have."; redrawLogin(); return; }
     if (u && u.status === "declined") { L.msg = "An admin didn't approve this account. Ask at the school office."; redrawLogin(); return; }
-    var cred = u && M.credential(u.id);
-    if (!u || !cred || cred.password !== pw) {
-      L.msg = "Student ID or password is not right.";
+    var wrong = function (e) {
+      L.msg = e && e.code && e.code !== "wrong" ? e.message : "Student ID or password is not right.";
       redrawLogin();
       var box = document.querySelector(".login-box"); if (box) { box.classList.remove("shake"); void box.offsetWidth; box.classList.add("shake"); }
-      return;
-    }
-    finishSignIn(u);
+    };
+    var ok = u ? M.checkSecret(u.id, pw) : null;
+    if (ok === true) { finishSignIn(u); tellHub(u, pw); return; }
+    if (ok === false) return wrong();
+    // this device doesn't hold this student's record yet: the hub checks it and sends it
+    viaHub({ studentNo: sid, secret: pw }, function (who, e) {
+      if (!who) return wrong(e);
+      if (who.status === "pending") { L.msg = "Your account is waiting for an admin to approve it. Try again once they have."; redrawLogin(); return; }
+      finishSignIn(who);
+    });
   };
   /* ------------------------------------------------------ online sign-in */
   function loginFail(e) {
@@ -803,6 +842,7 @@
     var name = form.querySelector("[name=name]").value.trim(), sid = form.sid.value.trim(), u = M.studentById(sid);
     L.name = name; L.sid = sid;
     if (!name || !sid) L.msg = "Enter both your full name and your student ID.";
+    else if (A.Sync && A.Sync.hubMode()) { L.userId = u ? u.id : null; L.step = "setpw"; L.msg = ""; } // the hub checks the name, the ID and that there's no password yet
     else if (!u) L.msg = "We can't find that student ID. Check it with your class teacher.";
     else if (!M.sameName(u.name, name)) L.msg = "That name doesn't match this student ID. Type your full name as the school has it.";
     else if (M.hasPassword(u.id)) L.msg = "This account already has a password. Sign in with it, or ask an administrator to reset it.";
@@ -813,6 +853,16 @@
     var pw = form.pw.value, pw2 = form.pw2.value;
     if (pw.length < MINPW) L.msg = "Use at least " + MINPW + " characters.";
     else if (pw !== pw2) L.msg = "The two passwords are different. Type them again.";
+    else if (A.Sync && A.Sync.hubMode()) {
+      L.busy = "Saving your password…"; L.msg = ""; redrawLogin();
+      A.Sync.hubSetup({ studentNo: L.sid, name: L.name, password: pw }).then(function (r) {
+        L.busy = false;
+        var who = M.user(r.user.id);
+        UI.toast("Password created. Welcome, " + A.firstName(who.name) + "!");
+        finishSignIn(who);
+      }, function (e) { L.busy = false; if (e.code === "hasPassword" || e.code === "wrong") L.step = "setup"; L.msg = e.message; redrawLogin(); });
+      return;
+    }
     else {
       var u = A.Store.get("users", L.userId);
       M.setPassword(u.id, pw, u.id);
@@ -828,14 +878,23 @@
     else if (L.pin.length < 4) L.pin += k;
     redrawLogin();
     if (L.pin.length === 4) {
-      var u = A.Store.get("users", L.userId);
+      var u = A.Store.get("users", L.userId), pin = L.pin;
       if (u && u.status === "pending") { L.pin = ""; L.step = "who"; L.msg = u.name + " is waiting for an admin to approve them."; redrawLogin(); return; }
-      if (u && String(u.pin || "") === L.pin) staffGate(u, function () { finishSignIn(u); });
-      else {
+      var shake = function (msg) {
+        L.msg = msg || "";
         var d = document.getElementById("pin-dots");
         if (d) d.classList.add("shake");
         setTimeout(function () { L.pin = ""; redrawLogin(); }, 380);
-      }
+      };
+      var ok = u ? M.checkSecret(u.id, pin) : false;
+      L.lastPin = pin; // for the staff code check through the hub
+      if (ok === true) staffGate(u, function (code) { finishSignIn(u); tellHub(u, pin, code); });
+      else if (ok === false) shake();
+      else viaHub({ userId: u.id, secret: pin }, function (who, e) {
+        if (who) return staffGate(who, function () { finishSignIn(who); });
+        if (e && e.code === "needCode") { L.codeFor = u; L.codeDone = function () { finishSignIn(u); }; L.step = "staffcode"; L.msg = ""; redrawLogin(); return; }
+        L.pin = ""; L.msg = e && e.code !== "wrong" ? e.message : "That PIN isn't right."; redrawLogin();
+      });
     }
   }
   document.addEventListener("keydown", function (e) {
@@ -914,6 +973,7 @@
       if (A.Sync) A.Sync.init();
       if (A.Alerts) A.Alerts.start();
       A.render();
+      A.schoolFolder(M.me());
     }).catch(function (e) {
       A.oops(e, "boot");
       document.getElementById("app").innerHTML = '<div class="content">' + UI.empty("alert", "The app could not start", String(e && e.message || e),

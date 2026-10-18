@@ -166,6 +166,11 @@
       Store.state.colls[coll][rec.id] = rec;
       return true;
     },
+    /** The hub's copy of a record, taken as it is (a change the hub refused, js/sync.js); null: the hub has none. */
+    replace: function (coll, id, rec) {
+      if (!Store.state.colls[coll]) return;
+      if (rec) Store.state.colls[coll][id] = rec; else delete Store.state.colls[coll][id];
+    },
     changedSince: function (ts) {
       var out = {};
       COLLS.forEach(function (c) {

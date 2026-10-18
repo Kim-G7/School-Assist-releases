@@ -65,7 +65,7 @@
   /** Take the school file: the school's look straight away, and its hub's addresses to join. */
   Id.provision = function (p) {
     var s = p.school || {};
-    meta().pack = { schoolId: s.schoolId, name: s.name, urls: (p.hub && p.hub.urls) || [], logo: s.logo || "" };
+    meta().pack = { schoolId: s.schoolId, name: s.name, urls: (p.hub && p.hub.urls) || [], logo: s.logo || "", join: (p.hub && p.hub.join) || "" };
     A.Store.state.colls.settings.branding = { id: "branding", name: s.name, shortName: s.shortName || s.name, motto: s.motto || "", vision: s.vision || "",
       mission: s.mission || "", aims: s.aims || "", logo: s.logo || "", primary: s.primary, secondary: s.secondary, updatedAt: 1 };
     A.Theme.apply();
@@ -82,7 +82,8 @@
         vision: o.vision || "", mission: o.mission || "", aims: o.aims || "", logo: o.logo || old.logo || "" },
         o.primary ? { primary: o.primary, secondary: o.secondary || o.primary } : {}));
       var admin = S().put("users", { id: A.uid("t"), role: "teacher", isAdmin: true, staffNo: o.abbr + "-AD1", name: o.admin, title: o.title || "Admin",
-        subjects: A.edition === "teacher" ? (o.cls ? "Class teacher" : "") : "All subjects", pin: o.pin });
+        subjects: A.edition === "teacher" ? (o.cls ? "Class teacher" : "") : "All subjects" });
+      M.setPin(admin.id, o.pin, admin.id);
       S().put("settings", { id: "school", schoolId: newId(), name: o.name, abbr: o.abbr, createdBy: admin.id });
       S().put("settings", { id: "staffcodes", prefix: o.abbr, admin: M.makeStaffCode(o.abbr), teacher: M.makeStaffCode(o.abbr), madeAt: Date.now() });
       if (o.key) {
@@ -98,12 +99,15 @@
   Id.adopt = function (res, startedAt) {
     var m = meta();
     if (m.pack && res.school.id !== m.pack.schoolId) return Promise.reject(new Error("This hub belongs to " + (res.school.name || "another school") + ", not " + m.pack.name + "."));
-    var deviceId = m.deviceId;
+    // what this device keeps: its id, its key to the hub (1.6) and the school file (its join secret, to join again)
+    var deviceId = m.deviceId, hubKey = m.hubKey || null, pack = m.pack || null;
     if (M.me()) M.signOut();
     if (A.LastUser) A.LastUser.forget(); // that was someone in the demo school
     A.Store.state = A.Store.empty();
     m = meta();
     m.deviceId = deviceId; m.seededAt = Date.now(); m.demo = false; m.joinedAt = Date.now();
+    if (hubKey) m.hubKey = hubKey;
+    if (pack) m.pack = pack;
     var n = 0;
     Object.keys(res.changes || {}).forEach(function (c) { (res.changes[c] || []).forEach(function (r) { if (S().merge(c, r)) n++; }); });
     if (!Id.record()) A.Store.state.colls.settings.school = { id: "school", schoolId: res.school.id, name: res.school.name || "", updatedAt: 1 };
@@ -114,7 +118,7 @@
 
   /* ------------------------------------------------------------------ which page */
   var notHub = false; // opened from a website that isn't a school hub (a hosted demo): the set-up page
-  function servedByHub() { return /^https?:$/.test(location.protocol) && !/github\.io|claude\.ai|vercel\.app/.test(location.host) && !notHub; }
+  function servedByHub() { return /^https?:$/.test(location.protocol) && !A.staticHost() && !notHub; }
   /** "ready" (its school, or the demo: the sign-in page), "connect" (on its way to its school's hub), "wizard" (set-up). */
   Id.stage = function (me) {
     if (!Id.applies() || !A.Store.state) return "ready";
@@ -193,7 +197,8 @@
     var p = meta().pack || {}, name = p.name || C.name;
     var logo = p.logo ? '<div class="logo"><img src="' + esc(p.logo) + '" alt=""></div>' : '<div class="logo"><img src="assets/icon.svg" alt=""></div>';
     return '<div class="setup-card setup-connect">' + logo + "<h1>" + esc(name || "Your school") + "</h1>" +
-      (C.error ? '<div class="callout warn mt" style="text-align:left">' + I("wifiOff") + "<div>" + esc(C.error) + "</div></div>" +
+      (C.pendingCode ? '<p class="mt">This computer is waiting to join the school hub. Show an admin this code:</p><p class="join-code">' + esc(C.pendingCode) + '</p><p class="small muted">The admin lets it in under Settings → Devices. This page carries on by itself.</p><div class="setup-spin" aria-hidden="true"></div>'
+        : C.error ? '<div class="callout warn mt" style="text-align:left">' + I("wifiOff") + "<div>" + esc(C.error) + "</div></div>" +
         '<button class="btn btn-primary btn-lg mt" data-act="su-connect">' + I("refresh") + "Try again</button>" +
         (meta().pack ? '<form data-submit="su-connect-at" class="mt-lg" style="text-align:left"><label class="field"><span>Or type the hub\'s address</span><input class="input" name="url" placeholder="e.g. 192.168.1.20:8080" autocomplete="off" spellcheck="false">' +
           '<span class="hint">It is on the hub computer, in Settings → Offline &amp; sync.</span></label><button class="btn" type="submit">' + I("wifi") + "Connect</button></form>" : "")
@@ -235,9 +240,11 @@
     }).catch(function (e) {
       C.busy = false; C.searching = false;
       if (e.message === "nohub") { notHub = true; redraw(); return; } // a website that isn't a hub: set up instead
+      // waiting for an admin to let it in: show the code, and look again every few seconds
+      C.pendingCode = e.code === "pending" ? (A.Sync.joinState().code || "") : "";
       C.error = e.message || String(e);
       redraw();
-      C.timer = setTimeout(function () { C.timer = null; if (Id.stage(M.me()) === "connect") Id.connect(); }, 20000);
+      C.timer = setTimeout(function () { C.timer = null; if (Id.stage(M.me()) === "connect") Id.connect(); }, C.pendingCode ? 6000 : 20000);
     });
   };
   A.act["su-connect"] = function () { C.manual = true; Id.connect(); redraw(); };
@@ -303,7 +310,9 @@
       '<div class="form-grid mt">' +
       field("School name", "name", d.name, { full: true, ph: teacher ? "e.g. Sunrise Primary School" : "e.g. Kopje High School", attrs: 'autocomplete="organization"' }) +
       field("Short name", "short", d.short, { ph: teacher ? "e.g. Sunrise Primary" : "e.g. Kopje High" }, "Used where space is tight.") +
-      field("Abbreviation", "abbr", d.abbr, { ph: teacher ? "e.g. SPS" : "e.g. KHS", attrs: 'maxlength="6" autocapitalize="characters"' }, "2 to 6 letters. Starts every ID: students " + esc(d.abbr || "KHS") + "-FM1-001 (Form 1, student 1), teachers " + esc(d.abbr || "KHS") + "-TC1, admins " + esc(d.abbr || "KHS") + "-AD1, and the staff codes.") +
+      field("Abbreviation", "abbr", d.abbr, { ph: teacher ? "e.g. SPS" : "e.g. KHS", attrs: 'maxlength="6" autocapitalize="characters"' }, teacher
+        ? "2 to 6 letters. Starts every ID: pupils " + esc(d.abbr || "SPS") + "-GR4-001 (Grade 4, pupil 1), teachers " + esc(d.abbr || "SPS") + "-TC1, admins " + esc(d.abbr || "SPS") + "-AD1, and the staff codes."
+        : "2 to 6 letters. Starts every ID: students " + esc(d.abbr || "KHS") + "-FM1-001 (Form 1, student 1), teachers " + esc(d.abbr || "KHS") + "-TC1, admins " + esc(d.abbr || "KHS") + "-AD1, and the staff codes.") +
       field("Motto", "motto", d.motto, { full: true, ph: "e.g. Knowledge is power" }) +
       '<div class="field full"><span class="label">School colours</span>' + coloursHtml() + "</div>" +
       field("Vision <span class=\"muted\">(optional)</span>", "vision", d.vision, { full: true, area: true, ph: "What the school wants to become" }) +
@@ -346,8 +355,9 @@
       '<div class="setup-actions"><span></span><button class="btn btn-primary btn-lg" data-act="su-finish">' + I("check") + "Finish</button></div>";
   };
   STEP.restore = function () {
-    return "<h1>Restore a school from its online backup</h1><p class=\"muted\">For a school whose hub computer was lost, stolen or broke. This computer downloads the school's backup and becomes its hub. " +
-      "You need the school's School Assist key, Golden Technologies' approval (they phone the school to check), and the school's recovery key.</p>" + A.Backup.restoreHtml("setup");
+    return "<h1>Restore a school from its backup</h1><p class=\"muted\">For a school whose hub computer was lost, stolen or broke. This computer downloads the school's backup and becomes its hub. " +
+      "You need the school's School Assist key, Golden Technologies' approval (they phone the school to check), and two parts of the school's key. " +
+      "With the school's backup files (from a flash drive) and parts 1 and 2, no internet or approval is needed.</p>" + A.Backup.restoreHtml("setup");
   };
   STEP.join = function (msg) {
     var d = W.d, eg = "192.168.1.20:8080";
@@ -429,6 +439,8 @@
     if (lic && !lic.master) { o.name = lic.data.name; o.abbr = lic.data.abbr; if (!d.short || d.short === d.name) o.shortName = lic.data.name; }
     Id.create(o).then(function (admin) {
       M.signIn(admin.id);
+      A.Theme.apply();
+      A.schoolFolder(admin);
       if (A.LastUser) A.LastUser.set(admin, {});
       meta().setupStep = desk() && desk().hub ? "hub" : "share";
       W = { step: meta().setupStep, d: {}, msg: "" };
@@ -526,7 +538,9 @@
   /** The school file: everything a copy needs to open as this school's and find its hub. Nothing secret. */
   Id.makePack = function () {
     var b = A.Theme.get(), r = Id.record() || {}, d = desk();
-    var urls = d && d.hub ? d.hub.status().then(function (h) { return h && h.running ? h.urls : []; }).catch(function () { return []; }) : Promise.resolve([]);
+    // made on the hub computer, the school file carries the hub's join secret: its copies join the hub by themselves (1.6)
+    var join = "";
+    var urls = d && d.hub ? d.hub.status().then(function (h) { join = (h && h.running && h.join) || ""; return h && h.running ? h.urls : []; }).catch(function () { return []; }) : Promise.resolve([]);
     return urls.then(function (list) {
       list = (list || []).filter(function (u) { return !/localhost|127\.0\.0\.1/.test(u); });
       var c = A.Sync.config();
@@ -534,7 +548,7 @@
       return { app: "school-assist-pack", v: 1, edition: A.edition === "teacher" ? "teacher" : "school", madeAt: Date.now(),
         school: { schoolId: r.schoolId, name: b.name, shortName: b.shortName, abbr: Id.abbr(), motto: b.motto, vision: b.vision, mission: b.mission, aims: b.aims,
           logo: b.logo || "", primary: b.primary, secondary: b.secondary },
-        hub: { urls: list } };
+        hub: { urls: list, join: join || undefined } };
     });
   };
   Id.shareOptions = function () {

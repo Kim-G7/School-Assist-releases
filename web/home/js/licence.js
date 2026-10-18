@@ -191,7 +191,9 @@
     if (!rec || !rec.key || rec._deleted) return { state: "trial" };
     var r = read(rec.key);
     if (!r.ok) return { state: "invalid", error: r.error };
-    var d = withRenewal(r.data, rec.renewal), end = Date.parse(d.until + "T23:59:59"), now = Date.now();
+    // now: this computer's clock, but never earlier than the last real date seen (noteServerTime)
+    var clock = S().get("settings", "clock"), now = Math.max(Date.now(), (clock && !clock._deleted && clock.seen) || 0);
+    var d = withRenewal(r.data, rec.renewal), end = Date.parse(d.until + "T23:59:59");
     var graceLeft = Math.ceil((end + GRACE_DAYS * DAY - now) / DAY);
     return { state: now <= end ? "active" : graceLeft > 0 ? "grace" : "expired", data: d, plan: d.plan,
       daysLeft: Math.ceil((end - now) / DAY), graceLeft: graceLeft };
@@ -372,6 +374,18 @@
       return true;
     });
   }
+  /** The real date, as GitHub last told an admin's device (1.6): a computer whose clock is set back can't make a
+      licence look paid for longer. GitHub's "Expires" header is its time now plus max-age (browsers may read it;
+      not "Date"). Kept as the settings record "clock", so it reaches every device of the school. */
+  function noteServerTime(res) {
+    try {
+      var exp = Date.parse(res.headers.get("expires") || ""), m = /max-age=(\d+)/.exec(res.headers.get("cache-control") || "");
+      if (!(exp > 0)) return;
+      var t = exp - (m ? Number(m[1]) * 1000 : 0), cur = S().get("settings", "clock");
+      if (t > Date.UTC(2026, 0, 1) && (!cur || t > (cur.seen || 0) + 3600000)) S().put("settings", { id: "clock", seen: t });
+    } catch (e) { /* no date: nothing learnt */ }
+  }
+  Lic._noteServerTime = noteServerTime;
   /** An admin's device online: has Golden Technologies published a renewal for this key? (Twice a day at most.) */
   var LAST_CHECK = "sca-licence-check";
   Lic.checkOnline = function (me) {
@@ -379,9 +393,9 @@
     var feed = CFG.licenceFeed, rec = S().get("settings", "licence"), cur = rec && rec.key ? read(rec.key) : null;
     if (!feed || !cur || !cur.ok) return;
     var last = 0; try { last = Number(localStorage.getItem(LAST_CHECK)) || 0; } catch (e) { /* private mode */ }
-    if (Date.now() - last < 12 * 3600000) return;
+    if (Math.abs(Date.now() - last) < 12 * 3600000) return; // (a clock set back far looks again at once)
     try { localStorage.setItem(LAST_CHECK, String(Date.now())); } catch (e) { /* private mode */ }
-    var base = feed.replace(/\/?$/, "/"), get = function (name) { return fetch(base + name, { cache: "no-store" }).then(function (res) { return res.ok ? res.json() : null; }); };
+    var base = feed.replace(/\/?$/, "/"), get = function (name) { return fetch(base + name, { cache: "no-store" }).then(function (res) { noteServerTime(res); return res.ok ? res.json() : null; }); };
     // index.json lists the licences that have a renewal, so a key without one asks for nothing that isn't there
     return get("index.json")
       .then(function (index) { return index && index[cur.data.no] ? get(encodeURIComponent(cur.data.no) + ".json") : null; })

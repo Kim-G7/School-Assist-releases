@@ -112,20 +112,26 @@
       (msg || "") + '<button class="btn btn-primary btn-lg btn-block mt" type="submit">' + I("key") + "Register</button></form>";
   };
   A.act["staff-register"] = function (form) {
-    var f = UI.formData(form), role = M.codeRole(f.code);
+    var f = UI.formData(form);
     typed = { code: f.code, name: f.name, subjects: f.subjects };
     var fail = function (m) { A.loginMessage(m); };
+    // a device that doesn't keep the codes (1.6: a new or student device) asks the school hub
+    if (!M.staffCodes() && A.Sync && A.Sync.hubMode()) return A.Sync.checkStaffCode(f.code).then(function (role) { register(f, role, fail); }, function (e) { fail(e.message); });
     if (!M.staffCodes()) return fail("This school hasn't made its staff codes yet. Ask an admin to open Settings → People → Teachers.");
+    register(f, M.codeRole(f.code), fail);
+  };
+  function register(f, role, fail) {
     if (!role) return fail("That staff code isn't right. Check it with an admin.");
     if (f.name.trim().split(/\s+/).length < 2) return fail("Enter your full name.");
     if (!/^\d{4}$/.test(f.pin)) return fail("The PIN must be 4 digits.");
     if (f.pin !== f.pin2) return fail("The two PINs are different. Type them again.");
     var u = S().put("users", { id: A.uid("t"), role: "teacher", isAdmin: role === "admin", status: "pending", name: f.name.trim().replace(/\s+/g, " "),
-      title: role === "admin" ? "Admin" : "Teacher", subjects: f.subjects.trim(), pin: f.pin, registeredAt: Date.now() });
+      title: role === "admin" ? "Admin" : "Teacher", subjects: f.subjects.trim(), registeredAt: Date.now() });
+    M.setPin(u.id, f.pin, u.id);
     typed = {};
     M.alertAdmins({ kind: "staff", aboutId: u.id, title: "New " + role + ": " + u.name, body: u.name + " registered as " + (role === "admin" ? "an admin" : "a teacher") + (u.subjects ? " (" + u.subjects + ")" : "") + " and is waiting for an admin to approve them in Settings → People." });
     A.loginDone("staffasked", u);
-  };
+  }
 
   /* ------------------------------------------------------------ admins: approving staff */
   A.act["staff-decide"] = function (el) {

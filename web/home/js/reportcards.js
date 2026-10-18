@@ -109,6 +109,7 @@
   };
   function save(ctx, sid, patch) {
     var cur = R.mark(ctx, sid) || { id: "rm_" + key(ctx) + "_" + sid, year: String(ctx.year), term: Number(ctx.term), classId: ctx.classId, subject: ctx.subject, studentId: sid };
+    groupsCache = null; // the class's count and average include this mark at once
     return S().put("reportmarks", Object.assign({}, cur, { outOf: R.outOf(ctx), teacherId: (M.me() || {}).id }, patch));
   }
   function ctxOf(el) {
@@ -163,6 +164,7 @@
     S().put("reportmarks", { id: "rmc_" + key(ctx), year: String(ctx.year), term: ctx.term, classId: ctx.classId, subject: ctx.subject, outOf: n });
     var pre = "rm_" + key(ctx) + "_";
     S().filter("reportmarks", function (r) { return r.id.indexOf(pre) === 0; }).forEach(function (r) { S().put("reportmarks", Object.assign({}, r, { outOf: n })); });
+    groupsCache = null;
     UI.toast("End of term marks are out of " + n);
     A.render();
   };
@@ -417,7 +419,7 @@
     var next = function (i) {
       if (cancelled || i >= files.length) return Promise.resolve();
       var batch = files.slice(i, i + BATCH).map(function (x) { return { path: x.path, html: R.doc([R.page(x.rep, f)]) }; });
-      return desk().reports.pdf({ folder: folder, files: batch }).then(function (r) {
+      return desk().reports.pdf({ school: (A.Theme.get() || {}).name || "", folder: folder, files: batch }).then(function (r) {
         if (r && r.error) throw new Error(r.error);
         dir = r.dir; done += batch.length; tell();
         return next(i + BATCH);

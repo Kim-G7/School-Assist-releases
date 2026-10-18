@@ -1,7 +1,7 @@
 {
   "name": "School Assist Teacher",
   "short_name": "SA Teacher",
-  "description": "Registers, mark book, termly reports, schemes and records and a class screen for primary school teachers. Works offline.",
+  "description": "Registers, mark book, report cards, timetable, schemes and records for primary school teachers. Works offline.",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
