@@ -25,8 +25,10 @@
     var id; try { id = localStorage.getItem(SESSION_KEY); } catch (e) { id = null; }
     return id ? S().get("users", id) : null;
   };
-  M.signIn = function (id) { try { localStorage.setItem(SESSION_KEY, id); } catch (e) { /* ignore */ } };
-  M.signOut = function () { try { localStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ } };
+  // a sync follows at once with the school hub: what the device keeps is for the person signed in now (js/sync.js)
+  var resync = function () { if (A.Sync && A.Sync.hubMode && A.Sync.hubMode()) setTimeout(function () { A.Sync.syncNow().catch(function () { /* the next sync */ }); }, 300); };
+  M.signIn = function (id) { try { localStorage.setItem(SESSION_KEY, id); } catch (e) { /* ignore */ } resync(); };
+  M.signOut = function () { try { localStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ } resync(); };
 
   /* ---------------------------------------------------------- people/classes */
   M.user = function (id) { return S().get("users", id); };

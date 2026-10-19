@@ -1,6 +1,6 @@
 /* Service worker: keeps the whole app available offline once it has been opened.
    Bump VERSION whenever you change any file so devices pick up the update. */
-var VERSION = "classroom-v31-teacher-mveawuwx";
+var VERSION = "classroom-v31-teacher-mvf01gps";
 var FILES = [
   "./", "index.html", "school.config.js", "manifest.webmanifest", "css/app.css", "assets/icon.svg",
   "fonts/inter-latin-400-normal.woff2", "fonts/inter-latin-500-normal.woff2", "fonts/inter-latin-600-normal.woff2", "fonts/inter-latin-700-normal.woff2",

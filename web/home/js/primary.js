@@ -345,8 +345,12 @@
 
   /* ---- one pupil */
   A.route("t/pupil/:id", function (p, q, me) {
-    var u = M.user(p.id), c = P.cls(me);
+    var u = M.user(p.id);
     if (!u || !u.pupil) return { redirect: "#/t/pupils" };
+    // only a pupil of a class this teacher has (the head: every class), even when the address is typed (a browser)
+    var theirs = P.classes(me).filter(function (x) { return (x.studentIds || []).indexOf(u.id) >= 0; }), sel = P.cls(me);
+    if (!theirs.length) return { redirect: "#/t/pupils" };
+    var c = theirs.filter(function (x) { return sel && x.id === sel.id; })[0] || theirs[0];
     var conf = P.conf(), sc = c ? P.scores(c, conf.year, conf.term).by[u.id] : null, notes = S().filter("pnotes", function (n) { return n.pupilId === u.id; }).sort(function (a, b) { return b.at - a.at; });
     var att = termAttendance(c, u.id, conf.term, conf);
     var html = '<div class="card card-pad mb"><div class="row wrap top">' + A.avatar(u, "lg") + '<div class="grow"><h2 style="font-size:22px">' + esc(u.name) + '</h2><p class="muted">' +
@@ -547,7 +551,7 @@
     });
   }
   A.route("t/assessment/:id", function (p, q, me) {
-    var a = S().get("assessments", p.id), c = a && S().get("classes", a.classId);
+    var a = S().get("assessments", p.id), c = a && P.classes(me).filter(function (x) { return x.id === a.classId; })[0]; // a class this teacher has (the head: every class)
     if (!a || !c) return { redirect: "#/t/markbook" };
     var kids = P.pupils(c), marks = a.marks || {};
     var html = '<div class="card card-pad mb"><div class="row wrap top"><div class="grow"><h2 style="font-size:22px">' + esc(a.title) + '</h2><p class="muted">' + esc(a.area) + " · " + esc(a.kind) + " · " +

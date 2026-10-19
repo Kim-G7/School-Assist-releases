@@ -52,6 +52,7 @@
     var h = Object.assign({}, extra || {}), m = meta();
     if (localToken) h["X-SA-Local"] = localToken;
     if (m.hubKey) h["X-SA-Key"] = m.hubKey;
+    h["X-SA-User"] = currentUser(); // what comes down is for the person signed in now (hub-access.cjs forNow)
     return h;
   }
   function readJson(r) { return r.json().catch(function () { return {}; }); }
@@ -95,19 +96,24 @@
       });
     });
   }
+  /** Who is signed in on this device now ("-": nobody), for the hub. */
+  function currentUser() { var me = A.M && A.M.me ? A.M.me() : null; return me ? me.id : "-"; }
   /** Things the hub sends back besides the records: changes it refused (its own copy instead), and this device's share. */
   function keepToShare(res) {
     var S = A.Store;
     (res.restore || []).forEach(function (x) { S.replace(x.coll, x.id, x.rec); });
     if (!res.scope || res.scope === "admin") return;
-    var known = {}, m = meta(), sent = m.lastPushAt || 0;
+    // known: whose records this device keeps now (the person signed in, on a computer students share); devKnown:
+    // everyone who signs in here (their scrambled passwords stay, so they can sign in when the hub is off)
+    var known = {}, devKnown = {}, m = meta(), sent = m.lastPushAt || 0;
     (res.known || []).forEach(function (id) { known[id] = 1; });
+    (res.devKnown || res.known || []).forEach(function (id) { devKnown[id] = 1; });
     var drop = function (coll, keep) {
       var all = S.state.colls[coll] || {};
       Object.keys(all).forEach(function (id) { var r = all[id]; if ((r.updatedAt || 0) <= sent && !keep(r)) delete all[id]; }); // never a change not yet sent
     };
     // passwords: only the people who sign in here; PINs from before 1.6 never stay on a device
-    drop("credentials", function (r) { return r._deleted || known[r.userId]; });
+    drop("credentials", function (r) { return r._deleted || devKnown[r.userId]; });
     Object.keys(S.state.colls.users || {}).forEach(function (id) { var u = S.state.colls.users[id]; if (u && u.pin != null) { var p = Object.assign({}, u); delete p.pin; S.state.colls.users[id] = p; } });
     if (res.scope !== "student") return;
     // a student device keeps its own students' records only (a lab computer may hold others' from before 1.6)
@@ -115,6 +121,28 @@
     ["alerts", "netinfo", "assessments", "reports", "schemes", "pnotes"].forEach(function (coll) { drop(coll, function () { return false; }); });
     drop("pwrequests", function (r) { return known[r.appId]; });
     drop("devices", function (r) { return A.Devices && r.deviceId === A.Devices.id(); });
+    // (1.6.1) what a teacher's or another student's session left here: messages to others, other classes' registers
+    // and other students' details. Only their classes' messages to everyone, their own marks in the register, and
+    // their classmates' names and IDs stay.
+    var mine = {}, mates = {};
+    Object.keys(S.state.colls.classes || {}).forEach(function (id) {
+      var c = S.state.colls.classes[id];
+      if (c && !c._deleted && (c.studentIds || []).some(function (s) { return known[s]; })) { mine[c.id] = 1; (c.studentIds || []).forEach(function (s) { mates[s] = 1; }); }
+    });
+    drop("messages", function (r) { return r._deleted || (Array.isArray(r.to) ? r.to.some(function (id) { return known[id]; }) : mine[r.classId]); });
+    drop("attendance", function (r) { return r._deleted || mine[r.classId]; });
+    Object.keys(S.state.colls.attendance || {}).forEach(function (id) {
+      var r = S.state.colls.attendance[id];
+      if (!r || r._deleted || (r.updatedAt || 0) > sent || !r.marks) return;
+      var only = {}; Object.keys(r.marks).forEach(function (s) { if (known[s]) only[s] = r.marks[s]; });
+      if (Object.keys(only).length !== Object.keys(r.marks).length) S.state.colls.attendance[id] = Object.assign({}, r, { marks: only });
+    });
+    drop("users", function (u) { return u._deleted || u.role !== "student" || known[u.id] || mates[u.id] || devKnown[u.id]; });
+    Object.keys(S.state.colls.users || {}).forEach(function (id) {
+      var u = S.state.colls.users[id];
+      if (!u || u._deleted || u.role !== "student" || known[u.id] || (u.updatedAt || 0) > sent) return;
+      S.state.colls.users[id] = { id: u.id, role: u.role, name: u.name, level: u.level, stream: u.stream, studentNo: u.studentNo, status: u.status, updatedAt: u.updatedAt, _serverAt: u._serverAt };
+    });
     var codes = S.state.colls.settings && S.state.colls.settings.staffcodes;
     if (codes && (codes.updatedAt || 0) <= sent) delete S.state.colls.settings.staffcodes;
   }
@@ -219,13 +247,15 @@
       // null: this device has no school yet (the demo, or a new install): it only receives
       var school = !c.cloud && A.SchoolId && A.SchoolId.applies() ? A.SchoolId.id() : undefined;
       var changes = school === null ? {} : S.changedSince(meta.lastPushAt || 0), sent = 0;
+      // someone else signed in since the last sync (1.6.1): their own records come down again from the start
+      var who = currentUser(), fresh = !c.cloud && meta.syncUser !== undefined && meta.syncUser !== who;
       if (c.cloud) { delete changes.credentials; delete changes.netinfo; } // passwords live in the online sign-in
       Object.keys(changes).forEach(function (k) { sent += changes[k].length; });
       var request = c.cloud
         ? A.Cloud.rpc("sync", { p_since: meta.serverSince || 0, p_changes: changes })
         : ready(c).then(function () { return fetch(c.url + "/api/sync", {
           method: "POST", headers: headers({ "Content-Type": "application/json" }),
-          body: JSON.stringify({ deviceId: A.Devices ? A.Devices.id() : meta.deviceId, since: school === null ? 0 : meta.serverSince || 0, changes: changes,
+          body: JSON.stringify({ deviceId: A.Devices ? A.Devices.id() : meta.deviceId, since: school === null ? 0 : meta.serverSince || 0, changes: changes, fresh: fresh || undefined,
             school: school, schoolName: school ? (A.SchoolId.record() || {}).name || A.Theme.get().name : undefined }),
         }); }).then(function (r) {
           return r.json().catch(function () { return {}; }).then(function (j) {
@@ -257,6 +287,7 @@
         if (A.SchoolId && A.SchoolId.hubOk) A.SchoolId.hubOk();
         meta.lastPushAt = startedAt;
         meta.serverSince = res.now;
+        if (!c.cloud) meta.syncUser = who;
         meta.lastSyncAt = Date.now();
         state = "ok"; lastError = "";
         return S.flush().then(function () {
