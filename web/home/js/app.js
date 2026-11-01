@@ -41,7 +41,7 @@
     var msg = (e && e.message) || String(e);
     console.error(e);
     try { if (window.desktop && window.desktop.logError) window.desktop.logError((where || "page") + " " + location.hash + ": " + ((e && e.stack) || msg)); } catch (x) { /* no log */ }
-    if (!quiet && Date.now() - oopsAt > 3000 && UI && UI.toast) { oopsAt = Date.now(); UI.toast("Something went wrong: " + msg.slice(0, 140), "bad"); }
+    if (!quiet && A.now() - oopsAt > 3000 && UI && UI.toast) { oopsAt = A.now(); UI.toast("Something went wrong: " + msg.slice(0, 140), "bad"); }
   };
   A.render = function () {
     try { draw(); }
@@ -78,11 +78,14 @@
     catch (e) { console.error(e); view = { title: "Something went wrong", html: UI.empty("alert", "This page could not be shown", String(e.message || e)) }; }
     if (view.redirect) { location.replace(view.redirect); return; }
 
+    noteTrail();
     var samePage = lastPath === h.path;
     var scroll = window.scrollY;
     // navigation strips keep their place when a page is redrawn (sidebar, settings tabs, filters)
     var kept = STRIPS.map(function (sel) { return Array.prototype.map.call(app.querySelectorAll(sel), function (el) { return { l: el.scrollLeft, t: el.scrollTop }; }); });
-    if (!samePage) document.querySelectorAll(".modal-back").forEach(function (m) { m.remove(); });
+    // and a wide table slid sideways stays where it was (the register, the mark book, the timetable)
+    var tables = samePage ? Array.prototype.map.call(app.querySelectorAll(".table-wrap"), function (el) { return el.scrollLeft; }) : [];
+    if (!samePage) { document.querySelectorAll(".modal-back").forEach(function (m) { m.remove(); }); A.unsaved = false; } // (a register left unsaved is gone)
     if (m.route.opts.bare) app.innerHTML = view.html;
     else app.innerHTML = shell(me, view, h);
     lastPath = h.path;
@@ -94,6 +97,7 @@
         if (on) keepInView(el, on);
       });
     });
+    if (tables.length) app.querySelectorAll(".table-wrap").forEach(function (el, k) { if (tables[k]) el.scrollLeft = tables[k]; });
     UI.hydrate(app);
     if (view.mount) { try { view.mount(app, m.params, h.query); } catch (e) { A.oops(e, "mount"); } }
     A.boxLists(app);
@@ -105,9 +109,12 @@
      A list with many rows scrolls inside its own card (its heading stays on top) instead of
      stretching the whole page: subject pickers, materials, topics, people, tables, groups.
      Runs after every redraw, and again when a page fills a list in later. */
-  var BOX_ROWS = 8;
+  var BOX_ROWS = 8, SMALL = window.matchMedia ? window.matchMedia("(max-width: 720px), (max-height: 500px)") : null;
   A.boxLists = function (root) {
     root = root || document;
+    root.querySelectorAll(".table-wrap, .tabs, .pill-tabs").forEach(UI.swipeLock);
+    // phones: one scroll, the page's. A box that stops scrolling at its last row, with more page below, confuses.
+    if (SMALL && SMALL.matches) { root.querySelectorAll(".boxed").forEach(function (el) { el.classList.remove("boxed"); }); return; }
     var rows = function (el, sel) { var n = 0; for (var i = 0; i < el.children.length; i++) if (el.children[i].matches(sel)) n++; return n; };
     root.querySelectorAll(".card, details.card").forEach(function (el) {
       el.classList.toggle("boxed", rows(el, ".list-row, .topic-row, .tutor-topic, .class-row, a.list-row, .mat-session") > BOX_ROWS);
@@ -143,7 +150,7 @@
     }
   }
   function navItems(me) {
-    if (A.edition === "teacher" && A.Primary && me.role !== "student") return A.Primary.nav(me);
+    if (A.Primary && me.role !== "student" && !A.Primary.withStudents) return A.Primary.nav(me);
     if (me.role === "student") {
       var newTasks = M.tasksForStudent(me.id).filter(function (t) { return M.taskStatus(t, me.id).key === "new"; }).length;
       return [
@@ -162,18 +169,43 @@
     M.myClasses(me).forEach(function (c) {
       M.tasksForClass(c.id).forEach(function (t) { var n = M.taskCounts(t); toMark += Math.max(0, n.submitted - n.graded); });
     });
-    return [
-      { href: "#/t/home", icon: "home", label: "Home", key: "home" },
-      { href: "#/t/classes", icon: "users", label: "My classes", key: "classes", match: ["classes", "class", "student", "task", "attempt"], count: toMark },
-      { href: "#/t/requests", icon: "checkCircle", label: "Subject requests", key: "requests", count: M.subjectRequests ? M.subjectRequests(me).length : 0 },
-      { href: "#/t/timetable", icon: "grid", label: "Timetable", key: "timetable" },
+    var classes = { href: "#/t/classes", icon: "users", label: A.Primary ? "Subject classes" : "My classes", key: "classes", match: ["classes", "class", "student", "task", "attempt"], count: toMark };
+    var requests = { href: "#/t/requests", icon: "checkCircle", label: "Subject requests", key: "requests", count: M.subjectRequests ? M.subjectRequests(me).length : 0 };
+    var teaching = [
       { href: "#/t/syllabi", icon: "layers", label: "Syllabus library", key: "syllabi", match: ["syllabi", "syllabus"] },
       { href: "#/t/materials", icon: "library", label: "Learning materials", key: "materials" },
       { href: "#/t/tutor", icon: "cap", label: "Tutor content", key: "tutor" },
-    ].concat(me.isAdmin && A.Report && A.edition !== "home" ? [{ href: "#/t/reportcards", icon: "download", label: "Report cards", key: "reportcards" }] : []).concat([
-      { href: me.isAdmin && A.pwRequestList && A.pwRequestList().length ? "#/t/settings?s=people" : "#/t/settings", icon: "sliders", label: "Settings", key: "settings", count: me.isAdmin && A.pwRequestList ? A.pwRequestList().length : 0 },
-    ]);
+    ];
+    var settings = { href: me.isAdmin && A.pwRequestList && A.pwRequestList().length ? "#/t/settings?s=people" : me.isAdmin && A.joinsWaiting ? "#/t/settings?s=devices" : "#/t/settings", icon: "sliders", label: "Settings", key: "settings",
+      count: me.isAdmin ? (A.pwRequestList ? A.pwRequestList().length : 0) + (A.joinsWaiting || 0) : 0 }; // password requests, devices waiting to join
+    // (2026-10-28) the School edition: School Assist Teacher's pages (js/primary.js), with the subject classes students
+    // join beside My class, and the library and materials after Schemes & records
+    if (A.Primary) {
+      var items = A.Primary.nav(me), after = function (key) { var i = items.map(function (it) { return it.key; }).indexOf(key); return i < 0 ? items.length : i + 1; };
+      items.splice(after("others"), 0, classes, requests);
+      items.splice.apply(items, [after("schemes"), 0].concat(teaching));
+      items[items.length - 1] = settings;
+      return items;
+    }
+    return [
+      { href: "#/t/home", icon: "home", label: "Home", key: "home" },
+    ].concat((A.Notices && A.Notices.nav(me)) || []).concat([
+      classes, requests,
+      { href: "#/t/timetable", icon: "grid", label: "Timetable", key: "timetable" },
+    ]).concat(teaching).concat(me.isAdmin && A.Report && A.edition !== "home" ? [{ href: "#/t/reportcards", icon: "download", label: "Report cards", key: "reportcards" }] : []).concat([settings]);
   }
+
+  /* Phones (the sidebar is hidden there): four pages in the bottom bar, and More for every page. */
+  var PHONE = { teacher: ["home", "classes", "timetable", "materials"], student: ["home", "tasks", "exam", "notifications"], primary: ["home", "register", "pupils", "markbook"] };
+  var SHORT = { materials: "Materials", notifications: "Alerts", exam: "Exam", pupils: "My class", markbook: "Marks", tasks: "Tasks", classes: "Classes" };
+  function phoneSplit(me, items) {
+    var k = A.Primary && me.role !== "student" ? "primary" : me.role === "student" ? "student" : "teacher";
+    var front = PHONE[k].map(function (key) { return items.filter(function (it) { return it.key === key; })[0]; }).filter(Boolean);
+    items.forEach(function (it) { if (front.length < 4 && front.indexOf(it) < 0) front.push(it); });
+    return { front: front, rest: items.filter(function (it) { return front.indexOf(it) < 0; }) };
+  }
+  var navOn = function (it, seg) { return it.key === seg || !!(it.match && it.match.indexOf(seg) >= 0); };
+  var whoLine = function (me) { return me.role === "student" ? M.studentHome(me) || "Student" : (me.title || "Teacher") + (me.staffNo ? " · " + me.staffNo : ""); };
 
   function shell(me, view, h) {
     var b = A.Theme.get(), seg = h.parts[1];
@@ -192,12 +224,14 @@
       }
       return html;
     }).join("");
-    var bottom = items.slice(0, 5).map(function (it) {
-      var on = it.key === seg || (it.match && it.match.indexOf(seg) >= 0);
-      var short = it.label.replace(/^My /, "").split(" ")[0];
-      return '<a href="' + it.href + '" class="' + (on ? "active" : "") + '">' + I(it.icon) + "<span>" + esc(short.charAt(0).toUpperCase() + short.slice(1)) + "</span>" + (it.count ? '<span class="count">' + it.count + "</span>" : "") + "</a>";
-    }).join("");
-    var sub = me.role === "student" ? M.studentHome(me) || "Student" : (me.title || "Teacher") + (me.staffNo ? " · " + me.staffNo : "");
+    var split = phoneSplit(me, items);
+    var restN = split.rest.reduce(function (n, it) { return n + (typeof it.count === "number" ? it.count : it.count ? 1 : 0); }, 0);
+    var bottom = split.front.map(function (it) {
+      var short = SHORT[it.key] || it.label.replace(/^My /, "").split(" ")[0];
+      return '<a href="' + it.href + '" class="' + (navOn(it, seg) ? "active" : "") + '">' + I(it.icon) + "<span>" + esc(short.charAt(0).toUpperCase() + short.slice(1)) + "</span>" + (it.count ? '<span class="count">' + it.count + "</span>" : "") + "</a>";
+    }).join("") +
+      '<button type="button" class="' + (split.rest.some(function (it) { return navOn(it, seg); }) ? "active" : "") + '" data-act="more-menu" aria-label="More: every page, light or dark, sign out">' + I("menu") + "<span>More</span>" + (restN ? '<span class="count">' + restN + "</span>" : "") + "</button>";
+    var sub = whoLine(me);
     var bellN = me.role === "teacher" ? (A.Alerts ? A.Alerts.unread(me.id) : 0) : M.unreadCount(me.id);
     var bell = me.role === "teacher"
       ? '<button class="btn btn-ghost btn-icon bell" data-act="open-alerts" data-tip="Notifications" aria-label="Notifications">' + I("bell") + '<span class="bell-n' + (bellN ? "" : " hidden") + '" id="bell-count">' + bellN + "</span></button>"
@@ -211,14 +245,15 @@
       '<nav class="nav" aria-label="Main">' + navHtml + "</nav>" +
       '<div class="side-foot"><div class="me">' + A.avatar(me) + '<div class="who"><b>' + esc(me.name) + "</b><span>" + esc(sub) + '</span></div><button class="side-btn" data-act="signout" data-tip="Sign out" aria-label="Sign out">' + I("logout") + "</button></div></div>" +
       "</aside>" +
-      '<div class="main"><header class="topbar">' + A.Theme.logoHTML("mobile-brand") +
+      '<div class="main"><header class="topbar' + (atHome(me, h) ? "" : " has-back") + '">' + (atHome(me, h) ? "" : '<button class="btn btn-ghost top-back" data-act="go-back" aria-label="Back" data-tip="Back">' + I("back") + '<span class="top-back-label">Back</span></button>') + A.Theme.logoHTML("mobile-brand") +
       '<div class="titles">' + (crumbs ? '<div class="crumbs">' + crumbs + "</div>" : "") + '<h1 class="page-title">' + esc(view.title || "") + "</h1></div>" +
       '<div class="top-actions">' + statusChip() + bell +
-      '<button class="btn btn-ghost btn-icon" data-act="toggle-theme" data-tip="Light / dark mode" aria-label="Toggle dark mode">' + I(A.Theme.isDark() ? "sun" : "moon") + "</button>" +
+      // phones: Sign out before light / dark, so the corner (where pop-ups close) isn't Sign out
       '<button class="btn btn-ghost btn-icon mobile-only-signout" data-act="signout" data-tip="Sign out" aria-label="Sign out">' + I("logout") + "</button>" +
+      '<button class="btn btn-ghost btn-icon" data-act="toggle-theme" data-tip="Light / dark mode" aria-label="Toggle dark mode">' + I(A.Theme.isDark() ? "sun" : "moon") + "</button>" +
       (A.Screen ? A.Screen.controls() : "") +
       "</div></header>" +
-      '<main class="content" id="view">' + (A.Licence ? A.Licence.banner(me) : "") + (view.html || "") + "</main></div>" +
+      '<main class="content" id="view">' + (A.Vacation ? A.Vacation.bar() : "") + (A.Licence ? A.Licence.banner(me) : "") + (view.html || "") + "</main></div>" +
       '<nav class="bottom-nav" aria-label="Main">' + bottom + "</nav></div>";
   }
 
@@ -282,7 +317,7 @@
     var last = (A.LastUser && A.LastUser.get()) || {}, who = L.codeFor || {};
     return back + '<div class="callout warn mt">' + I("shield") + "<div><b>This device was last used by " + esc(last.name || "a student") + ".</b> To sign in here as " + (who.isAdmin ? "an admin" : "a teacher") +
       ", enter your school's " + (who.isAdmin ? "admin" : "teacher") + " code as well. The admins are told about this sign-in.</div></div>" +
-      '<form data-submit="staff-code-check" class="mt"><label class="field"><span>' + (who.isAdmin ? "Admin" : "Teacher") + ' code</span><input class="input" name="code" autocapitalize="characters" spellcheck="false" autocomplete="off" placeholder="e.g. ' + esc(M.schoolAbbr ? M.schoolAbbr(A.Theme.get().name) : "ABC") + '-4K7-9QP"></label>' +
+      '<form data-submit="staff-code-check" class="mt"><label class="field"><span>' + (who.isAdmin ? "Admin" : "Teacher") + ' code</span><input class="input" name="code" autocapitalize="characters" spellcheck="false" autocomplete="off" placeholder="e.g. ' + esc(M.schoolAbbr ? M.idAbbr() : "ABC") + '-4K7-9QP"></label>' +
       msg + '<button class="btn btn-primary btn-lg btn-block mt" type="submit"' + (L.busy ? " disabled" : "") + ">" + I("check") + "Continue</button></form>";
   }
 
@@ -325,25 +360,32 @@
       if (L.step === "role") {
         return '<h2 style="font-size:26px">Welcome</h2>' + (A.SchoolId ? A.SchoolId.welcomeCard() : "") + '<p class="muted mt-sm">Who is using this device?</p>' + lastUserCard() +
           '<div class="role-cards">' +
-          '<button class="role-card" data-act="login-role" data-role="teacher"><div class="ico">' + I("school") + "</div><b>I'm a teacher</b><span>Sign in with your name and PIN</span></button>" +
+          '<button class="role-card" data-act="login-role" data-role="teacher"><div class="ico">' + I("school") + "</div><b>I'm a teacher</b><span>Sign in with your name and " + (A.staffPassword() ? "password" : "PIN") + "</span></button>" +
           '<button class="role-card" data-act="login-role" data-role="student"><div class="ico">' + I("cap") + "</div><b>I'm a student</b><span>Sign in, or create an account</span></button>" +
           "</div>";
       }
       if (L.step === "who") {
-        return (A.edition === "teacher" ? "" : back) + '<h2 class="mt" style="font-size:24px">Select your name</h2>' +
+        // School Assist Teacher starts here (no student role): the demo school's notice, its PIN and the way out, too
+        return (A.edition === "teacher" ? (A.SchoolId ? A.SchoolId.welcomeCard() : "") : back) + '<h2 class="mt" style="font-size:24px">Select your name</h2>' +
           msg + '<div class="mt"><input class="input" id="login-search" placeholder="Search by name…" value="' + esc(L.q) + '" data-input="login-search" autocomplete="off" aria-label="Search by name"></div>' +
           '<div class="who-list" id="who-list">' + Login.list() + "</div>" +
           '<div class="divider"></div><div class="row wrap spread"><span class="small">New teacher or admin?</span><button class="btn" data-act="login-goto" data-step="staffreg">' + I("plus") + "Register with the staff code</button></div>";
       }
       if (L.step === "pin") {
         var u = A.Store.get("users", L.userId) || {};
+        if (A.staffPassword(u)) { // an online hub (or someone who chose a password): a password, not the 4-digit keypad
+          return back + '<div style="text-align:center" class="mt">' + A.avatar(u, "lg") + '<h2 class="mt-sm" style="font-size:22px">' + esc(u.name) + '</h2><p class="muted small">Enter your password</p></div>' +
+            '<form data-submit="staff-pw-login" class="mt"><label class="field"><span>Password</span><div class="pw-wrap"><input class="input" type="password" name="pw" autocomplete="current-password"><button type="button" class="btn btn-ghost btn-icon btn-sm" data-act="pw-toggle" aria-label="Show password">' + I("eye") + "</button></div></label>" +
+            msg + '<button class="btn btn-primary btn-lg btn-block mt" type="submit">Sign in</button></form>' +
+            (CFG.demoPin && A.edition === "demo" && A.SchoolId && A.SchoolId.isDemo() ? '<p class="muted small" style="text-align:center;margin-top:18px">' + I("info") + " Demo password: <b>" + esc(CFG.demoPin) + "</b></p>" : "");
+        }
         var dots = [0, 1, 2, 3].map(function (i) { return '<i class="' + (i < L.pin.length ? "on" : "") + '"></i>'; }).join("");
         var keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "⌫"].map(function (k) {
           return '<button class="' + (k === "C" || k === "⌫" ? "fn" : "") + '" data-act="login-key" data-k="' + k + '">' + (k === "C" ? "Clear" : k) + "</button>";
         }).join("");
         return back + '<div style="text-align:center" class="mt">' + A.avatar(u, "lg") + '<h2 class="mt-sm" style="font-size:22px">' + esc(u.name) + '</h2><p class="muted small">Enter your 4-digit PIN</p>' +
           '<div class="pin-dots" id="pin-dots">' + dots + "</div></div>" + '<div class="keypad">' + keys + "</div>" +
-          (CFG.demoPin && A.edition === "demo" ? '<p class="muted small" style="text-align:center;margin-top:18px">' + I("info") + " Demo PIN: <b>" + esc(CFG.demoPin) + "</b></p>" : "");
+          (CFG.demoPin && A.edition === "demo" && A.SchoolId && A.SchoolId.isDemo() ? '<p class="muted small" style="text-align:center;margin-top:18px">' + I("info") + " Demo PIN: <b>" + esc(CFG.demoPin) + "</b></p>" : "");
       }
       if (L.step === "student") {
         return back + '<h2 class="mt" style="font-size:24px">Student sign in</h2><p class="muted small mt-sm">Use your student ID and your password.</p>' +
@@ -491,7 +533,7 @@
         var offer = L.offered || [];
         return back + '<h2 class="mt" style="font-size:24px">Register as a teacher or admin</h2><p class="muted small mt-sm">Use the staff code your school gave you: the teacher code makes you a teacher, the admin code an admin. An admin approves you before you can sign in.</p>' +
           '<form data-submit="cloud-staff-register" class="mt">' +
-          '<label class="field"><span>School staff code</span><input class="input" name="code" autocapitalize="characters" spellcheck="false" autocomplete="off" placeholder="e.g. ' + esc(M.schoolAbbr(A.Theme.get().name)) + '-4K7-9QP"></label>' +
+          '<label class="field"><span>School staff code</span><input class="input" name="code" autocapitalize="characters" spellcheck="false" autocomplete="off" placeholder="e.g. ' + esc(M.idAbbr()) + '-4K7-9QP"></label>' +
           '<label class="field"><span>Full name</span><input class="input" name="name" autocomplete="name" value="' + esc(L.name || "") + '"></label>' +
           '<label class="field"><span>Email</span><input class="input" type="email" name="email" autocomplete="username" value="' + esc(L.email || "") + '"></label>' +
           pw("pw", "Choose a password", "new-password", "At least 8 characters.") +
@@ -872,45 +914,101 @@
     }
     redrawLogin();
   };
+  /** A staff PIN or password: checked on this device when it knows it, else by the school hub.
+   *  wrong(message, fromHub): not right (the hub's message when it has one, such as too many tries). */
+  function staffCheck(secret, wrong) {
+    var u = A.Store.get("users", L.userId);
+    if (u && u.status === "pending") { L.pin = ""; L.step = "who"; L.msg = u.name + " is waiting for an admin to approve them."; redrawLogin(); return; }
+    var ok = u ? M.checkSecret(u.id, secret) : false;
+    L.lastPin = secret; // for the staff code check through the hub
+    if (ok === true) staffGate(u, function (code) { finishSignIn(u); tellHub(u, secret, code); });
+    else if (ok === false) wrong("", false);
+    else viaHub({ userId: u.id, secret: secret }, function (who, e) {
+      if (who) return staffGate(who, function () { finishSignIn(who); });
+      if (e && e.code === "needCode") { L.codeFor = u; L.codeDone = function () { finishSignIn(u); }; L.step = "staffcode"; L.msg = ""; redrawLogin(); return; }
+      wrong(e && e.code !== "wrong" ? e.message : "", true);
+    });
+  }
   function pinKey(k) {
     if (k === "C") L.pin = "";
     else if (k === "⌫") L.pin = L.pin.slice(0, -1);
     else if (L.pin.length < 4) L.pin += k;
     redrawLogin();
     if (L.pin.length === 4) {
-      var u = A.Store.get("users", L.userId), pin = L.pin;
-      if (u && u.status === "pending") { L.pin = ""; L.step = "who"; L.msg = u.name + " is waiting for an admin to approve them."; redrawLogin(); return; }
-      var shake = function (msg) {
+      staffCheck(L.pin, function (msg, fromHub) {
+        if (fromHub) { L.pin = ""; L.msg = msg || "That PIN isn't right."; redrawLogin(); return; }
         L.msg = msg || "";
         var d = document.getElementById("pin-dots");
         if (d) d.classList.add("shake");
         setTimeout(function () { L.pin = ""; redrawLogin(); }, 380);
-      };
-      var ok = u ? M.checkSecret(u.id, pin) : false;
-      L.lastPin = pin; // for the staff code check through the hub
-      if (ok === true) staffGate(u, function (code) { finishSignIn(u); tellHub(u, pin, code); });
-      else if (ok === false) shake();
-      else viaHub({ userId: u.id, secret: pin }, function (who, e) {
-        if (who) return staffGate(who, function () { finishSignIn(who); });
-        if (e && e.code === "needCode") { L.codeFor = u; L.codeDone = function () { finishSignIn(u); }; L.step = "staffcode"; L.msg = ""; redrawLogin(); return; }
-        L.pin = ""; L.msg = e && e.code !== "wrong" ? e.message : "That PIN isn't right."; redrawLogin();
       });
     }
   }
+  A.act["staff-pw-login"] = function (form) {
+    var pw = form.pw.value;
+    if (!pw) return loginFail(new Error("Enter your password."));
+    L.msg = "";
+    staffCheck(pw, function (msg) { L.msg = msg || "That password isn't right."; redrawLogin(); });
+  };
   document.addEventListener("keydown", function (e) {
-    if (M.me() || L.step !== "pin") return;
+    if (M.me() || L.step !== "pin" || A.staffPassword(A.Store.get("users", L.userId))) return; // the password field takes its own typing
     if (/^[0-9]$/.test(e.key)) pinKey(e.key);
     else if (e.key === "Backspace") pinKey("⌫");
   });
 
+  /* ------------------------------------------------------------------ Back (top left)
+     The pages visited in the app, newest last; the browser's own Back is followed too. Back goes to the one before,
+     or home when there is none (the app opened on this page, or straight after signing in). */
+  var trail = [];
+  function noteTrail() {
+    var here = location.hash || "#/";
+    if (trail[trail.length - 1] === here) return;
+    if (trail[trail.length - 2] === here) { trail.pop(); return; } // came back (this button, or the browser's)
+    trail.push(here);
+    if (trail.length > 60) trail.shift();
+  }
+  function atHome(me, h) { return A.home(me) === "#/" + h.path; }
+  A.act["go-back"] = function () {
+    if (trail.length > 1) { history.back(); return; }
+    var me = M.me();
+    location.hash = A.home(me);
+  };
   A.act.signout = function () {
     if (A.Devices) A.Devices.signOut(M.me());
     if (A.Cloud) { if (A.Sync) A.Sync.syncNow().catch(function () {}); A.Cloud.signOut(); }
     var pops = document.getElementById("alert-root"); if (pops) pops.innerHTML = ""; // the next person must not see them
     M.signOut();
     lastPath = null;
+    trail = [];
     location.hash = "";
     A.render();
+  };
+  /** Phones: every page (the sidebar's list), the person signed in, light or dark, full screen and sign out, in a sheet. */
+  A.act["more-menu"] = function () {
+    var me = M.me();
+    if (!me) return;
+    var seg = location.hash.replace(/^#\/?/, "").split("?")[0].split("/")[1] || "";
+    var links = navItems(me).map(function (it) {
+      var row = '<a class="more-link' + (navOn(it, seg) ? " active" : "") + '" href="' + it.href + '">' + I(it.icon) + '<span class="grow">' + esc(it.label) + "</span>" +
+        (it.count ? '<span class="count">' + esc(String(it.count)) + "</span>" : "") + I("right") + "</a>";
+      if (it.key === "classes") row += M.myClasses(me).slice(0, 6).map(function (c) {
+        return '<a class="more-link sub" href="#/t/class/' + c.id + '"><span class="dot"></span><span class="grow">' + esc(c.name + " · " + c.subject) + "</span></a>";
+      }).join("");
+      return row;
+    }).join("");
+    var full = A.Screen && A.Screen.canToggle() && !A.Screen.isFull() && !A.Screen.locked();
+    UI.modal({
+      title: A.Theme.get().name, size: "more-sheet", foot: false, noFocus: true,
+      body: '<div class="more-me">' + A.avatar(me) + '<div class="grow"><b>' + esc(me.name) + '</b><div class="small muted">' + esc(whoLine(me)) + "</div></div></div>" +
+        '<nav class="more-links" aria-label="Every page">' + links + "</nav>" +
+        // Sign out first, light or dark last: a second tap where More was lands on the theme, not on Sign out
+        '<div class="more-acts"><button type="button" class="btn" data-act="signout">' + I("logout") + "Sign out</button>" +
+        (full ? '<button type="button" class="btn" data-act="screen-enter">' + I("expand") + "Full screen</button>" : "") +
+        (A.Install && A.Install.can() ? '<button type="button" class="btn" data-act="install-app">' + I("download") + "Install the app</button>" : "") +
+        '<button type="button" class="btn" data-act="toggle-theme">' + I(A.Theme.isDark() ? "sun" : "moon") + (A.Theme.isDark() ? "Light mode" : "Dark mode") + "</button></div>",
+      // a page link or an action closes the sheet (the action itself runs from the page's own click handling)
+      onMount: function (el, close) { el.addEventListener("click", function (e) { if (e.target.closest("a[href], [data-act]")) setTimeout(close, 0); }); },
+    });
   };
   A.act["toggle-theme"] = function () {
     A.Theme.setMode(A.Theme.isDark() ? "light" : "dark");
@@ -949,10 +1047,20 @@
   });
   window.addEventListener("online", A.refreshStatus);
   window.addEventListener("offline", A.refreshStatus);
-  window.addEventListener("hashchange", A.render);
+  window.addEventListener("hashchange", function () { A.render(); }); // (the current A.render: js/vacation.js wraps it)
 
   /** Re-render after data arrives from another device, unless the user is typing. */
+  /* What a sync brought is drawn, but never under a finger (2026-10-26: a redraw in the middle of a swipe stopped it,
+     sent a wide table back to its start and made the page jump): while the screen is touched, and until the page has
+     been still for a moment after a swipe or a scroll, it waits. */
+  var touching = 0, movedAt = 0, redrawLater = null;
+  var touchNote = function (e) { touching = e.touches ? e.touches.length : 0; movedAt = A.now(); };
+  ["touchstart", "touchend", "touchcancel"].forEach(function (ev) { document.addEventListener(ev, touchNote, { passive: true, capture: true }); });
+  document.addEventListener("scroll", function () { movedAt = A.now(); }, { passive: true, capture: true }); // the page, and any table or list in it
+  A.busyMoving = function () { return touching > 0 || A.now() - movedAt < 900; };
   A.softRefresh = function () {
+    clearTimeout(redrawLater); redrawLater = null;
+    if (A.busyMoving()) { redrawLater = setTimeout(A.softRefresh, 500); return; }
     var a = document.activeElement;
     if (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) { A.refreshStatus(); return; }
     if (document.querySelector(".modal-back") || document.querySelector(".exam-room") || document.querySelector("[data-no-refresh]")) { A.refreshStatus(); return; }
@@ -962,8 +1070,65 @@
   /* ------------------------------------------------------------------- boot */
   window.addEventListener("error", function (e) { if (e && e.error) A.oops(e.error, "uncaught", true); });
   window.addEventListener("unhandledrejection", function (e) { var r = e && e.reason; if (r && !(r.name === "AbortError")) A.oops(r, "promise", true); });
+  /* ------------------------------------------------------------------ a new version, at a quiet moment
+     Teachers keep the app open for days, so a new version loads by itself: at once when the app is in the background;
+     on screen, when no pop-up is open, nothing is being typed (nor was in the last 20 seconds) and no paper is being
+     sat, after a short notice. The work on this device is saved first. */
+  var lastTyped = 0;
+  document.addEventListener("input", function () { lastTyped = A.now(); }, true);
+  document.addEventListener("keydown", function () { lastTyped = A.now(); }, true);
+  document.addEventListener("pointerdown", function () { lastTyped = A.now(); }, true); // a tap is work too
+  // a register marked but not saved (its marks are kept only when Save is pressed) holds an update back
+  var UNSAVED = /^p?reg-(mark|all)$/, SAVED = /^p?reg-save$/;
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest && e.target.closest("[data-act]"), act = t && t.getAttribute("data-act");
+    if (!act) return;
+    if (UNSAVED.test(act)) A.unsaved = true; else if (SAVED.test(act)) A.unsaved = false;
+  }, true);
+  A.quietMoment = function () {
+    if (A.unsaved) return false;
+    if (document.hidden) return true;
+    var a = document.activeElement;
+    if (a && (a.isContentEditable || (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.type !== "checkbox" && a.type !== "radio" && a.type !== "button"))) return false;
+    if (A.now() - lastTyped < 20000) return false;
+    if (document.querySelector(".modal-back, .exam-room, [data-no-refresh]") || /#\/s\/sit\//.test(location.hash)) return false;
+    return true;
+  };
+  A.reloadWhenQuiet = function (load, notice) {
+    var go = function () {
+      if (!A.quietMoment()) { setTimeout(go, 5000); return; }
+      var hidden = document.hidden;
+      if (!hidden) UI.toast(notice || "Updating School Assist…");
+      Promise.resolve(A.Store && A.Store.state ? A.Store.flush() : null).catch(function () { /* saved before */ })
+        .then(function () { setTimeout(load, hidden ? 0 : 1500); });
+    };
+    go();
+  };
+
+  /* ------------------------------------------------------------------ one window at a time
+     The records are kept in memory and saved whole, so two windows of the app on one device (two browser tabs, or the
+     browser and the installed app on Android, which share storage) would save over each other. The newest window is
+     the one used; an older one pauses (saves and syncs nothing) behind a notice, with "Use it here". */
+  function oneWindow() {
+    if (!window.BroadcastChannel) return;
+    var id = A.uid("win"), ch = new BroadcastChannel("sca-window");
+    ch.onmessage = function (e) { if (e.data && e.data.opened && e.data.id !== id) pause(); };
+    ch.postMessage({ opened: true, id: id });
+    function pause() {
+      if (A.Store.paused) return;
+      A.Store.paused = true;
+      var el = document.createElement("div");
+      el.className = "paused-window";
+      el.innerHTML = '<div class="card card-pad">' + I("copy") + "<h2>School Assist is open in another window</h2>" +
+        '<p class="muted">This one has stopped, so the two don\'t save over each other. Use the other window, or this one instead.</p>' +
+        '<button class="btn btn-primary mt" onclick="location.reload()">' + I("refresh") + "Use it here</button></div>";
+      document.body.appendChild(el);
+    }
+  }
+
   A.boot = function () {
     A.Theme.apply();
+    oneWindow();
     // ask the browser to keep offline data even when the device is short of space
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
     A.Store.init().then(function () {
@@ -980,7 +1145,21 @@
         '<button class="btn btn-primary" onclick="location.reload()">Try again</button>') + "</div>";
     });
     if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
-      navigator.serviceWorker.register("sw.js").catch(function (e) { console.warn("[sw]", e); });
+      var hadWorker = !!navigator.serviceWorker.controller, updating = false;
+      navigator.serviceWorker.register("sw.js").then(function (reg) {
+        // an app open for days never loads a page, so it asks for a new version itself
+        var check = function () { if (navigator.onLine) reg.update().catch(function () { /* next time */ }); };
+        setInterval(check, 15 * 60000);
+        document.addEventListener("visibilitychange", function () { if (!document.hidden) check(); });
+        window.addEventListener("online", check);
+      }).catch(function (e) { console.warn("[sw]", e); });
+      // the new version has taken over (sw.js: skipWaiting, clients.claim): load it at a quiet moment
+      navigator.serviceWorker.addEventListener("controllerchange", function () {
+        if (!hadWorker) { hadWorker = true; return; } // the very first install: this page is already the newest
+        if (updating) return;
+        updating = true;
+        A.reloadWhenQuiet(function () { location.reload(); }, "A new version of School Assist: updating…");
+      });
     }
   };
 })(window.App);

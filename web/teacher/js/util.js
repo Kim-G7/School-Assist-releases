@@ -7,10 +7,36 @@ window.App = window.App || {};
   /* Which edition this copy is: "demo" (Greenfield High School, to explore) or "home" (one admin,
      one student, for revising at home). The desktop build passes it as ?edition=home; a web copy
      can set `edition` in school.config.js. */
+  /* The app for every school (1.7, schoolassistapp.com: multi-hub.cjs marks its page): the edition is the school's,
+     kept on this device when it joined or set the school up (its key, or the school's own, decides). */
+  A.multiHost = typeof window !== "undefined" && !!window.SA_MULTI;
   A.edition = (function () {
-    var q = typeof location !== "undefined" && /[?&]edition=([a-z]+)/.exec(location.search);
-    return (q && q[1]) || (window.SCHOOL_CONFIG && window.SCHOOL_CONFIG.edition) || "demo";
+    var q = typeof location !== "undefined" && /[?&]edition=([a-z]+)/.exec(location.search), kept = null;
+    try { kept = A.multiHost ? localStorage.getItem("sca-edition") : null; } catch (e) { /* private mode */ }
+    return (q && q[1]) || kept || (window.SCHOOL_CONFIG && window.SCHOOL_CONFIG.edition) || "demo";
   })();
+
+  /** Staff roles (a person's title): the school's hierarchy first, top down (2026-10-26: Directors, the Responsible Authority (RA), the Principal,
+   *  the Deputy Principal, the Senior Master and Senior Lady, Heads of Department, then Teachers), then the names other
+   *  schools give the same posts (Headmaster, Head…) and the rest of the staff, with "Other (type it)" for anything else
+   *  (UI.selectOther). */
+  A.ROLES = ["Director", "Responsible Authority", "Principal", "Deputy Principal", "Senior Master", "Senior Lady", "Head of Department", "Teacher",
+    "Headmaster", "Headmistress", "Head", "Deputy Headmaster", "Deputy Headmistress", "Deputy Head", "School Administrator", "Senior Teacher",
+    "Class Teacher", "ICT Teacher", "Sports Director", "Chaplain", "Counsellor", "Librarian", "Bursar", "Secretary", "Boarding Master", "Boarding Mistress", "Matron"];
+  /* Where a title sits in that hierarchy: 0 directors, 1 the responsible authority (RA), 2 the principal (or head), 3 the deputy, 4 the senior
+     master and senior lady, 5 heads of department; everyone else after them (A.RANK_STAFF). */
+  var RANKS = [/^(school )?directors?$/i, /^(ra|ra \(.*\)|resident assistant|responsible authority)$/i, /^(principal|head|headmaster|headmistress|head ?teacher)$/i,
+    /^(deputy|vice) (principal|head|headmaster|headmistress|head ?teacher)$/i, /^senior (master|lady|mistress)$/i, /^(head of department|hod|h\.o\.d\.?)$/i];
+  A.RANK_STAFF = RANKS.length;
+  A.rank = function (title) { var t = String(title || "").trim(); for (var i = 0; i < RANKS.length; i++) if (RANKS[i].test(t)) return i; return RANKS.length; };
+  /** Staff sign in with a password, not a 4-digit PIN, on an online hub (https: the cloud hub; a school's own hub is
+   *  http on its Wi-Fi), and so does anyone who has chosen a password (user.pw). */
+  A.staffPassword = function (u) { return (typeof location !== "undefined" && location.protocol === "https:") || !!(u && u.pw); };
+  /** What is wrong with a staff password ("" when it is good enough): 8 or more characters, letters and a number. */
+  A.staffPasswordProblem = function (pw) {
+    pw = String(pw || "");
+    return pw.length < 8 ? "Use at least 8 characters for the password." : !/[A-Za-z]/.test(pw) || !/\d/.test(pw) ? "Use letters and at least one number in the password." : "";
+  };
 
   A.esc = function (s) {
     return String(s == null ? "" : s)
@@ -19,7 +45,7 @@ window.App = window.App || {};
   };
 
   A.uid = function (prefix) {
-    return (prefix || "id") + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    return (prefix || "id") + "_" + A.now().toString(36) + Math.random().toString(36).slice(2, 7);
   };
 
   A.clamp = function (n, lo, hi) { return Math.max(lo, Math.min(hi, n)); };
@@ -47,17 +73,47 @@ window.App = window.App || {};
     return a;
   };
 
+  /* ------------------------------------------------------------- the clock
+     The time is the school hub's, not the device's: a phone whose clock is wrong would date its work wrongly (and lose
+     a change to an older one). Each sync tells the hub's time (js/sync.js → A.Clock.learn); the difference from this
+     device's clock is kept, offline too, and A.now() is the device's clock put right by it. Dates and times are the
+     school's (Zimbabwe, UTC+2; school.config.js tzOffset: minutes east of UTC), even on a device set to another time
+     zone: A.wall(ts) is a Date whose day, hour and minute read as the school's. A device set right moves nothing. */
+  var CLOCK_KEY = "sca-clock", clockOffset = 0;
+  try { clockOffset = Number(JSON.parse(localStorage.getItem(CLOCK_KEY) || "{}").offset) || 0; } catch (e) { /* private mode */ }
+  A.Clock = {
+    offset: function () { return clockOffset; },
+    /** The hub's time `serverNow`, for a request sent at `sentAt` and answered at `gotAt` (this device's own clock). */
+    learn: function (serverNow, sentAt, gotAt) {
+      if (!(serverNow > 0) || !(gotAt >= sentAt) || gotAt - sentAt > 10000) return; // a slow answer can't say the time well
+      var off = Math.round(serverNow - (sentAt + gotAt) / 2);
+      if (Math.abs(off) < 30000) off = 0; // within half a minute: the device is right
+      if (Math.abs(off - clockOffset) < 30000) return; // the same as before (no small jumps in timers)
+      clockOffset = off;
+      try { localStorage.setItem(CLOCK_KEY, JSON.stringify({ offset: off, at: Date.now() })); } catch (e) { /* private mode */ }
+    },
+  };
+  A.now = function () { return Date.now() + clockOffset; };
+  var TZ = typeof (window.SCHOOL_CONFIG || {}).tzOffset === "number" ? window.SCHOOL_CONFIG.tzOffset : 120;
+  var shiftAt = function (ts) { return (TZ + new Date(ts).getTimezoneOffset()) * 60000; }; // 0 on a device in the school's zone
+  /** A Date whose local day, hour and minute are the school's at the moment ts (now when left out). */
+  A.wall = function (ts) { ts = ts == null ? A.now() : ts; return new Date(ts + shiftAt(ts)); };
+  /** The school's "now", to read its year, month, day or hour. */
+  A.date = function () { return A.wall(A.now()); };
+  /** The moment that a school wall-clock Date (from A.wall, changed) stands for. */
+  A.fromWall = function (d) { var t = d.getTime(); return t - shiftAt(t); };
+
   /* ------------------------------------------------------------- dates */
   var DAY = 86400000;
   A.DAY = DAY;
   A.pad = function (n) { return (n < 10 ? "0" : "") + n; };
-  A.isoDate = function (ts) { var d = new Date(ts == null ? Date.now() : ts); return d.getFullYear() + "-" + A.pad(d.getMonth() + 1) + "-" + A.pad(d.getDate()); };
-  A.startOfDay = function (ts) { var d = new Date(ts == null ? Date.now() : ts); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  A.isoDate = function (ts) { var d = A.wall(ts); return d.getFullYear() + "-" + A.pad(d.getMonth() + 1) + "-" + A.pad(d.getDate()); };
+  A.startOfDay = function (ts) { var d = A.wall(ts); d.setHours(0, 0, 0, 0); return A.fromWall(d); };
   var MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   var WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  A.fmtDate = function (ts) { if (!ts) return "—"; var d = new Date(ts); return WD[d.getDay()] + " " + d.getDate() + " " + MON[d.getMonth()]; };
-  A.fmtDateLong = function (ts) { if (!ts) return "—"; var d = new Date(ts); return d.getDate() + " " + MON[d.getMonth()] + " " + d.getFullYear(); };
-  A.fmtTime = function (ts) { var d = new Date(ts); return A.pad(d.getHours()) + ":" + A.pad(d.getMinutes()); };
+  A.fmtDate = function (ts) { if (!ts) return "—"; var d = A.wall(ts); return WD[d.getDay()] + " " + d.getDate() + " " + MON[d.getMonth()]; };
+  A.fmtDateLong = function (ts) { if (!ts) return "—"; var d = A.wall(ts); return d.getDate() + " " + MON[d.getMonth()] + " " + d.getFullYear(); };
+  A.fmtTime = function (ts) { var d = A.wall(ts); return A.pad(d.getHours()) + ":" + A.pad(d.getMinutes()); };
   A.fmtDateTime = function (ts) { return ts ? A.fmtDate(ts) + ", " + A.fmtTime(ts) : "—"; };
   /** A website that only serves the app's pages (no school hub behind it): GitHub Pages, Vercel, Netlify, Cloudflare
       Pages, Firebase, a claude.ai preview, or a school's website (<school>.school-assist.app; its hub is hub.<school>…). */
@@ -68,7 +124,7 @@ window.App = window.App || {};
   };
   A.relTime = function (ts) {
     if (!ts) return "never";
-    var s = Math.round((Date.now() - ts) / 1000);
+    var s = Math.round((A.now() - ts) / 1000);
     if (s < 45) return "just now";
     if (s < 3600) return Math.round(s / 60) + " min ago";
     if (s < DAY / 1000) return Math.round(s / 3600) + " h ago";
@@ -77,7 +133,7 @@ window.App = window.App || {};
   };
   A.dueLabel = function (ts) {
     if (!ts) return { text: "No due date", tone: "" };
-    var now = Date.now(), days = Math.round((A.startOfDay(ts) - A.startOfDay()) / DAY), t = A.fmtTime(ts);
+    var now = A.now(), days = Math.round((A.startOfDay(ts) - A.startOfDay()) / DAY), t = A.fmtTime(ts);
     if (ts < now) {
       if (days === 0) return { text: "Was due today at " + t, tone: "bad" };
       var d = Math.max(1, Math.round((now - ts) / DAY));
@@ -101,7 +157,7 @@ window.App = window.App || {};
     return (h ? h + ":" + A.pad(m) : m) + ":" + A.pad(s);
   };
   A.fmtMinutes = function (sec) { var m = Math.round(sec / 60); return m < 60 ? m + " min" : Math.floor(m / 60) + " h" + (m % 60 ? " " + (m % 60) + " min" : ""); };
-  A.greeting = function () { var h = new Date().getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; };
+  A.greeting = function () { var h = A.date().getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; };
 
   /* ----------------------------------------------------------- people */
   A.initials = function (name) {
@@ -114,7 +170,12 @@ window.App = window.App || {};
     for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
     return '<span class="avatar ' + (size || "") + '" style="background:' + AV[h % AV.length] + '" aria-hidden="true">' + A.esc(A.initials(user && user.name)) + "</span>";
   };
-  A.firstName = function (name) { return String(name || "").replace(/^(mr|mrs|ms|miss|dr)\.?\s+/i, "").split(/\s+/)[0]; };
+  /** How to address someone: a student or a name with no title by the first name; staff by title and last name
+      ("Mrs Moyo", and "Mr K. Sibanda" → "Mr Sibanda"). */
+  A.firstName = function (name) {
+    var w = String(name || "").trim().split(/\s+/);
+    return /^(mr|mrs|ms|miss|dr)\.?$/i.test(w[0]) && w.length > 1 ? w[0].replace(/\.$/, "") + " " + w[w.length - 1] : w[0];
+  };
 
   /* ------------------------------------------------------------ icons */
   var P = {
@@ -174,6 +235,7 @@ window.App = window.App || {};
     send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
     bulb: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5M9 18h6M10 22h4"/>',
     list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
     copy: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
     expand: '<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>',
     shrink: '<path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"/>',

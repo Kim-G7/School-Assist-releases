@@ -16,6 +16,7 @@
   var EVERY = 30000, SPREAD = 15000, HIDDEN = 120000;
 
   function cfg() {
+    if (A.Store && A.Store.vacation) return { url: "", vacation: true }; // vacation mode: this device only, never the hub
     if (A.Cloud) return { url: A.Cloud.url, auto: true, cloud: true }; // home edition online
     var c = {};
     try { c = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { c = {}; }
@@ -43,8 +44,8 @@
   function prepLocal(c) {
     var d = window.desktop;
     if (!d || !d.hub || !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(c.url || "")) { localToken = null; return Promise.resolve(); }
-    if (localToken && Date.now() - localAsked < 60000) return Promise.resolve();
-    localAsked = Date.now();
+    if (localToken && A.now() - localAsked < 60000) return Promise.resolve();
+    localAsked = A.now();
     return d.hub.status().then(function (h) { localToken = (h && h.running && h.token) || null; }).catch(function () { localToken = null; });
   }
   /** Headers that tell the hub which device this is. */
@@ -56,6 +57,22 @@
     return h;
   }
   function readJson(r) { return r.json().catch(function () { return {}; }); }
+  /** The school moved its records to a server of its own (1.7, hub-move.cjs): its old place answers 410 with the new
+      address. This device goes there with the same key (the move took every device's key along) and takes everything
+      once from there. True when it is now pointed at the new address. */
+  function follow(j) {
+    var to = j && typeof j.moved === "string" ? j.moved.replace(/\/+$/, "") : "";
+    if (!/^https:\/\/[\w.-]+(:\d+)?$/i.test(to) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(to)) return false;
+    if (cfg().url === to) return false;
+    var m = meta(), was = m.multi || {};
+    // (movedFrom, eraseAt: an admin can erase School Assist's copy sooner, Settings → Offline & sync)
+    m.multi = Object.assign({}, was, { sid: j.code || was.sid, name: j.name || was.name, hub: to, movedFrom: cfg().url || was.movedFrom, eraseAt: Number(j.eraseAt) || was.eraseAt || 0 });
+    m.serverSince = 0; // everything once, from the school's own server
+    try { localStorage.setItem(KEY, JSON.stringify({ url: to, auto: true })); } catch (e) { /* ignore */ }
+    A.Store.flush();
+    if (A.UI) A.UI.toast((j.name || "Your school") + " now keeps its records on its own server. This device carries on there.");
+    return true;
+  }
   /** The school file's joining secret: the one this device took at set-up, or (a copy updated to 1.6 by copying the new
       version over the old one) the school file now next to the app, when it is this school's. */
   function packSecret(m) {
@@ -72,16 +89,18 @@
   /** Register this device with the hub (once): the school file's secret, a staff code, or an admin's approval. */
   function join(c, staffCode) {
     var m = meta();
+    m.joinAskedAt = A.now();
     return packSecret(m).then(function (secret) {
       return fetch(c.url + "/api/join", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deviceId: A.Devices ? A.Devices.id() : m.deviceId, label: deviceLabel(), secret: secret || undefined, staffCode: staffCode || undefined }) });
     })
       .then(function (r) {
         return readJson(r).then(function (j) {
+          if (r.status === 410 && follow(j)) return join(cfg(), staffCode); // the school moved: ask there (a request waiting moved with it)
           if (r.status === 200 && j.key) { m.hubKey = j.key; m.joinCode = null; m.blocked = false; m.oldHub = null; return A.Store.flush().then(function () { return { key: true }; }); }
           // a hub still on 1.5 has no /api/join (it answers 405, or 404): sync as before; once it is updated it
           // answers 401 "join" and this device joins
-          if (r.status === 404 || r.status === 405) { m.oldHub = Date.now(); return { old: true }; }
+          if (r.status === 404 || r.status === 405) { m.oldHub = A.now(); return { old: true }; }
           if (r.status === 202 && j.pending) { m.joinCode = j.code; return { pending: true, code: j.code }; }
           throw err(j.declined ? "declined" : "refused", j.error || "The school hub replied " + r.status + ".");
         });
@@ -91,6 +110,9 @@
   function ready(c, staffCode) {
     return prepLocal(c).then(function () {
       if (localToken || meta().hubKey || meta().oldHub) return;
+      // waiting for an admin, and the hub was asked moments ago (the join page asks every 10 to 30 seconds): don't ask again
+      var m = meta();
+      if (!staffCode && m.joinCode && A.now() - (m.joinAskedAt || 0) < 25000) throw err("pending", "This device is waiting to join the school hub. Show an admin this code: " + m.joinCode + " (Settings → Devices).");
       return join(c, staffCode).then(function (r) {
         if (r.pending) throw err("pending", "This device is waiting to join the school hub. Show an admin this code: " + r.code + " (Settings → Devices).");
       });
@@ -147,13 +169,16 @@
     if (codes && (codes.updatedAt || 0) <= sent) delete S.state.colls.settings.staffcodes;
   }
 
-  function hubAuth(path, o) {
+  function hubAuth(path, o, again) {
     var c = cfg(), m = meta(), S = A.Store;
     if (!c.url || A.Cloud) return Promise.reject(err("nohub", "No school hub."));
     return ready(c, o.staffCode).then(function () {
       return fetch(c.url + path, { method: "POST", headers: headers({ "Content-Type": "application/json" }), body: JSON.stringify(o) });
     }).then(function (r) {
       return readJson(r).then(function (j) {
+        if (r.status === 410 && !again && follow(j)) return hubAuth(path, o, true);
+        // the school's records are on its hub computer, which is off just now (1.8, hub-relay.cjs): as with no internet
+        if (r.status === 503 && j.hubOffline) throw err("offline", j.error);
         if (r.status === 401 && j.join) { m.hubKey = null; m.oldHub = null; throw err("rejoin", "This device has to join the school hub again. Try once more."); }
         if (!r.ok) throw err(j.locked ? "locked" : j.needCode ? "needCode" : j.wrong ? "wrong" : j.hasPassword ? "hasPassword" : j.pending ? "pending" : j.declined ? "declined" : j.blocked ? "blocked" : "refused", j.error || "The school hub replied " + r.status + ".");
         if (j.user) S.merge("users", j.user);
@@ -175,6 +200,9 @@
     hubMode: function () { var c = cfg(); return !A.Cloud && !!c.url && !!(A.SchoolId && A.SchoolId.id()) && !meta().oldHub; },
     /** This device and the hub: { key, code } (code: the six letters an admin approves, while it waits). */
     joinState: function () { var m = meta(); return { key: !!m.hubKey || !!localToken, code: m.joinCode || null, blocked: !!m.blocked }; },
+    /** While waiting for an admin: ask the hub once whether this device is let in yet. Resolves { key } or
+        { pending, code }; rejects with code "declined" when an admin turned it away. */
+    joinCheck: function () { var c = cfg(); return c.url ? join(c) : Promise.reject(err("nohub", "No school hub.")); },
     /** Join with a staff code typed on this device (a teacher registering or signing in). */
     joinWithCode: function (code) { var c = cfg(); return c.url ? join(c, code) : Promise.reject(err("nohub", "No school hub.")); },
     /** Sign someone in through the hub: { userId | studentNo, secret, staffCode }. Resolves with { user, credential }; the
@@ -194,13 +222,21 @@
     /** An admin's request to the hub: devices waiting to join, the registered ones, approving, removing. */
     /** This device's key to the hub (or the hub computer's token) before asking it anything else (js/model.js claimNumber). */
     ready: function () { var c = cfg(); return c.url && !A.Cloud ? ready(c) : Promise.resolve(); },
-    hubPost: function (path, body) {
+    hubPost: function (path, body, again) {
       var c = cfg();
       if (!c.url || A.Cloud) return Promise.reject(err("nohub", "No school hub."));
       return ready(c).then(function () {
         return fetch(c.url + path, { method: "POST", headers: headers({ "Content-Type": "application/json" }), body: JSON.stringify(body || {}) });
-      }).then(function (r) { return readJson(r).then(function (j) { if (!r.ok) throw err("refused", j.error || "The school hub replied " + r.status + "."); return j; }); });
+      }).then(function (r) {
+        return readJson(r).then(function (j) {
+          if (r.status === 410 && !again && follow(j)) return Sync.hubPost(path, body, true);
+          if (!r.ok) throw err("refused", j.error || "The school hub replied " + r.status + ".");
+          return j;
+        });
+      });
     },
+    /** The school moved to its own server: go there (a reply with { moved }, from its old place or its ping). */
+    follow: follow,
     setConfig: function (c) {
       if (A.Cloud) return;
       try { localStorage.setItem(KEY, JSON.stringify({ url: c.url, auto: !!c.auto })); } catch (e) { /* ignore */ }
@@ -229,11 +265,11 @@
     /** Back on the app after a while: fetch what changed now rather than at the next turn. */
     catchUp: function () {
       var meta = (A.Store.state && A.Store.state.meta) || {};
-      if (Date.now() - (meta.lastSyncAt || 0) > 10000) Sync.maybe();
+      if (A.now() - (meta.lastSyncAt || 0) > 10000) Sync.maybe();
     },
     maybe: function () {
       var c = cfg();
-      if (!c.url || !c.auto || !navigator.onLine || running) return;
+      if (!c.url || !c.auto || !navigator.onLine || running || A.Store.paused) return; // (paused: another window is in use)
       if (c.cloud && !A.Cloud.session()) return;
       Sync.syncNow(c.probe).catch(function () { /* status shows it */ });
     },
@@ -243,7 +279,7 @@
       if (!c.url) return Promise.reject(new Error("No sync server set"));
       if (c.cloud && !A.Cloud.session()) return Promise.reject(new Error("Sign in online to sync"));
       if (running) return running;
-      var S = A.Store, meta = S.state.meta, startedAt = Date.now();
+      var S = A.Store, meta = S.state.meta, startedAt = A.now(), sentAt = 0;
       // null: this device has no school yet (the demo, or a new install): it only receives
       var school = !c.cloud && A.SchoolId && A.SchoolId.applies() ? A.SchoolId.id() : undefined;
       var changes = school === null ? {} : S.changedSince(meta.lastPushAt || 0), sent = 0;
@@ -253,15 +289,20 @@
       Object.keys(changes).forEach(function (k) { sent += changes[k].length; });
       var request = c.cloud
         ? A.Cloud.rpc("sync", { p_since: meta.serverSince || 0, p_changes: changes })
-        : ready(c).then(function () { return fetch(c.url + "/api/sync", {
+        : ready(c).then(function () { sentAt = Date.now(); return fetch(c.url + "/api/sync", { // (the device's own clock: it times the answer)
           method: "POST", headers: headers({ "Content-Type": "application/json" }),
           body: JSON.stringify({ deviceId: A.Devices ? A.Devices.id() : meta.deviceId, since: school === null ? 0 : meta.serverSince || 0, changes: changes, fresh: fresh || undefined,
             school: school, schoolName: school ? (A.SchoolId.record() || {}).name || A.Theme.get().name : undefined }),
         }); }).then(function (r) {
+          var gotAt = Date.now();
           return r.json().catch(function () { return {}; }).then(function (j) {
+            if (r.ok && j.now) A.Clock.learn(j.now, sentAt, gotAt); // the school's time, not this device's
             // its key no longer works (the hub was replaced, or it joined again elsewhere): join again next time
             if (r.status === 401 && j.join) { meta.hubKey = null; meta.oldHub = null; throw err("rejoin", j.error || "This device has to join the school hub again."); }
             if (r.status === 403 && j.blocked) { meta.hubKey = null; meta.blocked = true; throw err("blocked", j.error); }
+            if (r.status === 410 && follow(j)) throw err("moved", j.error); // the school moved: sync again, there
+            if (r.status === 503 && j.moving) throw err("moving", j.error); // moving now: this device's changes wait here
+            if (r.status === 503 && j.hubOffline) throw err("hubOffline", j.error); // the school's hub computer is off: they wait here too
             if (!r.ok) throw new Error(j.error || "Server replied " + r.status);
             return j;
           });
@@ -269,7 +310,7 @@
       running = request.then(function (res) {
         if (school === null) {
           // no school here yet: join the hub's school, if it has one
-          meta.lastSyncAt = Date.now();
+          meta.lastSyncAt = A.now();
           if (!res.school) { state = "ok"; lastError = "This hub has no school yet. Set the school up on the hub computer."; A.refreshStatus(); return { sent: 0, received: 0 }; }
           return A.SchoolId.adopt(res, startedAt).then(function (n) {
             state = "ok"; lastError = "";
@@ -288,7 +329,7 @@
         meta.lastPushAt = startedAt;
         meta.serverSince = res.now;
         if (!c.cloud) meta.syncUser = who;
-        meta.lastSyncAt = Date.now();
+        meta.lastSyncAt = A.now();
         state = "ok"; lastError = "";
         return S.flush().then(function () {
           // files go up and down in the background, so a big download never holds up the next sync
@@ -302,6 +343,7 @@
           return { sent: sent, received: received };
         });
       }).catch(function (e) {
+        if (e && e.code === "moved") throw e; // (synced again at once, at the school's new address)
         // online account removed, or its sign-in ran out: back to the sign-in screen
         if (c.cloud && !e.offline && (/no school assist account/i.test(e.message || "") || !A.Cloud.session()) && A.cloudSignedOut) {
           A.cloudSignedOut("Please sign in again.");
@@ -309,10 +351,15 @@
         // the hub didn't answer at all (not an error reply): maybe its address changed (js/setup.js looks for it)
         if (!c.cloud && e && e.name === "TypeError" && A.SchoolId && A.SchoolId.lostHub) A.SchoolId.lostHub(c.url);
         if (e && e.code === "pending") { state = "pending"; lastError = e.message; }
+        else if (e && e.code === "hubOffline") { state = "local"; lastError = e.message; }
         else if (quiet) { state = "local"; } else { state = "error"; lastError = e.message || String(e); }
         A.refreshStatus();
         throw e;
-      }).then(function (r) { running = null; return r; }, function (e) { running = null; throw e; });
+      }).then(function (r) { running = null; return r; }, function (e) {
+        running = null;
+        if (e && e.code === "moved") return Sync.syncNow(quiet); // (once: follow() takes an address only when it is new)
+        throw e;
+      });
       return running;
     },
 
@@ -351,7 +398,7 @@
         return A.Cloud.download(id).then(function (blob) {
           if (!blob) return null;
           var mat = A.Store.find("materials", function (m) { return m.fileId === id; });
-          var rec = { id: id, name: (mat && mat.fileName) || id, type: blob.type, size: blob.size, blob: blob, createdAt: Date.now(), uploaded: true };
+          var rec = { id: id, name: (mat && mat.fileName) || id, type: blob.type, size: blob.size, blob: blob, createdAt: A.now(), uploaded: true };
           return persist === false ? rec : A.Files.put(rec);
         }).catch(function () { return null; });
       }
@@ -359,7 +406,7 @@
         if (!r.ok) return null;
         var name = decodeURIComponent(r.headers.get("X-File-Name") || id);
         return r.blob().then(function (blob) {
-          var rec = { id: id, name: name, type: blob.type, size: blob.size, blob: blob, createdAt: Date.now(), uploaded: true };
+          var rec = { id: id, name: name, type: blob.type, size: blob.size, blob: blob, createdAt: A.now(), uploaded: true };
           return persist === false ? rec : A.Files.put(rec);
         });
       }).catch(function () { return null; });
@@ -401,8 +448,8 @@
   }
   // screens that show the progress update in place; the page redraws when a run ends
   function show(final) {
-    if (!final && Date.now() - shownAt < 1500) return;
-    shownAt = Date.now();
+    if (!final && A.now() - shownAt < 1500) return;
+    shownAt = A.now();
     document.querySelectorAll("[data-offline-job]").forEach(function (el) { el.innerHTML = A.Offline.statusText(); });
     if (final && document.querySelector("[data-offline-panel], [data-offline-list]") && A.softRefresh) A.softRefresh();
   }

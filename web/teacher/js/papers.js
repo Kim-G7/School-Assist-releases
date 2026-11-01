@@ -302,7 +302,7 @@
     if (!paper || !me) return;
     UI.confirm("Have you finished “" + paper.title + "”? The marking scheme opens so you can mark your own answers.", { ok: "Yes, I've finished" }).then(function (ok) {
       if (!ok) return;
-      S().put("receipts", { id: "pd_" + paper.id + "_" + me.id, kind: "paper-done", paperId: paper.id, studentId: me.id, doneAt: Date.now() });
+      S().put("receipts", { id: "pd_" + paper.id + "_" + me.id, kind: "paper-done", paperId: paper.id, studentId: me.id, doneAt: A.now() });
       UI.toast("Marking scheme unlocked");
       A.render();
       var ms = M.markSchemeFor(paper.id);

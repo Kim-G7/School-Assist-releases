@@ -8,19 +8,21 @@
   "use strict";
   var esc = A.esc, I = A.icon, M = A.M, UI = A.UI, S = function () { return A.Store; };
   var Al = (A.Alerts = {});
-  var ICON = { submitted: "checkCircle", due: "clock", copy: "shield", register: "users" };
-  var TONE = { submitted: "good", due: "bad", copy: "serious", register: "good" };
+  var ICON = { submitted: "checkCircle", due: "clock", copy: "shield", register: "users", join: "phone", notice: "bell" };
+  var TONE = { submitted: "good", due: "bad", copy: "serious", register: "good", join: "", notice: "" };
 
   Al.mine = function (tid) {
     return S().filter("alerts", function (a) { return a.teacherId === tid; }).sort(function (a, b) { return b.createdAt - a.createdAt; });
   };
   Al.unread = function (tid) { return Al.mine(tid).filter(function (a) { return !a.readAt; }).length; };
-  Al.href = function (a) { return a.kind === "feature" ? "#/t/settings?s=licence" : a.kind === "register" || a.kind === "password" ? "#/t/settings?s=people" : a.attemptId ? "#/t/attempt/" + a.attemptId : a.taskId ? "#/t/task/" + a.taskId : "#/t/home"; };
+  /** Where a notification takes you: a new teacher or admin waiting (staff) to People, where they are approved; a
+      teacher's request about their subjects or class to My subjects, where the head agrees or says no. */
+  Al.href = function (a) { return a.kind === "notice" ? "#/t/notices" : a.kind === "join" || a.kind === "device" ? "#/t/settings?s=devices" : a.kind === "feature" ? "#/t/settings?s=licence" : a.kind === "register" || a.kind === "password" || a.kind === "staff" ? "#/t/settings?s=people" : a.kind === "subjects" ? "#/t/subjects" : a.attemptId ? "#/t/attempt/" + a.attemptId : a.taskId ? "#/t/task/" + a.taskId : "#/t/home"; };
 
   Al.check = function () {
     var me = M.me();
     if (!me || me.role !== "teacher" || !S().state) return;
-    var now = Date.now(), created = [];
+    var now = A.now(), created = [];
     var add = function (rec) { if (!S().get("alerts", rec.id)) created.push(S().put("alerts", Object.assign({ teacherId: me.id, createdAt: now }, rec))); };
     // home edition online: someone registered and is waiting for the admin
     if (A.Cloud && me.isAdmin) {
@@ -29,6 +31,12 @@
           body: u.name + (u.level ? ", " + u.level + "," : "") + " registered and is waiting for you. Approve them in Settings → People." });
       });
     }
+    // notices from the school's admins (js/notices.js): each one for me becomes my notification, once
+    if (A.Notices && A.Notices.on()) A.Notices.forMe(me).forEach(function (n) {
+      if (!A.Notices.toMe(n, me) || n.createdAt < now - 14 * A.DAY) return;
+      var nt = A.Notices.alertText(n);
+      add({ id: A.Notices.alertId(n, me), kind: "notice", noticeId: n.id, title: nt.title, body: nt.body });
+    });
     M.classesForTeacher(me.id).forEach(function (c) {
       M.tasksForClass(c.id).forEach(function (t) {
         if (!M.canSubmit(t)) return;
@@ -79,18 +87,18 @@
     el.className = "alert-pop " + (TONE[a.kind] || "");
     el.setAttribute("role", "alert");
     el.innerHTML = '<div class="alert-ico">' + I(ICON[a.kind] || "bell") + '</div><div class="grow"><b>' + esc(a.title) + '</b><p>' + esc(a.body) + "</p>" +
-      '<div class="row mt-sm"><a class="btn btn-sm btn-primary" href="' + Al.href(a) + '" data-alert-open="' + a.id + '">' + (a.kind === "copy" ? "Review the paper" : a.kind === "due" ? "See who is missing" : a.kind === "register" ? "Approve or decline" : a.kind === "feature" ? "See your plan" : "Start marking") + "</a>" +
+      '<div class="row mt-sm"><a class="btn btn-sm btn-primary" href="' + Al.href(a) + '" data-alert-open="' + a.id + '">' + (a.kind === "copy" ? "Review the paper" : a.kind === "due" ? "See who is missing" : a.kind === "register" ? "Approve or decline" : a.kind === "feature" ? "See your plan" : a.kind === "join" ? "Let it in" : a.kind === "notice" ? "Read it" : "Start marking") + "</a>" +
       '<button type="button" class="btn btn-sm btn-ghost" data-alert-dismiss="' + a.id + '">Dismiss</button></div></div>' +
       '<button type="button" class="btn btn-ghost btn-icon btn-sm" data-alert-dismiss="' + a.id + '" aria-label="Close">' + I("x") + "</button>";
     add(root, el);
     autoClose(el, POP_MS);
     if (document.hidden && window.Notification && Notification.permission === "granted") {
-      try { new Notification(a.title, { body: a.body, icon: "assets/icon.svg", tag: a.id }); } catch (e) { /* not supported */ }
+      try { new Notification(a.title, { body: a.body, icon: A.Theme.iconURL(), tag: a.id }); } catch (e) { /* not supported */ }
     }
   };
   function markRead(id) {
     var a = S().get("alerts", id);
-    if (a && !a.readAt) S().put("alerts", Object.assign({}, a, { readAt: Date.now() }));
+    if (a && !a.readAt) S().put("alerts", Object.assign({}, a, { readAt: A.now() }));
   }
   document.addEventListener("click", function (e) {
     var t = e.target.closest && e.target.closest("[data-alert-dismiss], [data-alert-open]");
@@ -98,13 +106,26 @@
     markRead(t.getAttribute("data-alert-dismiss") || t.getAttribute("data-alert-open"));
     var pop = t.closest(".alert-pop");
     if (pop) pop.remove();
+    if (t.hasAttribute("data-alert-open")) {
+      // the Notifications list closes, so the page it opens is seen (it used to stay on top of it); the page we are on
+      // already is drawn again, as following its link changes nothing
+      var back = t.closest(".modal-back"), x = back && back.querySelector("[data-close]"), href = t.getAttribute("href");
+      if (x) x.click();
+      if (href && href.charAt(0) === "#") { e.preventDefault(); if (href !== location.hash) location.hash = href; else setTimeout(function () { A.render(); }, 0); }
+    }
     Al.refreshBell();
   });
 
-  /* More than three pop-ups at once layer into one stack: the newest in front, two more peeking out under
-     it, and a bar above with the count, "Show all" (spreads them out) and "Clear all". Three or fewer sit
-     one under another as before. Removing pop-ups (closed, timed out, signed out) restacks by itself. */
-  var STACK_FROM = 4, KEEP = 8;
+  /* More than three pop-ups at once (more than one on a phone, whose screen holds one) layer into one stack: the
+     newest in front, two more peeking out under it, and a bar above with the count, "Show all" (spreads them out)
+     and "Clear all". Fewer sit one under another as before. Removing pop-ups (closed, timed out, signed out)
+     restacks by itself, and so does turning a tablet between wide and narrow. */
+  var KEEP = 8, PHONE = window.matchMedia ? window.matchMedia("(max-width: 720px)") : null;
+  var stackFrom = function () { return PHONE && PHONE.matches ? 2 : 4; };
+  if (PHONE) {
+    var again = function () { var r = document.getElementById("alert-root"); if (r) restack(r); };
+    if (PHONE.addEventListener) PHONE.addEventListener("change", again); else if (PHONE.addListener) PHONE.addListener(again);
+  }
   function pops(root) { return Array.prototype.filter.call(root.children, function (c) { return c.classList.contains("alert-pop"); }); }
   function add(root, el) {
     if (!root._stack) { root._stack = new MutationObserver(function () { restack(root); }); root._stack.observe(root, { childList: true }); }
@@ -114,7 +135,7 @@
     var list = pops(root);
     while (list.length > KEEP) list.shift().remove();
     var bar = root.querySelector(".alert-stackbar");
-    if (list.length < STACK_FROM) {
+    if (list.length < stackFrom()) {
       root.classList.remove("stacked", "open");
       if (bar) bar.remove();
       list.forEach(function (el) { el.classList.remove("deep"); });
@@ -158,11 +179,11 @@
   A.act["open-alerts"] = function () {
     var me = M.me(), list = Al.mine(me.id);
     UI.modal({
-      title: "Notifications", sub: "Submissions, due work and exam integrity", size: "wide", flush: true,
+      title: "Notifications", sub: A.edition === "home" ? "Submissions, due work and exam integrity" : "Notices from the school, submissions, due work and exam integrity", size: "wide", flush: true,
       body: list.length ? list.map(function (a) {
         return '<a class="list-row" href="' + Al.href(a) + '" data-alert-open="' + a.id + '"><div class="alert-ico ' + (TONE[a.kind] || "") + '">' + I(ICON[a.kind] || "bell") + '</div><div class="grow"><div class="title">' + (a.readAt ? "" : '<span class="badge accent" style="margin-right:6px">New</span>') + esc(a.title) + '</div><div class="small muted">' + esc(a.body) + '</div><div class="tiny muted mt-sm">' + A.relTime(a.createdAt) + "</div></div>" + I("right") + "</a>";
       }).join("") : UI.empty("bell", "No notifications yet", "You'll be told here when everyone has submitted, when work is due, and when a test needs checking."),
-      foot: [{ label: "Mark all as read", onClick: function () { list.forEach(function (a) { if (!a.readAt) S().put("alerts", Object.assign({}, a, { readAt: Date.now() })); }); Al.refreshBell(); } }, { label: "Close", cls: "btn-primary" }],
+      foot: [{ label: "Mark all as read", onClick: function () { list.forEach(function (a) { if (!a.readAt) S().put("alerts", Object.assign({}, a, { readAt: A.now() })); }); Al.refreshBell(); } }, { label: "Close", cls: "btn-primary" }],
     });
   };
 
@@ -174,11 +195,11 @@
   var stateKey = function (uid) { return "sca-news-" + uid; };
   function readState(uid) {
     try { var s = JSON.parse(localStorage.getItem(stateKey(uid)) || "null"); if (s && s.since) return s; } catch (e) { /* private mode */ }
-    return { since: Date.now() - 120000, shown: {} }; // a first visit starts from now (not with a flood of old news)
+    return { since: A.now() - 120000, shown: {} }; // a first visit starts from now (not with a flood of old news)
   }
   function saveState(uid, s) {
     // anything older than a week isn't news any more, so what was shown before then can be forgotten
-    s.since = Math.max(s.since, Date.now() - 7 * 86400000);
+    s.since = Math.max(s.since, A.now() - 7 * 86400000);
     Object.keys(s.shown).forEach(function (k) { if (s.shown[k] < s.since - 86400000) delete s.shown[k]; });
     try { localStorage.setItem(stateKey(uid), JSON.stringify({ since: s.since, shown: s.shown })); } catch (e) { /* private mode */ }
   }
@@ -235,7 +256,7 @@
     events(me).forEach(function (ev) { if (ev.at && ev.at > st.since - 60000 && !st.shown[ev.id]) fresh.push(ev); });
     if (!fresh.length) return;
     fresh.sort(function (a, b) { return a.at - b.at; });
-    fresh.forEach(function (ev) { st.shown[ev.id] = Date.now(); });
+    fresh.forEach(function (ev) { st.shown[ev.id] = A.now(); });
     saveState(me.id, st);
     // lots of new library files at once: one pop-up for them all
     var mats = fresh.filter(function (e) { return e.group === "mat"; });
@@ -257,7 +278,7 @@
     add(root, el);
     autoClose(el, POP_MS || 15000);
     if (document.hidden && window.Notification && Notification.permission === "granted") {
-      try { new Notification(ev.title, { body: ev.body || "", icon: "assets/icon.svg", tag: ev.id }); } catch (e) { /* not supported */ }
+      try { new Notification(ev.title, { body: ev.body || "", icon: A.Theme.iconURL(), tag: ev.id }); } catch (e) { /* not supported */ }
     }
   };
   document.addEventListener("click", function (e) {

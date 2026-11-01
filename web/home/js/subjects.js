@@ -54,7 +54,7 @@
   // the same actions without a server (as cloud/migrations/006 does online): keep the records here and move the
   // student in or out of the class. Asking to drop a subject keeps them in its class until the answer.
   function localPut(sid, sylId, status, by) {
-    var now = Date.now(), id = "en_" + sid + "_" + sylId, prev = S().get("enrolments", id), rec;
+    var now = A.now(), id = "en_" + sid + "_" + sylId, prev = S().get("enrolments", id), rec;
     var c = S().find("classes", function (x) { return x.syllabusId === sylId; });
     if (status === "drop_pending" || (prev && prev.status === "drop_pending")) {
       // asking to leave, or the answer to it: how they joined stays as it was
@@ -262,7 +262,7 @@
     var rows = Object.keys(byId).map(function (id) { var s = M.syllabus(id); return s ? Object.assign({ e: byId[id] }, s) : null; }).filter(Boolean);
     var n = function (st) { return rows.filter(function (r) { return r.e.status === st; }).length; };
     // subjects whose drop was approved in the last week: they have just left the list
-    var gone = M.enrolments(me.id).filter(function (e) { return e.status === "dropped" && e.dropOutcome === "approved" && Date.now() - (e.dropDecidedAt || 0) < WEEK; })
+    var gone = M.enrolments(me.id).filter(function (e) { return e.status === "dropped" && e.dropOutcome === "approved" && A.now() - (e.dropDecidedAt || 0) < WEEK; })
       .map(function (e) { var s = M.syllabus(e.syllabusId); return s ? s.subject : ""; }).filter(Boolean);
     var html = '<div class="callout mb">' + I("info") + '<div>These are the subjects you are taking. <b>Drop</b> any you don\'t do: your teacher (or the admin) approves it, and until then it stays here, greyed out. Left one out? <b>Add subjects</b> and your teacher approves it.' +
       (A.Cloud && !navigator.onLine ? ' <b>You need the internet to change your subjects.</b>' : "") + "</div></div>" +
@@ -273,7 +273,7 @@
     html += rows.length ? M.byGroup(rows).map(function (g) {
       return '<div class="section-title"><h2>' + I(g.group.icon) + esc(g.group.label) + '</h2></div><div class="card">' + g.items.map(function (s) {
         var st = STATUS[s.e.status] || STATUS.approved, t = M.teacherOf(s.id), leaving = s.e.status === "drop_pending";
-        var kept = s.e.status === "approved" && s.e.dropOutcome === "declined" && Date.now() - (s.e.dropDecidedAt || 0) < WEEK;
+        var kept = s.e.status === "approved" && s.e.dropOutcome === "declined" && A.now() - (s.e.dropDecidedAt || 0) < WEEK;
         var note = s.e.status === "pending" ? "Waiting for " + (t ? esc(t.name) : "your teacher") + " to approve it"
           : leaving ? "You asked to drop it. Waiting for " + (t ? esc(t.name) : "your teacher") + " to decide; until then you can still use it."
           : s.e.status === "declined" ? "Your teacher didn't approve this subject. Ask them, or remove it."

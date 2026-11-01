@@ -273,7 +273,7 @@
   A.act["qs-finish"] = function () {
     flushNow();
     var r = cur(), blank = R.scan.qs.filter(function (q) { return !qAnswered(q, r); }).length;
-    var left = Math.max(0, Math.round((r.endsAt - Date.now()) / 60000));
+    var left = Math.max(0, Math.round((r.endsAt - A.now()) / 60000));
     UI.modal({
       title: "Finish the paper?", noFocus: true,
       body: "<p>You have answered <b>" + (R.scan.qs.length - blank) + " of " + R.scan.qs.length + "</b> questions." + (left ? " You still have " + left + " minute" + (left === 1 ? "" : "s") + "." : "") + "</p>" +
@@ -286,7 +286,7 @@
   Q.finish = function (timeUp) {
     flushNow();
     var r = cur(); if (!r || r.doneAt) return;
-    var now = Date.now(), end = Math.min(now, r.endsAt || now);
+    var now = A.now(), end = Math.min(now, r.endsAt || now);
     var done = Object.assign({}, r, { doneAt: end, timeUsedSec: Math.round((end - r.startedAt) / 1000), timeUp: !!timeUp });
     if (R.scan) done = Q.markAll(R.paper, R.scan, done);
     S().put("receipts", done);
@@ -303,7 +303,7 @@
   Q.tick = function () {
     var r = cur(), el = document.getElementById("sit-time");
     if (!r || !el || r.doneAt) return;
-    var left = Math.max(0, Math.round((r.endsAt - Date.now()) / 1000));
+    var left = Math.max(0, Math.round((r.endsAt - A.now()) / 1000));
     el.textContent = A.fmtDuration(left);
     var box = document.getElementById("sit-timer");
     box.classList.toggle("warn", left <= 300 && left > 60);
@@ -351,7 +351,7 @@
             marks[x.id] = Object.assign({}, marks[x.id], { got: x.marks, how: "ai", note: x.feedback });
             done++;
           });
-          S().put("receipts", Object.assign({}, now, { marks: marks, aiAt: Date.now() }, Q.totals(paper, scan, marks)));
+          S().put("receipts", Object.assign({}, now, { marks: marks, aiAt: A.now() }, Q.totals(paper, scan, marks)));
         });
       });
     }, Promise.resolve()).then(function () { return done; });
@@ -468,7 +468,7 @@
   A.act["pr-give"] = function (el) {
     var r = M.paperSitting(V.me.id, V.paper.id), marks = Object.assign({}, r.marks), uid = el.getAttribute("data-u");
     marks[uid] = Object.assign({}, marks[uid], { got: Number(el.getAttribute("data-v")), own: true });
-    S().put("receipts", Object.assign({}, r, { marks: marks, markedAt: Date.now() }, Q.totals(V.paper, V.scan, marks)));
+    S().put("receipts", Object.assign({}, r, { marks: marks, markedAt: A.now() }, Q.totals(V.paper, V.scan, marks)));
     var y = window.scrollY; drawResult(); window.scrollTo(0, y);
   };
   A.act["pr-question"] = function (el) {

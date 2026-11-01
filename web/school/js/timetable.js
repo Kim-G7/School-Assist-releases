@@ -15,8 +15,10 @@
   var esc = A.esc, I = A.icon, M = A.M, UI = A.UI, S = function () { return A.Store; };
   var CFG = window.SCHOOL_CONFIG || {};
   var TT = (A.TT = {});
-  // School Assist Teacher has its own timetable page (js/primary.js): the bells, modes and keys here, not these routes
-  var route = A.edition === "teacher" ? function () {} : A.route;
+  // School Assist Teacher has its own timetable page (js/primary.js): the bells, modes and keys here, not these routes;
+  // since 2026-10-28 the School edition's staff too (js/primary.js, loaded after this file, is on in every edition but
+  // Home), and its students' week stays here (s/timetable)
+  var route = function (pattern, fn, o) { if (A.edition === "home" || (A.edition !== "teacher" && !/^t\//.test(pattern))) A.route(pattern, fn, o); };
   // the school day the bell times must fit in (primary schools start earlier)
   TT.DAY_START = A.edition === "teacher" ? "07:00" : "08:00";
   TT.DAY_END = A.edition === "teacher" ? "17:00" : "16:00";
@@ -41,7 +43,7 @@
   TT.MODES = { day: "Day to day", week: "Week by week", month: "Monthly", term: "By term" };
   TT.mode = function () { var r = S().get("settings", "ttmode"); return r && TT.MODES[r.mode] ? r.mode : "week"; };
   var monthKey = function (ts) { var d = new Date(ts); return "m:" + d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2); };
-  var termNow = function () { return A.edition === "teacher" && A.Primary ? "Term " + A.Primary.conf().term : (S().get("settings", "term") || {}).term || CFG.term || M.termName(1); };
+  var termNow = function () { return A.Primary ? "Term " + A.Primary.conf().term : (S().get("settings", "term") || {}).term || CFG.term || M.termName(1); };
   /** The scope in force on a day (null: the usual weekly timetable). */
   TT.keyFor = function (dayTs) {
     var m = TT.mode();
@@ -107,7 +109,7 @@
   };
   function nowInfo(dayTs, p) {
     if (A.startOfDay() !== dayTs) return "";
-    var m = (Date.now() - dayTs) / 60000;
+    var m = (A.now() - dayTs) / 60000;
     if (m >= A.hm(p.start) && m < A.hm(p.end)) return "now";
     return m < A.hm(p.start) ? "later" : "done";
   }
@@ -179,7 +181,7 @@
     return '<div class="table-wrap"><table class="tt"><thead>' + head + "</thead><tbody>" + body + "</tbody></table></div>";
   }
   function weekNav(base, w, extra) {
-    var monday = A.mondayOf(Date.now()) + w * 7 * A.DAY;
+    var monday = A.mondayOf(A.now()) + w * 7 * A.DAY;
     return '<div class="row wrap mb"><div class="seg"><button data-act="goto" data-href="' + base + "?w=" + (w - 1) + (extra || "") + '">' + I("left") + 'Previous</button><button class="' + (w === 0 ? "on" : "") + '" data-act="goto" data-href="' + base + "?w=0" + (extra || "") + '">This week</button><button data-act="goto" data-href="' + base + "?w=" + (w + 1) + (extra || "") + '">Next ' + I("right") + "</button></div>" +
       '<span class="muted small">Week of ' + A.fmtDateLong(monday + 12 * 3600000) + "</span><span class=\"grow\"></span>" +
       '<div class="legend">' + TT.TYPES.map(function (t) { return TT.typeChip(t); }).join("") + "</div></div>";
@@ -188,12 +190,12 @@
   /* ------------------------------------------------------------- routes */
   /** Which week, month or term is shown, and how to move between them. */
   function timeView(q, base, extra) {
-    var mode = TT.mode(), w = Number(q.w) || 0, v = { mode: mode, monday: A.mondayOf(Date.now()), dated: mode === "day", thisWeek: true };
+    var mode = TT.mode(), w = Number(q.w) || 0, v = { mode: mode, monday: A.mondayOf(A.now()), dated: mode === "day", thisWeek: true };
     if (mode === "day") {
       v.monday += w * 7 * A.DAY; v.thisWeek = w === 0; v.keyOf = function (ts) { return "d:" + A.isoDate(ts); };
       v.nav = weekNav(base, w, extra);
     } else if (mode === "month") {
-      var mo = Number(q.m) || 0, d = new Date(); d.setDate(15); d.setMonth(d.getMonth() + mo);
+      var mo = Number(q.m) || 0, d = A.date(); d.setDate(15); d.setMonth(d.getMonth() + mo);
       var key = monthKey(d.getTime()); v.keyOf = function () { return key; }; v.key = key; v.thisWeek = mo === 0;
       v.nav = '<div class="row wrap mb"><div class="seg"><button data-act="goto" data-href="' + base + "?m=" + (mo - 1) + (extra || "") + '">' + I("left") + 'Previous month</button><button class="' + (mo === 0 ? "on" : "") + '" data-act="goto" data-href="' + base + "?m=0" + (extra || "") + '">This month</button><button data-act="goto" data-href="' + base + "?m=" + (mo + 1) + (extra || "") + '">Next month ' + I("right") + "</button></div>" +
         '<span class="muted small">' + esc(TT.keyLabel(key)) + ': Monday to Friday</span><span class="grow"></span>' + legend() + "</div>";
@@ -211,6 +213,9 @@
   function legend() { return '<div class="legend">' + TT.TYPES.map(function (t) { return TT.typeChip(t); }).join("") + "</div>"; }
 
   route("s/timetable", function (p, q, me) {
+    // the School edition: their class's week, as the school sets it (js/primary.js), when it has one
+    var hr = A.Primary && M.homeroomOf(me.id), week = hr ? A.Primary.classWeek(hr) : "";
+    if (week) return { title: "Timetable", html: '<div class="card">' + week + '</div><p class="small muted mt">' + esc(A.Primary.classLabel(hr)) + "'s week, as the school sets it.</p>" };
     var v = timeView(q, "#/s/timetable", "");
     return { title: "Timetable", html: v.nav + '<div class="card">' + weekGrid(function (ts) { return TT.forStudent(me, v.keyOf(ts)); }, v.monday, v) + "</div>" +
       '<p class="small muted mt">' + esc(M.studentHome(me)) + " · lessons run Monday to Friday, 08:00 to 16:00. The label under a lesson tells you what your teacher has planned.</p>" };

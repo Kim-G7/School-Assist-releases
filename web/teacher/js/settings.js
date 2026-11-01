@@ -11,19 +11,19 @@
     var admin = me.role === "teacher" && me.isAdmin;
     var sections = [["appearance", "Appearance", "sun"]];
     if (admin) sections.push(["branding", "School branding", "palette"], ["structure", "Classes & streams", "layers"]);
-    if (me.role === "teacher" && A.edition !== "teacher") sections.push(["subjects", "My subjects", "layers"]);
+    if (me.role === "teacher" && A.edition !== "teacher") sections.push(["subjects", A.Primary ? "My syllabuses" : "My subjects", "layers"]); // (School edition: My subjects is a page of its own, js/tracker.js)
     if (A.Primary && admin) sections.push(["primary", "Learning areas & terms", "book"]);
     if (A.edition !== "teacher" || admin) sections.push(["sync", "Offline & sync", "refresh"]); // School Assist Teacher: admins only
     if (admin) sections.push(["people", "People", "users"], ["devices", "Devices", "phone"]);
     if (me.role === "teacher" && A.edition !== "teacher") sections.push(["integrity", "Exam integrity", "shield"]);
     if (admin && A.edition !== "teacher" && A.AI && (!A.Licence || A.Licence.has("ai-marking"))) sections.push(["ai", "AI marking", "bulb"]); // Premium (hidden on Standard); online, or through the school hub
     if (admin && A.Licence && A.Licence.applies()) sections.push(["licence", "Plan & licence", "key"]);
-    if (admin && A.SchoolId && A.SchoolId.applies() && A.SchoolId.id()) sections.push(["share", "Share the app", "download"]);
-    if (admin) sections.push(["data", "Backup & data", "database"]);
-    if (admin && A.Backup && A.Backup.applies() && A.SchoolId && A.SchoolId.id()) sections.push(["backup", "Online backup", "upload"]);
+    // (no "Share the app" for now: Golden Technologies brings School Assist on a flash drive, or the school uses it online)
+    if (admin) sections.push(["data", "Backup & data", "database"]); // the online backup is in it too (SECTIONS.data)
     if (A.Updates) sections.push(["updates", "App updates", "download"]);
-    sections.push(["account", me.role === "student" || A.Cloud ? "My password" : "My PIN", "lock"]);
-    var sec = sections.some(function (s) { return s[0] === q.s; }) ? q.s : sections[0][0];
+    sections.push(["account", me.role === "student" || A.Cloud || A.staffPassword(me) ? "My password" : "My PIN", "lock"]);
+    var want = q.s === "backup" ? "data" : q.s; // (Online backup had a tab of its own before 1.6.2)
+    var sec = sections.some(function (s) { return s[0] === want; }) ? want : sections[0][0];
     var base = me.role === "student" ? "#/s/settings" : "#/t/settings";
     var tabs = UI.tabs(sections.map(function (s) { return { href: base + "?s=" + s[0], label: s[1], icon: s[2], on: s[0] === sec }; }));
     var view = SECTIONS[sec](me, q);
@@ -162,7 +162,10 @@
     if (A.Cloud) return cloudSyncSection();
     var st = A.Sync.status(), cfg = A.Sync.config();
     var hubCard = window.desktop && M.me().role === "teacher" ? '<div class="card card-pad mb" id="hub-card"><h3>' + I("monitor") + " School hub on this computer</h3><p class=\"muted small mt-sm\">Loading…</p></div>" : "";
-    var html = hubCard + '<div class="grid g-main"><div class="card card-pad"><h3>School hub address</h3><p class="muted small mt-sm">Empty: this device only.</p>' +
+    var linkCard = M.me().isAdmin && A.Sync.hubMode() ? '<div class="card card-pad mb" id="link-card"><h3>' + I("globe") + " Online copy</h3><p class=\"muted small mt-sm\">Asking the school hub…</p></div>" : "";
+    // phones away from school through School Assist (1.8): on a school's hub computer only (the card stays hidden elsewhere)
+    var relayCard = M.me().isAdmin && A.Sync.hubMode() && !A.multiHost ? '<div class="card card-pad mb" id="relay-card" hidden></div>' : "";
+    var html = hubCard + whereCard() + relayCard + linkCard + '<div class="grid g-main"><div class="card card-pad"><h3>School hub address</h3><p class="muted small mt-sm">Empty: this device only.</p>' +
       '<form data-submit="sync-save" class="mt"><div class="row wrap"><input class="input grow" name="url" value="' + esc(cfg.url) + '" placeholder="http://192.168.1.20:8080" aria-label="Sync server address">' +
       '<button class="btn" type="submit">Save</button></div><label class="check mt-sm"><input type="checkbox" name="auto"' + (cfg.auto ? " checked" : "") + ">Sync automatically when online (every 30 to 45 seconds)</label></form></div>" +
       '<div class="card card-pad" style="align-self:start"><h3>Status</h3><dl class="kv mt">' +
@@ -175,7 +178,288 @@
       '<button class="btn btn-primary btn-block mt" data-act="sync-now"' + (cfg.url ? "" : " disabled") + ">" + I("refresh") + "Sync now</button>" +
       (M.me().role === "student" ? '<div class="divider"></div><label class="row top small" style="gap:12px;cursor:pointer"><span class="toggle"><input type="checkbox" data-change="autosave"' + (autoSaveOn() ? " checked" : "") + ' aria-label="Save library files automatically"><span></span></span><span><b>Save new library files automatically</b> so they open with no internet. Turn off if this device is short of space.</span></label>' : "") +
       "</div></div>";
-    return { html: html + offlinePapersCard(M.me()), mount: function (root) { if (hubCard) mountHub(root); mountOffline(); } };
+    return { html: html + offlinePapersCard(M.me()), mount: function (root) { if (hubCard) mountHub(root); if (relayCard) mountRelay(root); if (linkCard) mountLink(root); mountWhere(); mountMove(); mountOffline(); } };
+  };
+
+  /* The app for every school (1.7): where this school's records are kept, School Assist's servers or the school's own. */
+  function whereCard() {
+    var me = M.me(), m = A.Store.state.meta;
+    if (!me || !me.isAdmin || !((A.multiHost && m.multi) || m.joinLink)) return "";
+    var mv = m.multi || {}, own = mv.hub, keptUntil = own && mv.movedFrom && !mv.erased && mv.eraseAt > A.now() ? mv.eraseAt : 0;
+    // on the school's hub computer, reached through School Assist (1.8, hub-relay.cjs)
+    if (mv.relay) return '<div class="card card-pad mb" id="where-card"><h3 class="row">' + I("database") + " Where the school's records are kept</h3>" +
+      '<p class="mt-sm" style="max-width:680px"><b>On the school\'s hub computer</b>, at school. Away from school, devices reach it through School Assist (schoolassistapp.com), which passes each request on and keeps none of the school\'s records.</p>' +
+      '<p class="small muted mt-sm" style="max-width:680px">While that computer is off or offline, everyone keeps working on their own device, and their changes go up when it is back.</p></div>';
+    return '<div class="card card-pad mb" id="where-card"><h3 class="row">' + I("database") + " Where the school's records are kept</h3>" + (own
+      ? '<p class="mt-sm" style="max-width:680px"><b>On the school\'s own server</b>, <code>' + esc(own) + "</code>. School Assist keeps only the school's code and this address: Golden Technologies holds none of the school's records.</p>" +
+        (keptUntil ? '<p class="small mt-sm" style="max-width:680px">The school moved here from School Assist\'s servers. In case anything went wrong, School Assist keeps its copy until <b>' + esc(A.fmtDate(keptUntil)) + "</b>, then erases it by itself.</p>" +
+          '<button class="btn btn-sm btn-danger mt-sm" data-act="move-erase">' + I("trash") + "Erase School Assist's copy now</button>" : "")
+      : '<p class="mt-sm" style="max-width:680px"><b>On School Assist\'s servers</b> (schoolassistapp.com), run by Golden Technologies: each school\'s records apart from the others\', encrypted with a key of their own.</p>' +
+        '<p class="small muted mt-sm" style="max-width:680px">To keep them at school instead, on a computer of the school\'s own, install School Assist on that computer and bring the school there with a move code. Phones keep this address and reach that computer through School Assist, which then keeps none of the school\'s records. ' +
+        'Or, on a server in the school\'s own account: Golden Technologies sets one up with the school\'s IT person (its address and link key are printed then), and the records move there.</p>' +
+        (A.Sync.hubMode() ? '<div id="move-slot" class="mt"></div>' : "")) + "</div>";
+  }
+
+  /* Where the school is, asked again (1.8): a school that moved onto its hub computer kept this address, so its devices
+     learn it here rather than by following a new one. */
+  function mountWhere() {
+    var m = A.Store.state.meta, mv = m.multi;
+    if (!A.multiHost || !mv || !mv.sid || mv.hub || mv.relay || !M.me() || !M.me().isAdmin) return;
+    fetch(location.origin + "/api/schools/" + encodeURIComponent(mv.sid)).then(function (r) { return r.ok ? r.json() : null; }).then(function (w) {
+      if (!w || !w.relay) return;
+      mv.relay = true;
+      A.Store.flush();
+      var card = document.getElementById("where-card");
+      if (card) card.outerHTML = whereCard();
+    }, function () { /* offline: as it was */ });
+  }
+
+  /* Moving the school's records to its own server (1.7, hub-move.cjs, on School Assist's side). The move runs on the
+     server; this page starts it and follows it. Devices keep their keys and follow by themselves (js/sync.js follow). */
+  var STEPS = { check: "Checking the school's server", records: "Copying the records", files: "Copying the files", hold: "Holding changes for a moment",
+    final: "Copying the last changes", devices: "Taking the devices' keys across", verify: "Checking the copy", "switch": "Switching to the school's server" };
+  var moveTimer = null;
+  function mb(b) { return !b ? "0 KB" : b >= 1048576 ? Math.round(b / 1048576) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB"; }
+  function moveHtml(s) {
+    if (s.state === "running") {
+      var r = s.records || {}, f = s.files || {}, pct = s.step === "records" && r.total ? r.done / r.total : s.step === "files" && f.totalBytes ? f.bytes / f.totalBytes : null;
+      return '<div class="row small" style="gap:8px"><span class="setup-spin sm" aria-hidden="true"></span><b>' + esc(STEPS[s.step] || "Moving") + "</b>" +
+        (s.step === "records" && r.total ? " " + r.done + " of " + r.total : s.step === "files" && f.total ? " " + f.done + " of " + f.total + " (" + mb(f.bytes) + " of " + mb(f.totalBytes) + ")" : "") + "…</div>" +
+        (pct != null ? '<div class="bar mt-sm" style="max-width:420px"><i style="width:' + Math.round(pct * 100) + '%"></i></div>' : "") +
+        '<p class="small muted mt-sm" style="max-width:680px">To <code>' + esc(s.to || "") + "</code>. Keep working: while the last changes copy, they wait on each device and go to the school's server by themselves.</p>";
+    }
+    return (s.state === "failed" ? '<div class="callout warn mb-sm" style="max-width:680px">' + I("alert") + "<div><b>The move stopped</b>: " + esc(s.error || "") + " The school carries on here as before, and a new try carries on where this one stopped.</div></div>" : "") +
+      '<div class="row wrap"><button class="btn btn-primary" data-act="move-pass">' + I("monitor") + "Move to the school's computer</button>" +
+      '<button class="btn" data-act="move-open">' + I("upload") + "Move to the school's own server</button></div>";
+  }
+  /* A move code (1.8): typed on the school's new hub computer (its set-up: Bring the school onto this computer), which
+     then takes everything from School Assist. One at a time, for 30 minutes, used once. */
+  A.act["move-pass"] = function () {
+    var m = A.Store.state.meta, sid = (m.multi && m.multi.sid) || "";
+    UI.modal({
+      title: "Move to the school's computer", size: "lg",
+      body: '<p style="max-width:640px">Everything ' + esc(A.Theme.get().name) + " has here moves onto a computer at school, which becomes the school's hub: every record, every uploaded file, and every registered device.</p>" +
+        '<ul class="small mt-sm" style="max-width:640px;padding-left:18px">' +
+        "<li>Phones and laptops keep this address and their keys: nobody joins again or signs in again. Away from school, School Assist passes their requests to that computer and keeps none of the school's records.</li>" +
+        "<li>That computer should stay on and online during the school day. While it is off, everyone keeps working on their own device, and their changes go up when it is back.</li>" +
+        "<li>School Assist keeps its copy for 7 days in case, then erases it (or sooner, from that computer).</li></ul>" +
+        '<ol class="small mt" style="max-width:640px;padding-left:18px">' + "<li>Install School Assist on the school's computer (from Golden Technologies, or the school's flash drive).</li>" +
+        "<li>On its first page, choose <b>Bring the school onto this computer</b>.</li><li>Type the school's code and the move code below.</li></ol>" +
+        '<div id="pass-box" class="mt"><button class="btn btn-primary" data-act="move-pass-make">' + I("key") + "Make a move code</button></div>",
+      foot: [{ label: "Close" }],
+    });
+    A.act["move-pass-make"] = function (el) {
+      el.disabled = true;
+      A.Sync.hubPost("/api/move/pass", { by: (M.me() || {}).name }).then(function (p) {
+        var box = document.getElementById("pass-box");
+        if (!box) return;
+        box.innerHTML = '<div class="card card-pad"><dl class="kv">' + "<dt>School's code</dt>" + '<dd><code style="font-size:1.25em">' + esc(p.code || sid) + "</code></dd>" +
+          '<dt>Move code</dt><dd><code style="font-size:1.6em;letter-spacing:.08em;user-select:all">' + esc(p.pass) + "</code></dd>" +
+          "<dt>Lasts until</dt><dd>" + esc(A.fmtTime ? A.fmtTime(p.until) : new Date(p.until).toLocaleTimeString()) + " (30 minutes), once</dd></dl>" +
+          '<p class="small muted mt-sm">' + "Making another code ends this one. Give it only to the person at the school's computer.</p>" +
+          '<button class="btn btn-sm mt-sm" data-act="move-pass-make">' + I("refresh") + "Make a new code</button></div>";
+      }, function (e) { el.disabled = false; UI.toast(e.message, "bad"); });
+    };
+  };
+  function mountMove() {
+    clearTimeout(moveTimer);
+    var slot = document.getElementById("move-slot");
+    if (!slot) return;
+    A.Sync.hubPost("/api/move/status").then(function (s) {
+      slot = document.getElementById("move-slot");
+      if (!slot) return;
+      if (s.state === "done" && s.to) return moved(s);
+      slot.innerHTML = moveHtml(s);
+      if (s.state === "running") moveTimer = setTimeout(mountMove, 1500);
+    }, function (e) {
+      // a hub with no move (a school's own server, an older hub): nothing to offer
+      if (slot && !/replied 404|not allowed/i.test(e.message || "")) slot.innerHTML = '<p class="small muted">' + esc(e.message || "") + "</p>";
+    });
+  }
+  /** The move is done: this device follows the school there now (the others do at their next sync). */
+  function moved(s) {
+    var m = A.Store.state.meta;
+    if (s.hubComputer || /^relay:/.test(s.to || "")) return; // (onto the hub computer: the school keeps this address)
+    A.Sync.follow({ moved: s.to, code: (m.multi && m.multi.sid) || s.code, name: A.Theme.get().name, eraseAt: s.eraseAt });
+    UI.toast("Moved: " + ((s.counts || {}).records || 0) + " records, " + ((s.counts || {}).files || 0) + " files and " + ((s.counts || {}).devices || 0) + " devices are on the school's server now.");
+    A.Sync.syncNow().catch(function () {}).then(function () { A.render(); });
+  }
+  A.act["move-open"] = function () {
+    var name = A.Theme.get().name;
+    UI.modal({
+      title: "Move to the school's own server", size: "lg",
+      body: '<p style="max-width:640px">Everything ' + esc(name) + ' has on School Assist\'s servers moves to a server in the school\'s own account: every record, every uploaded file, and every registered device.</p>' +
+        '<ul class="small mt-sm" style="max-width:640px;padding-left:18px">' +
+        "<li>Nobody joins again or signs in again: each device takes the school's new address by itself, with the key it has.</li>" +
+        "<li>While the last changes copy (usually under a minute), changes wait on each device and go across by themselves. Nothing typed is lost.</li>" +
+        "<li>School Assist keeps its copy for 7 days in case, then erases it. You can erase it sooner here.</li></ul>" +
+        '<form data-submit="move-check" class="mt" style="max-width:560px">' +
+        '<label class="field"><span>The school\'s server</span><input class="input" name="url" placeholder="https://your-school-assist.fly.dev" autocomplete="off" spellcheck="false" required></label>' +
+        '<label class="field mt-sm"><span>Its link key</span><input class="input" name="key" type="password" autocomplete="off" spellcheck="false" required><span class="hint">Both were printed when the server was set up (scripts/online-hub.cjs). Keep the key with the backup key parts.</span></label>' +
+        '<button class="btn mt" type="submit">' + I("search") + "Check the server</button></form>" +
+        '<div id="move-plan" class="mt"></div>',
+      foot: [{ label: "Close" }],
+    });
+  };
+  var movePending = null;
+  A.act["move-check"] = function (form) {
+    var f = UI.formData(form), btn = form.querySelector("[type=submit]"), box = document.getElementById("move-plan");
+    btn.disabled = true; btn.innerHTML = I("refresh") + "Checking…";
+    A.Sync.hubPost("/api/move/check", { url: f.url, key: f.key }).then(function (p) {
+      movePending = { url: f.url, key: f.key };
+      btn.disabled = false; btn.innerHTML = I("search") + "Check again";
+      box.innerHTML = '<div class="card card-pad"><dl class="kv"><dt>Server</dt><dd><code>' + esc(p.to) + "</code>" + (p.resume ? ' <span class="badge">Carrying on</span>' : ' <span class="badge good">Empty, ready</span>') + "</dd>" +
+        "<dt>Records</dt><dd>" + p.records + "</dd><dt>Files</dt><dd>" + p.files + (p.sendFiles !== p.files ? " (" + p.sendFiles + " still to copy)" : "") + (p.files ? ", " + mb(p.bytes) + " to copy" : "") + "</dd>" +
+        "<dt>Devices</dt><dd>" + p.devices + " registered (their keys go too)</dd>" + (p.room != null ? "<dt>Room there</dt><dd>" + mb(p.room) + " free</dd>" : "") + "</dl>" +
+        (p.fits ? '<label class="check mt"><input type="checkbox" id="move-ok">I am moving ' + esc(p.school) + "'s records to <code>" + esc(p.to) + "</code></label>" +
+          '<button class="btn btn-primary mt" data-act="move-go">' + I("upload") + "Move now</button>"
+          : '<div class="callout warn mt">' + I("alert") + "<div>" + (p.tooBig.length ? p.tooBig.length + " file(s) are bigger than the school's server takes." : "The school's server hasn't room for the files. Make its disk bigger first (Golden Technologies can).") + "</div></div>") + "</div>";
+    }, function (e) { btn.disabled = false; btn.innerHTML = I("search") + "Check the server"; box.innerHTML = '<div class="callout warn">' + I("alert") + "<div>" + esc(e.message) + "</div></div>"; });
+  };
+  A.act["move-go"] = function (el) {
+    var ok = document.getElementById("move-ok");
+    if (!ok || !ok.checked) return UI.toast("Tick the box first: it says where the records go.", "bad");
+    if (!movePending) return;
+    el.disabled = true;
+    A.Sync.hubPost("/api/move/start", { url: movePending.url, key: movePending.key, confirm: true, by: (M.me() || {}).name }).then(function () {
+      movePending = null;
+      var back = el.closest(".modal-back");
+      if (back) back.querySelector("[data-close]").click();
+      mountMove();
+    }, function (e) { el.disabled = false; UI.toast(e.message, "bad"); });
+  };
+  A.act["move-erase"] = function () {
+    var m = A.Store.state.meta, mv = m.multi || {};
+    UI.confirm("Erase School Assist's copy of the school's records now? The school's own server has everything; School Assist's copy can't be brought back after this.", { danger: true, ok: "Erase it" }).then(function (yes) {
+      if (!yes || !mv.movedFrom) return;
+      fetch(mv.movedFrom + "/api/move/erase", { method: "POST", headers: A.Sync.headers({ "Content-Type": "application/json" }), body: JSON.stringify({ by: (M.me() || {}).name }) })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) {
+          // erased (or already: its place answers only "moved" now)
+          if (r.ok || r.status === 410) { mv.erased = true; A.Store.flush(); UI.toast("Erased. The school's records are only on its own server now."); A.render(); return; }
+          UI.toast(j.error || "School Assist replied " + r.status + ".", "bad");
+        }); }, function () { UI.toast("Can't reach School Assist just now. Try again.", "bad"); });
+    });
+  };
+  /* Phones away from school (1.8, hub-relay.cjs): the school's records stay on its hub computer, and School Assist
+     passes phones' requests to it. Only the hub computer itself turns it on or off. */
+  function mountRelay(root) {
+    var card = root.querySelector("#relay-card");
+    if (!card) return;
+    A.Sync.hubPost("/api/relay/status").then(function (s) { drawRelay(card, s); }, function () { card.hidden = true; }); // (an older hub: no card)
+  }
+  var relayTimer = null;
+  function drawRelay(card, s) {
+    clearTimeout(relayTimer);
+    if (!card || !document.body.contains(card)) return;
+    card.hidden = false;
+    var head = function (badge) { return '<h3 class="row">' + I("phone") + "Phones away from school " + badge + "</h3>"; };
+    if (s.bringing) {
+      var b = s.bring || {};
+      card.innerHTML = head('<span class="badge">' + I("refresh") + "Bringing the school here</span>") +
+        '<p class="small mt-sm">' + esc(b.state === "failed" ? "It stopped: " + (b.error || "") + " Make a new move code on schoolassistapp.com and bring the school here again: it carries on where it stopped." : "Copying from schoolassistapp.com (" + (b.step || "starting") + ")…") + "</p>";
+      if (b.state !== "failed") relayTimer = setTimeout(function () { A.Sync.hubPost("/api/relay/status").then(function (x) { drawRelay(card, x); }); }, 2000);
+      return;
+    }
+    if (!s.on) {
+      card.innerHTML = head('<span class="badge">Off</span>') +
+        '<p class="muted small mt-sm" style="max-width:680px">' + "Devices reach the school's records on the school Wi-Fi only. Turned on, phones and laptops reach them from anywhere through School Assist (schoolassistapp.com): it passes each request to this computer and keeps none of the school's records. Keep this computer on and online during the school day.</p>" +
+        (s.canChange ? '<button class="btn btn-primary mt" data-act="relay-on">' + I("globe") + "Turn on</button>" : '<p class="small muted mt">Turn it on on the hub computer itself.</p>');
+      return;
+    }
+    var kept = s.eraseAt && s.eraseAt > A.now() && !(s.bring && s.bring.erased) ? s.eraseAt : 0;
+    card.innerHTML = head(s.connected ? '<span class="badge good">' + I("check") + "On</span>" : '<span class="badge warn">' + I("alert") + "Not connected</span>") +
+      '<dl class="kv mt"><dt>Phones join at</dt><dd><code style="user-select:all">' + esc(s.join) + "</code></dd>" +
+      "<dt>Requests passed on</dt><dd>" + (s.served || 0) + " since School Assist started on this computer</dd>" +
+      (s.lastError && !s.connected ? '<dt>Problem</dt><dd class="small">' + esc(s.lastError) + "</dd>" : "") + "</dl>" +
+      '<p class="small muted mt-sm" style="max-width:680px">' + "School Assist passes each request to this computer and keeps none of the school's records. While this computer is off, devices keep their work and send it when it is back. Share the link or QR code from Settings → Devices.</p>" +
+      (kept ? '<p class="small mt-sm" style="max-width:680px">The school moved here from schoolassistapp.com. In case anything went wrong, School Assist keeps its old copy until <b>' + esc(A.fmtDate(kept)) + "</b>, then erases it by itself.</p>" +
+        (s.canChange ? '<button class="btn btn-sm btn-danger mt-sm" data-act="relay-erase">' + I("trash") + "Erase School Assist's copy now</button>" : "") : "") +
+      (s.canChange ? '<div class="row wrap mt"><button class="btn btn-ghost" data-act="relay-off">' + I("x") + "Turn off</button></div>" : "");
+    if (!s.connected) relayTimer = setTimeout(function () { A.Sync.hubPost("/api/relay/status").then(function (x) { drawRelay(card, x); }); }, 5000);
+  }
+  A.act["relay-on"] = function (el) {
+    el.disabled = true; el.innerHTML = I("refresh") + "Turning on…";
+    A.Sync.hubPost("/api/relay/on").then(function (s) { UI.toast("On: phones join at " + s.join); drawRelay(document.getElementById("relay-card"), s); },
+      function (e) { el.disabled = false; el.innerHTML = I("globe") + "Turn on"; UI.toast(e.message, "bad"); });
+  };
+  A.act["relay-off"] = function () {
+    UI.confirm("Turn off phones away from school? Devices then reach the school's records on the school Wi-Fi only, and the school's link stops working away from school.", { danger: true, ok: "Turn off" }).then(function (ok) {
+      if (!ok) return;
+      A.Sync.hubPost("/api/relay/off").then(function (s) { UI.toast("Turned off"); drawRelay(document.getElementById("relay-card"), s); }, function (e) { UI.toast(e.message, "bad"); });
+    });
+  };
+  A.act["relay-erase"] = function () {
+    UI.confirm("Erase School Assist's old copy of the school's records now? This computer has everything; the old copy can't be brought back after this.", { danger: true, ok: "Erase it" }).then(function (ok) {
+      if (!ok) return;
+      A.Sync.hubPost("/api/relay/erase").then(function (s) { UI.toast("Erased. The school's records are only on this computer now."); drawRelay(document.getElementById("relay-card"), s); }, function (e) { UI.toast(e.message, "bad"); });
+    });
+  };
+
+  /* The school's online copy (1.7, hub-link.cjs): the hub computer keeps an online hub in the school's own account up
+     to date, and takes its changes back, so phones reach the school's data from anywhere. Without one, the hub
+     computer is the school's only copy, as before. Only the hub computer itself connects or disconnects it. */
+  function mountLink(root) {
+    var card = root.querySelector("#link-card");
+    if (!card) return;
+    A.Sync.hubPost("/api/link/status").then(function (s) { drawLink(card, s); }, function (e) {
+      var old = /not allowed|replied 40[45]/i.test(e.message || "");
+      card.innerHTML = '<h3 class="row">' + I("globe") + "Online copy</h3><p class=\"small muted mt-sm\">" +
+        esc(old ? "The school hub is older than School Assist 1.7. Update it to keep an online copy." : e.message || "The school hub is out of reach.") + "</p>";
+    });
+  }
+  function drawLink(card, s) {
+    if (!card) return;
+    var head = function (badge) { return '<h3 class="row">' + I("globe") + "Online copy " + badge + "</h3>"; };
+    if (s.role === "online") {
+      card.innerHTML = head('<span class="badge brand">This is the online hub</span>') +
+        '<p class="muted small mt-sm" style="max-width:680px">Phones and laptops reach the school\'s records here from anywhere. The school\'s hub computer keeps it up to date and takes its changes back.</p>' +
+        '<dl class="kv mt"><dt>Hub computer</dt><dd>' + (s.seenAt ? "copied " + A.relTime(s.seenAt) + (s.from ? " (" + esc(s.from) + ")" : "")
+          : s.ready ? '<span class="muted">None connected yet</span>' : '<span class="muted">None can connect: this hub has no link key</span>') + "</dd></dl>";
+      return;
+    }
+    if (!s.linked) {
+      card.innerHTML = head('<span class="badge">Off</span>') +
+        '<p class="muted small mt-sm" style="max-width:680px">The school\'s records are on the hub computer only, so devices reach them on the school Wi-Fi. With an online hub in the school\'s own account, this hub copies every change to it and back, and phones work from anywhere.</p>' +
+        '<p class="small mt-sm" style="max-width:680px">No online hub yet? Golden Technologies sets one up with the school\'s IT person, in an account in the school\'s name. The school pays the host directly, and Golden Technologies gets no login to it.</p>' +
+        (s.canConnect ? '<form data-submit="link-connect" class="mt" style="max-width:560px">' +
+          '<label class="field"><span>Online hub address</span><input class="input" name="url" placeholder="https://your-school.fly.dev" autocomplete="off" spellcheck="false" required></label>' +
+          '<label class="field mt-sm"><span>Link key</span><input class="input" name="key" type="password" autocomplete="off" spellcheck="false" required><span class="hint">Given when the online hub was set up. Keep it with the backup key parts.</span></label>' +
+          '<button class="btn btn-primary mt" type="submit">' + I("link") + "Connect</button></form>"
+          : '<p class="small muted mt">Connect it on the hub computer itself.</p>');
+      return;
+    }
+    var files = s.files || {}, waiting = files.waiting || 0, kept = files.kept || 0;
+    card.innerHTML = head(s.lastError ? '<span class="badge warn">' + I("alert") + "Not copying</span>" : '<span class="badge good">' + I("check") + "Connected</span>") +
+      '<dl class="kv mt"><dt>Online hub</dt><dd><code>' + esc(s.url) + "</code></dd>" +
+      "<dt>Last copied</dt><dd>" + (s.lastAt ? A.relTime(s.lastAt) : "not yet") + "</dd>" +
+      "<dt>Changes</dt><dd>" + s.sent + " sent, " + s.received + " received</dd>" +
+      (waiting ? "<dt>Files</dt><dd>" + waiting + " still to copy</dd>" : "") +
+      (kept ? "<dt>Here only</dt><dd>" + kept + " file" + (kept === 1 ? "" : "s") + " too big for the online hub</dd>" : "") +
+      (s.lastError ? '<dt>Problem</dt><dd class="small">' + esc(s.lastError) + "</dd>" : "") + "</dl>" +
+      '<p class="small mt" style="max-width:680px">Away from school, phones and laptops open <b>' + esc(s.url) + "</b> and join with a staff code, or ask an admin to let them in under Settings → Devices (here too).</p>" +
+      '<div class="row wrap mt"><button class="btn btn-primary" data-act="link-now">' + I("refresh") + "Copy now</button>" +
+      (s.canConnect ? '<button class="btn btn-ghost" data-act="link-off">' + I("x") + "Disconnect</button>" : "") + "</div>";
+  }
+  A.act["link-connect"] = function (form) {
+    var f = UI.formData(form), btn = form.querySelector("[type=submit]");
+    btn.disabled = true; btn.innerHTML = I("refresh") + "Connecting… the first copy can take a minute";
+    A.Sync.hubPost("/api/link/connect", { url: f.url, key: f.key }).then(function (s) {
+      UI.toast(s.lastError ? "Connected, but the first copy had a problem: " + s.lastError : "Connected. The online hub has the school's records.", s.lastError ? "bad" : undefined);
+      drawLink(document.getElementById("link-card"), s);
+    }, function (e) { UI.toast(e.message, "bad"); btn.disabled = false; btn.innerHTML = I("link") + "Connect"; });
+  };
+  A.act["link-now"] = function (el) {
+    el.disabled = true; el.innerHTML = I("refresh") + "Copying…";
+    A.Sync.hubPost("/api/link/now").then(function (s) {
+      UI.toast(s.lastError ? "Not copied: " + s.lastError : "Copied", s.lastError ? "bad" : undefined);
+      drawLink(document.getElementById("link-card"), s);
+    }, function (e) { UI.toast(e.message, "bad"); el.disabled = false; el.innerHTML = I("refresh") + "Copy now"; });
+  };
+  A.act["link-off"] = function () {
+    UI.confirm("Disconnect the online hub? This computer stops copying to it. The online hub keeps its copy as it is now, so phones away from school stop seeing new changes.", { danger: true, ok: "Disconnect" }).then(function (ok) {
+      if (!ok) return;
+      A.Sync.hubPost("/api/link/disconnect").then(function (s) { UI.toast("Disconnected"); drawLink(document.getElementById("link-card"), s); }, function (e) { UI.toast(e.message, "bad"); });
+    });
   };
   function autoSaveOn() { try { return localStorage.getItem("sca-autosave") !== "off"; } catch (e) { return true; } }
 
@@ -329,7 +613,7 @@
     // School Assist Teacher: pupils are looked after in My class, so People is the teachers
     var role = A.edition === "teacher" ? "teacher" : q.r || "student", find = (q.q || "").toLowerCase();
     var users = S().filter("users", function (u) { return u.role === role && (!find || (u.name + " " + (u.studentNo || "") + " " + (u.staffNo || "")).toLowerCase().indexOf(find) >= 0); })
-      .sort(function (a, b) { return role === "student" ? M.levelIndex(a.level) - M.levelIndex(b.level) || M.streamIndex(a.stream) - M.streamIndex(b.stream) || a.name.localeCompare(b.name) : a.name.localeCompare(b.name); });
+      .sort(function (a, b) { return role === "student" ? M.levelIndex(a.level) - M.levelIndex(b.level) || M.streamIndex(a.stream) - M.streamIndex(b.stream) || a.name.localeCompare(b.name) : A.rank(a.title) - A.rank(b.title) || a.name.localeCompare(b.name); }); // staff in the school's hierarchy
     var html = '<div class="row spread wrap mb">' + (A.edition === "teacher" ? '<p class="muted small" style="max-width:520px">The teachers who sign in on this device or the school hub. Pupils are added in <a href="#/t/pupils">My class</a>.</p><div class="hidden">' : '<div class="pill-tabs" style="margin:0">') + '<button class="' + (role === "student" ? "on" : "") + '" data-act="goto" data-href="#/t/settings?s=people&r=student">Students</button><button class="' + (role === "teacher" ? "on" : "") + '" data-act="goto" data-href="#/t/settings?s=people&r=teacher">Teachers</button></div>' +
       '<form data-submit="people-search" class="row"><input class="input sm" name="q" value="' + esc(q.q || "") + '" placeholder="Search name or ID" style="width:220px" aria-label="Search people"><button class="btn btn-sm" type="submit">' + I("search") + "</button></form>" +
       (A.Cloud ? (role === "student" ? '<button class="btn btn-primary" data-act="cloud-add-student">' + I("plus") + "Add student</button>" : '<button class="btn btn-primary" data-act="teacher-add">' + I("plus") + "Add teacher</button>") :
@@ -368,7 +652,7 @@
         }
         return '<tr><td><div class="row">' + A.avatar(u, "sm") + "<b>" + esc(u.name) + "</b>" + (u.isAdmin ? ' <span class="badge accent">Admin</span>' : "") + (u.example ? ' <span class="badge brand">Example</span>' : "") + "</div></td>" +
           (role === "student" ? '<td class="small"><code>' + esc(u.studentNo || "") + '</code></td><td class="small">' + esc(M.studentHome(u)) + "</td><td>" + pw + "</td>" : (A.Cloud ? "" : '<td class="small"><code>' + esc(u.staffNo || "") + "</code></td>") + '<td class="small">' + esc(A.Cloud && !u.isAdmin ? cls.map(function (c) { return c.subject; }).join(", ") || "No subjects yet" : u.subjects || "") + "</td><td>" + (A.Cloud ? '<span class="small muted">Email and password</span>' : M.hasPassword(u.id) ? '<span class="badge good">' + I("check") + "PIN set</span>" : '<span class="badge warn">No PIN</span>') + "</td>") +
-          "<td>" + devCell + '</td><td class="small muted">' + cls.map(function (c) { return esc(c.subject); }).join(", ") + '</td><td class="num">' +
+          "<td>" + devCell + '</td><td class="small muted">' + esc(subjectsOf(u, role, cls).join(", ")) + '</td><td class="num">' +
           (A.Cloud && role === "teacher" && !u.isAdmin
             ? '<div class="row" style="justify-content:flex-end;gap:6px"><button class="btn btn-sm" data-act="teacher-subjects" data-id="' + u.id + '">' + I("layers") + 'Subjects</button><button class="btn btn-sm btn-ghost" data-act="teacher-reset" data-id="' + u.id + '">' + I("key") + 'New password</button><button class="btn btn-sm btn-ghost" data-act="teacher-remove" data-id="' + u.id + '" aria-label="Remove ' + esc(u.name) + '">' + I("trash") + "</button></div>"
             : '<button class="btn btn-sm" data-act="person-edit" data-id="' + u.id + '">' + I("edit") + "Edit</button>") + "</td></tr>";
@@ -380,6 +664,12 @@
       if (me.isAdmin && !A.Cloud) M.numberStaff().then(function (n) { if (n && /s=people/.test(location.hash)) A.render(); });
     } } : html;
   };
+  // a teacher's subjects: the ones they teach (School Assist Teacher's pages: user.areas) and their subject classes'
+  function subjectsOf(u, role, cls) {
+    var out = role !== "student" && A.Primary ? (u.areas || []).slice() : [];
+    cls.forEach(function (c) { if (c.subject && out.indexOf(c.subject) < 0) out.push(c.subject); });
+    return out;
+  }
   A.act["people-search"] = function (form) { location.hash = "#/t/settings?s=people&r=" + (/r=teacher/.test(location.hash) ? "teacher" : "student") + "&q=" + encodeURIComponent(form.q.value.trim()); };
   A.act["reveal-pw"] = function (el) {
     var code = el.parentNode.querySelector(".pw-mask"), shown = code.textContent.indexOf("•") < 0;
@@ -397,7 +687,8 @@
         var f = el.querySelector("#person-form");
         if (isNew && f && f.studentNo && f.level) f.level.addEventListener("change", function () { f.studentNo.placeholder = M.nextNumber(M.studentPrefix(f.level.value), "studentNo", 3); });
       },
-      body: '<form id="person-form" class="form-grid"><label class="field full"><span>Full name</span><input class="input" name="name" value="' + esc(u.name) + '"></label>' +
+      // staff: gender and last name ("Mrs Moyo", js/staff.js); students: their full name
+      body: '<form id="person-form" class="form-grid">' + (u.role === "student" ? '<label class="field full"><span>Full name</span><input class="input" name="name" value="' + esc(u.name) + '"></label>' : M.nameFields(M.nameGuess(u))) +
         (u.role === "student"
           ? '<label class="field"><span>Student ID</span><input class="input" name="studentNo" value="' + esc(u.studentNo || "") + '"' + (isNew ? ' placeholder="' + esc(M.nextNumber(M.studentPrefix(u.level), "studentNo", 3)) + '"' : "") + ">" +
               (isNew ? '<span class="hint">Leave it empty for the next number in the form.</span>' : "") + "</label>" +
@@ -408,9 +699,11 @@
               : '<div class="field full"><span class="label">Password</span><div class="row wrap">' + (M.hasPassword(u.id) ? '<span class="badge good">' + I("check") + "Set</span>" : '<span class="badge warn">Not set yet</span>') +
                 '<button type="button" class="btn btn-sm" data-act="give-pw" data-id="' + u.id + '">' + I("key") + 'Give a new password</button><button type="button" class="btn btn-sm btn-ghost" data-act="reset-pw" data-id="' + u.id + '">' + I("refresh") + 'Let them choose one</button></div><span class="hint">Passwords are kept scrambled, so nobody can read them.</span></div>')
           : (u.staffNo ? '<div class="field"><span class="label">Staff number</span><code style="font-size:16px">' + esc(u.staffNo) + "</code></div>" : "") +
-            '<label class="field"><span>Subjects</span><input class="input" name="subjects" value="' + esc(u.subjects || "") + '"></label><label class="field"><span>Title</span><input class="input" name="title" value="' + esc(u.title || "") + '" placeholder="e.g. Head of Science"></label>' +
+            // School Assist Teacher: the subjects they teach (they record those end-of-term marks); otherwise a short text
+            (A.Primary ? A.Primary.areaChecks(u.areas) + A.Primary.classChecks(u.classIds) : '<label class="field"><span>Subjects</span><input class="input" name="subjects" value="' + esc(u.subjects || "") + '"></label>') +
+            '<label class="field"><span>Role</span>' + UI.selectOther("title", A.ROLES, u.title || (isNew ? "Teacher" : ""), "Role") + "</label>" +
             // PINs are kept scrambled: a new one can be set, the old one can't be read
-            (A.Cloud ? "" : '<label class="field"><span>' + (isNew ? "Sign-in PIN (4 digits)" : "New PIN") + '</span><div class="pw-wrap"><input class="input" type="password" name="pin" inputmode="numeric" maxlength="4" autocomplete="off" value=""' + (isNew ? "" : ' placeholder="Empty: keep the PIN"') + '><button type="button" class="btn btn-ghost btn-icon btn-sm" data-act="pw-toggle" aria-label="Show PIN">' + I("eye") + "</button></div></label>") +
+            (A.Cloud ? "" : A.staffPassword() ? '<label class="field"><span>' + (isNew ? "Sign-in password" : "New password") + '</span><div class="pw-wrap"><input class="input" type="password" name="pin" autocomplete="new-password" value=""' + (isNew ? ' placeholder="8 or more characters, letters and a number"' : ' placeholder="Empty: keep the password"') + '><button type="button" class="btn btn-ghost btn-icon btn-sm" data-act="pw-toggle" aria-label="Show password">' + I("eye") + "</button></div></label>" : '<label class="field"><span>' + (isNew ? "Sign-in PIN (4 digits)" : "New PIN") + '</span><div class="pw-wrap"><input class="input" type="password" name="pin" inputmode="numeric" maxlength="4" autocomplete="off" value=""' + (isNew ? "" : ' placeholder="Empty: keep the PIN"') + '><button type="button" class="btn btn-ghost btn-icon btn-sm" data-act="pw-toggle" aria-label="Show PIN">' + I("eye") + "</button></div></label>") +
             '<label class="check full"><input type="checkbox" name="isAdmin"' + (u.isAdmin ? " checked" : "") + ">Admin: can change branding, classes and streams, the timetable, people, devices and backups</label>") +
         "</form>",
       foot: (isNew || u.id === me.id ? [] : A.Cloud ? [{ label: "Remove", cls: "btn-danger", onClick: function () {
@@ -423,12 +716,17 @@
         });
       } }]).concat([{ label: "Cancel" }, {
         label: "Save", cls: "btn-primary", onClick: function (m) {
-          var f = UI.formData(m.querySelector("#person-form"));
-          if (!f.name.trim()) { UI.toast("Enter a name", "bad"); return false; }
-          var rec = Object.assign({}, u, { name: f.name.trim() });
+          var f = UI.formData(m.querySelector("#person-form")), n = u.role === "student" ? null : M.nameRead(m.querySelector("#person-form"));
+          if (n && n.error) { UI.toast(n.error, "bad"); return false; }
+          if (!n && !f.name.trim()) { UI.toast("Enter a name", "bad"); return false; }
+          var rec = Object.assign({}, u, n ? M.nameRec(n, u.id) : { name: f.name.trim() });
           var pin = u.role === "student" || A.Cloud ? "" : String(f.pin || "").trim();
           delete rec.pin; // PINs from before 1.6 lived on the user
-          var save = function (msg) { S().put("users", rec); if (pin) M.setPin(rec.id, pin, me.id); UI.toast(msg || "Saved"); A.render(); };
+          var save = function (msg) {
+            S().put("users", rec); if (pin) M.setPin(rec.id, pin, me.id);
+            if (rec.role === "student" && A.Primary && A.Primary.withStudents) A.Primary.followClass(rec); // into the class of their form and stream
+            UI.toast(msg || "Saved"); A.render();
+          };
           if (u.role === "student") {
             var typed = f.studentNo.trim();
             if (!typed && !isNew) { UI.toast("Enter the student ID", "bad"); return false; }
@@ -439,8 +737,16 @@
             if (!typed) return M.claimStudentNo(f.level).then(function (no) { rec.studentNo = no; save(rec.name + "'s student ID is " + no); });
             rec.studentNo = typed;
           } else {
-            if (!A.Cloud && (isNew || pin) && !/^\d{4}$/.test(pin)) { UI.toast(isNew ? "Give them a 4-digit PIN" : "The new PIN must be 4 digits", "bad"); return false; }
-            rec.subjects = f.subjects; rec.title = f.title; rec.isAdmin = !!f.isAdmin; if (u.id === me.id) rec.isAdmin = true;
+            var full = isNew && A.Licence && A.Licence.teacherLimit && A.Licence.teacherLimit();
+            if (full) { UI.toast(full, "bad"); return false; }
+            if (!A.Cloud && (isNew || pin) && A.staffPassword()) { var bad = A.staffPasswordProblem(pin); if (bad) { UI.toast(bad, "bad"); return false; } rec.pw = true; }
+            else if (!A.Cloud && (isNew || pin) && !/^\d{4}$/.test(pin)) { UI.toast(isNew ? "Give them a 4-digit PIN" : "The new PIN must be 4 digits", "bad"); return false; }
+            if (A.Primary) {
+              rec.areas = A.Primary.areasPicked(m.querySelector("#person-form")); rec.subjects = rec.areas.join(", "); rec.areasAsked = null;
+              if (m.querySelector("#person-form [data-cls]")) rec.classIds = A.Primary.classesPicked(m.querySelector("#person-form"));
+              rec.classIdsAsked = null;
+            } else rec.subjects = f.subjects;
+            rec.title = f.title; rec.isAdmin = !!f.isAdmin; if (u.id === me.id) rec.isAdmin = true;
             if (isNew && !A.Cloud) return M.claimStaffNo(rec.isAdmin).then(function (no) { rec.staffNo = no; save(rec.name + "'s staff number is " + no); });
           }
           save();
@@ -476,10 +782,11 @@
     var u = M.user(el.getAttribute("data-id")), list = A.Devices.forUser(u.id, true);
     UI.modal({
       title: u.name + ": devices", sub: esc(u.studentNo ? u.studentNo + " · " + M.studentHome(u) : u.title || "Teacher"), size: "wide", flush: true,
-      body: list.length ? list.map(deviceRow).join("") : UI.empty("laptop", "No devices yet", "Devices appear here after the first sign-in."),
+      body: list.length ? deviceRow(list) : UI.empty("laptop", "No devices yet", "Devices appear here after the first sign-in."),
     });
   };
-  function deviceRow(d) {
+  var deviceRow = function (list) { return list.map(deviceRow1).join(""); };
+  function deviceRow1(d) {
     var ip = A.Devices.ip(d), u = M.user(d.userId) || {};
     return '<div class="list-row"><div class="stat" style="padding:0"><div class="ico ' + (d.type === "Phone" ? "accent" : "") + '">' + I(A.Devices.icon(d.type)) + '</div></div><div class="grow"><div class="title">' + esc(d.type) + (d.model ? " · " + esc(d.model) : "") + (A.Devices.isThis(d) ? ' <span class="badge brand">This device</span>' : "") + (d.sample ? ' <span class="badge">sample</span>' : "") + "</div>" +
       '<div class="meta"><span>' + esc(u.name || "") + '</span><span class="sep"></span><span>' + esc(d.os) + " · " + esc(d.browser) + '</span><span class="sep"></span><span>Screen ' + esc(d.screen || "?") + "</span>" + (ip ? '<span class="sep"></span><span>IP ' + esc(ip) + "</span>" : "") + "</div>" +
@@ -499,51 +806,144 @@
 
   /* --------------------------------------------------------------- devices */
   SECTIONS.devices = function (me, q) {
-    var f = q.f || "all", all = S().all("devices").sort(function (a, b) { return (b.lastSeenAt || 0) - (a.lastSeenAt || 0); });
-    var list = all.filter(function (d) { return f === "phones" ? d.type === "Phone" : f === "students" ? d.role === "student" : f === "out" ? !d.signedIn : d.signedIn; });
+    var all = S().all("devices").sort(function (a, b) { return (b.lastSeenAt || 0) - (a.lastSeenAt || 0); });
     var signedIn = all.filter(function (d) { return d.signedIn; });
     var phones = signedIn.filter(function (d) { return d.type === "Phone"; });
     var owners = {};
     phones.forEach(function (d) { owners[d.userId] = 1; });
     var html = '<div class="grid g-4">' + UI.stat("laptop", signedIn.length, "Devices signed in") + UI.stat("phone", phones.length, "Phones", true, Object.keys(owners).length + " people use a phone") +
       UI.stat("tablet", signedIn.filter(function (d) { return d.type === "Tablet"; }).length, "Tablets") + UI.stat("users", Object.keys(signedIn.reduce(function (m, d) { m[d.userId] = 1; return m; }, {})).length, "Accounts in use") + "</div>" +
-      '<div class="pill-tabs mt">' + [["all", "Signed in"], ["phones", "Phones"], ["students", "Students only"], ["out", "Signed out"]].map(function (x) { return '<button class="' + (f === x[0] ? "on" : "") + '" data-act="goto" data-href="#/t/settings?s=devices&f=' + x[0] + '">' + x[1] + "</button>"; }).join("") + "</div>" +
-      '<div class="card">' + (list.length ? list.map(deviceRow).join("") : UI.empty("laptop", "No devices here")) + "</div>" +
+      // each kind of device a group of its own, its list shown when tapped
+      devGroup("in", "laptop", "Signed in", signedIn) + devGroup("phones", "phone", "Phones", phones) +
+      (A.edition === "teacher" ? "" : devGroup("students", "users", "Students' devices", all.filter(function (d) { return d.role === "student"; }))) +
+      devGroup("out", "logout", "Signed out", all.filter(function (d) { return !d.signedIn; })) +
       '<p class="tiny muted mt">A device is recorded each time someone signs in. The network address shows once the device has synced with the school server. Rows marked "sample" are demo data.</p>';
     var hub = A.Sync && A.Sync.hubMode();
     if (hub) html = '<div class="card card-pad mb" id="hub-devices">' + hubDevicesHead() + '<p class="small mt">' + I("refresh") + " Asking the school hub…</p></div>" + html;
-    return { html: html, mount: hub ? mountHubDevices : null };
+    html = (inviteCard() || '<div id="invite-slot"></div>') + html; // the app for every school: the invite first
+    return { html: html, mount: function () { mountInvite(); if (hub) mountHubDevices(); } };
+  };
+  /* A group of devices, folded: its name and how many, the list when tapped (open ones stay open on a redraw). */
+  var openGroups = {};
+  function devGroup(key, icon, title, list, rows) {
+    return '<details class="card dev-group mt" data-group="' + key + '"' + (openGroups[key] ? " open" : "") + '><summary><span class="row grow" style="gap:10px">' + I(icon) + "<b>" + esc(title) + '</b></span><span class="badge">' + list.length + '</span><span class="dev-chev">' + I("down") + "</span></summary>" +
+      '<div class="dev-list">' + (list.length ? (rows || deviceRow)(list) : '<p class="small muted card-pad">None</p>') + "</div></details>";
+  }
+  document.addEventListener("toggle", function (e) { var g = e.target && e.target.getAttribute && e.target.getAttribute("data-group"); if (g) openGroups[g] = e.target.open; }, true);
+  /* The app for every school (1.7): the school's join link and QR code, for teachers and students to open or scan. */
+  function inviteLink() {
+    var m = A.Store.state.meta, base = A.SchoolId && A.SchoolId.hubBase ? A.SchoolId.hubBase() : "";
+    if (A.multiHost && base) return location.origin + "/join/" + base.slice(3);
+    if (A.multiHost && m.multi && m.multi.sid) return location.origin + "/join/" + m.multi.sid; // a school on its own server
+    return m.joinLink || ""; // another address of a school on School Assist (its hub says the link: /api/ping)
+  }
+  function inviteCard() {
+    var link = inviteLink(), me = M.me();
+    if (!link || !me || !me.isAdmin) return "";
+    var codes = S().get("settings", "staffcodes"), code = link.split("/join/")[1];
+    return '<div class="card card-pad mb" id="invite-card"><h3 class="row">' + I("link") + " Invite teachers and students</h3>" +
+      '<p class="muted small mt-sm" style="max-width:680px">They open this link, or scan the code with their phone\'s camera, and join ' + esc(A.Theme.get().name) + ". Teachers let their device in with the staff code" + (codes ? " <code>" + esc(codes.teacher) + "</code>" : "") + "; other devices wait for an admin to let them in, on this page.</p>" +
+      '<div class="row wrap top mt" style="gap:20px"><div class="invite-qr" id="invite-qr"></div><div class="grow"><div class="label">Link</div><code class="pw-mask" style="display:inline-block;font-size:14px;word-break:break-all">' + esc(link) + "</code>" +
+      '<div class="row wrap mt-sm"><button class="btn" data-act="invite-copy">' + I("copy") + 'Copy the link</button><button class="btn" data-act="invite-print">' + I("download") + "Print it</button></div>" +
+      '<p class="tiny muted mt-sm">Or type the school\'s code on the first page of School Assist: <b>' + esc(code) + "</b></p></div></div></div>";
+  }
+  var qrLoading = null;
+  /** A QR code of `text` as SVG (vendor/qrcode, loaded the first time). */
+  function qrSvg(text) {
+    qrLoading = qrLoading || (window.qrcode ? Promise.resolve() : new Promise(function (ok, no) {
+      var sc = document.createElement("script"); sc.src = "vendor/qrcode/qrcode.js"; sc.onload = ok;
+      sc.onerror = function () { qrLoading = null; no(new Error("The QR code couldn't be made")); };
+      document.head.appendChild(sc);
+    }));
+    return qrLoading.then(function () { var q = window.qrcode(0, "M"); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 4, margin: 2, scalable: true, alt: "QR code: " + text }); });
+  }
+  function mountInvite() {
+    // not known yet on this address: ask the school's hub for its join link, then show the invite
+    if (!inviteLink() && M.me() && M.me().isAdmin && A.Sync && A.Sync.hubMode()) {
+      fetch(A.Sync.config().url + "/api/ping").then(function (r) { return r.json(); }).then(function (j) {
+        if (!j || !j.join || !/^https:\/\//.test(j.join)) return;
+        A.Store.state.meta.joinLink = j.join; A.Store.flush();
+        var slot = document.getElementById("invite-slot");
+        if (slot) { slot.outerHTML = inviteCard(); mountInvite(); }
+      }).catch(function () { /* the hub is away for now */ });
+      return;
+    }
+    var box = document.getElementById("invite-qr"), link = inviteLink();
+    if (box && link) qrSvg(link).then(function (svg) { box.innerHTML = svg; }, function () { box.textContent = ""; });
+  }
+  A.act["invite-copy"] = function () {
+    var link = inviteLink();
+    var done = function () { UI.toast("Link copied: send it on WhatsApp or by SMS"); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(done, function () { UI.toast(link); }); else UI.toast(link);
+  };
+  A.act["invite-print"] = function () {
+    var link = inviteLink(), b = A.Theme.get(), codes = S().get("settings", "staffcodes");
+    qrSvg(link).then(function (svg) {
+      UI.printSheet({ title: "Join " + b.name, pageWidth: 794, css: "@page{size:A4;margin:16mm}#print-root .inv{width:178mm;margin:0 auto;text-align:center;font-family:'Segoe UI',Arial,sans-serif;color:#111}#print-root .inv .logo{width:28mm;height:28mm;margin:0 auto}#print-root .inv .logo img,#print-root .inv .logo svg{width:100%;height:100%;object-fit:contain}#print-root .inv h1{font-size:22pt;margin:6mm 0 2mm}#print-root .inv .qr{width:110mm;height:110mm;margin:8mm auto}#print-root .inv .qr svg{width:100%;height:100%}#print-root .inv p{font-size:13pt;margin:2mm 0}#print-root .inv code{font-size:14pt}",
+        html: '<section class="inv">' + A.Theme.logoHTML() + "<h1>" + esc(b.name) + "</h1><p>Scan with your phone's camera to open School Assist</p><div class=\"qr\">" + svg + "</div><p>or open <code>" + esc(link) + "</code></p>" +
+          (codes ? "<p>Teachers: let your device in with the staff code <b>" + esc(codes.teacher) + "</b></p>" : "") + "</section>" });
+    }, function (e) { UI.toast(e.message, "bad"); });
   };
   /* The hub's own list (1.6): only a registered device reaches the school's data. */
   function hubDevicesHead() {
     return "<h3>Registered with the school hub</h3>" +
       '<p class="muted small mt-sm">Only devices on this list can reach the school\'s data. A device joins with the school file, a staff code, or a code shown on its screen that an admin lets in here. The computer that runs the hub is always allowed.</p>';
   }
+  var devTimer = null, devShown = "";
   function mountHubDevices() {
+    clearTimeout(devTimer);
     Promise.all([A.Sync.hubPost("/api/joins"), A.Sync.hubPost("/api/devices")]).then(function (r) {
       var box = document.getElementById("hub-devices");
       if (!box) return;
+      // while the page is open the list keeps itself up to date: a device that asks to join shows within 10 seconds
+      devTimer = setTimeout(function () { if (document.getElementById("hub-devices")) mountHubDevices(); }, 10000);
       var joins = r[0].joins || [], devs = (r[1].devices || []).sort(function (a, b) { return (b.seenAt || 0) - (a.seenAt || 0); });
+      A.joinsWaiting = joins.length;
+      var now = JSON.stringify([joins, devs]);
+      if (now === devShown && box.querySelector(".label")) return; // nothing new: the buttons stay put under a finger
+      devShown = now;
       var thisId = A.Devices ? A.Devices.id() : null;
       box.innerHTML = hubDevicesHead() +
         '<div class="label mt">Waiting to join</div>' + (joins.length ? joins.map(function (j) {
-          return '<div class="list-row"><div class="grow"><div class="title"><span class="join-code sm">' + esc(j.code) + "</span> " + esc(j.label || "A device") + "</div>" +
+          return '<div class="list-row"><div class="grow"><div class="title"><span class="join-code sm">' + esc(j.code) + "</span> " + esc(j.label || "A device") + (j.online ? ' <span class="badge">' + I("globe") + "Online hub</span>" : "") + "</div>" +
             '<div class="tiny muted">Asked ' + A.relTime(j.at) + (j.ip ? " · " + esc(j.ip) : "") + " · check the code matches the one on its screen</div></div>" +
-            '<button class="btn btn-sm btn-primary" data-act="hub-join" data-code="' + esc(j.code) + '" data-ok="1">' + I("check") + "Let it in</button>" +
-            '<button class="btn btn-sm btn-ghost" data-act="hub-join" data-code="' + esc(j.code) + '">Decline</button></div>';
+            // side by side, together, on a phone too
+            '<div class="row join-btns"><button class="btn btn-sm btn-primary" data-act="hub-join" data-code="' + esc(j.code) + '" data-ok="1">' + I("check") + "Let it in</button>" +
+            '<button class="btn btn-sm" data-act="hub-join" data-code="' + esc(j.code) + '">' + I("x") + "Decline</button></div></div>";
         }).join("") : '<p class="small muted">No devices waiting.</p>') +
-        '<div class="label mt">Registered (' + devs.length + ")</div>" + (devs.length ? devs.map(function (d) {
+        devGroup("registered", "shield", "Devices", devs, function (list) { return list.map(function (d) {
           var who = (d.users || []).map(function (id) { var u = M.user(id); return u ? u.name : null; }).filter(Boolean);
           return '<div class="list-row"><div class="grow"><div class="title">' + esc(d.label || d.deviceId) + (d.deviceId === thisId ? ' <span class="badge brand">This device</span>' : "") + "</div>" +
             '<div class="tiny muted">Joined ' + A.relTime(d.at) + " (" + esc(d.how || "") + ") · last seen " + A.relTime(d.seenAt) + (d.ip ? " · " + esc(d.ip) : "") + "</div>" +
             (who.length ? '<div class="tiny">' + esc(who.slice(0, 6).join(", ")) + (who.length > 6 ? " and " + (who.length - 6) + " more" : "") + "</div>" : "") + "</div>" +
             (d.deviceId === thisId ? "" : '<button class="btn btn-sm btn-danger" data-act="hub-remove" data-id="' + esc(d.deviceId) + '" data-label="' + esc(d.label || "this device") + '">' + I("trash") + "Remove</button>") + "</div>";
-        }).join("") : '<p class="small muted">No other devices yet.</p>');
+        }).join(""); });
     }, function (e) {
       var box = document.getElementById("hub-devices");
       if (box) box.innerHTML = hubDevicesHead() + '<div class="callout warn mt">' + I("wifiOff") + "<div>" + esc(e.message || String(e)) + "</div></div>";
     });
   }
+  /* An admin with School Assist open hears when a device asks to join (a pop-up once per code, and the count on
+     Settings): so devices can be let in from the admin's phone. Every 20 seconds, on a school hub, while open in front. */
+  var seenJoins = {};
+  A.joinsWaiting = 0;
+  function watchJoins() {
+    var me = M.me();
+    if (me && me.isAdmin && A.Sync && A.Sync.hubMode() && A.Sync.joinState().key && !document.hidden && navigator.onLine) {
+      A.Sync.hubPost("/api/joins").then(function (r) {
+        var joins = r.joins || [];
+        A.joinsWaiting = joins.length;
+        joins.forEach(function (j) {
+          if (seenJoins[j.code]) return;
+          seenJoins[j.code] = 1;
+          if (A.Alerts && !document.getElementById("hub-devices")) A.Alerts.popup({ id: "join_" + j.code, kind: "join", title: "A device wants to join: " + j.code,
+            body: (j.label || "A device") + ". Check the code on its screen, then let it in under Settings → Devices." });
+        });
+      }, function () { /* the hub is away for now */ });
+    }
+    setTimeout(watchJoins, 20000);
+  }
+  setTimeout(watchJoins, 4000);
   A.act["hub-join"] = function (el) {
     var ok = !!el.getAttribute("data-ok"), code = el.getAttribute("data-code");
     A.Sync.hubPost("/api/joins/decide", { code: code, ok: ok, by: M.me().name }).then(function () {
@@ -703,6 +1103,8 @@
 
   /* ------------------------------------------------------------------ data */
   SECTIONS.data = function (me) {
+    // the school hub's online backup first (js/backup.js), then this device's own backup and restore
+    var online = me.isAdmin && A.Backup && A.Backup.applies() && A.SchoolId && A.SchoolId.id() ? A.Backup.section(me) : null;
     var counts = S().COLLS.map(function (c) { return [c, S().all(c).length]; }).filter(function (x) { return x[1]; });
     var html = '<div class="grid g-2"><div class="card card-pad"><h3>Back up</h3><p class="muted small mt-sm">Everything on this device in one file, for a flash drive.</p>' +
       '<label class="check mt"><input type="checkbox" id="bk-files" checked>Include uploaded PDFs and files (bigger file)</label>' +
@@ -711,9 +1113,11 @@
       '<div class="row wrap mt"><label class="btn">' + I("upload") + 'Merge a backup<input type="file" accept=".json" data-change="restore" data-mode="merge" hidden></label><label class="btn btn-danger">' + I("upload") + 'Replace from backup<input type="file" accept=".json" data-change="restore" data-mode="replace" hidden></label></div></div>' +
       '<div class="card card-pad"><h3>On this device</h3><dl class="kv mt">' + counts.map(function (c) { return "<dt>" + esc(c[0]) + "</dt><dd>" + c[1] + "</dd>"; }).join("") + '<dt>Files</dt><dd id="file-count">…</dd></dl>' +
       demoCard() + "</div></div>";
+    if (online) html = '<h3 class="row" style="gap:8px;margin-bottom:10px">' + I("upload") + " Online backup</h3>" + online.html + '<div class="divider"></div><h3 class="row" style="gap:8px;margin-bottom:10px">' + I("database") + " This device</h3>" + html;
     return {
       html: html,
       mount: function (root) {
+        if (online && online.mount) online.mount(root);
         A.Files.all().then(function (fs) {
           var el = root.querySelector("#file-count");
           if (el) el.textContent = fs.length + " (" + A.fmtBytes(A.sum(fs, function (f) { return f.size || 0; })) + ")";
@@ -793,6 +1197,11 @@
         '<button class="btn btn-primary mt" type="submit">' + I("lock") + "Change password</button></form>" +
         '<p class="tiny muted mt">Forgot it? Ask an administrator to reset it. Your school administrators can see student passwords to protect accounts if a device is lost or stolen.</p></div>';
     }
+    if (A.staffPassword(M.me())) return '<div class="card card-pad" style="max-width:480px"><h3>Change my password</h3><form data-submit="change-pin" class="mt">' +
+      '<label class="field"><span>Current password</span><input class="input" type="password" name="old" autocomplete="current-password"></label>' +
+      '<label class="field"><span>New password</span><input class="input" type="password" name="pin" autocomplete="new-password" placeholder="8 or more characters, letters and a number"></label>' +
+      '<label class="field"><span>Type it again</span><input class="input" type="password" name="pin2" autocomplete="new-password"></label>' +
+      '<button class="btn btn-primary mt" type="submit">' + I("lock") + "Change password</button></form></div>";
     return '<div class="card card-pad" style="max-width:480px"><h3>Change my PIN</h3><form data-submit="change-pin" class="mt">' +
       '<label class="field"><span>Current PIN</span><input class="input" type="password" name="old" inputmode="numeric" maxlength="4" autocomplete="current-password"></label>' +
       '<label class="field"><span>New PIN (4 digits)</span><input class="input" type="password" name="pin" inputmode="numeric" maxlength="4" autocomplete="new-password"></label>' +
@@ -816,10 +1225,16 @@
   };
   A.act["change-pin"] = function (form) {
     var me = M.me(), f = UI.formData(form);
-    if (M.checkSecret(me.id, f.old) !== true) { UI.toast("Your current PIN is not right", "bad"); return; }
-    if (!/^\d{4}$/.test(f.pin)) { UI.toast("The new PIN must be 4 digits", "bad"); return; }
+    var pw = A.staffPassword(me);
+    if (M.checkSecret(me.id, f.old) !== true) { UI.toast(pw ? "Your current password is not right" : "Your current PIN is not right", "bad"); return; }
+    if (pw) {
+      var bad = A.staffPasswordProblem(f.pin);
+      if (bad) { UI.toast(bad, "bad"); return; }
+      if (f.pin !== f.pin2) { UI.toast("The two passwords are different", "bad"); return; }
+      if (!me.pw) S().put("users", Object.assign({}, me, { pw: true }));
+    } else if (!/^\d{4}$/.test(f.pin)) { UI.toast("The new PIN must be 4 digits", "bad"); return; }
     M.setPin(me.id, f.pin, me.id);
-    UI.toast("PIN changed");
+    UI.toast(pw ? "Password changed" : "PIN changed");
     form.reset();
   };
   A.act["change-password"] = function (form) {

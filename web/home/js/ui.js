@@ -16,10 +16,32 @@
     setTimeout(function () { el.remove(); }, 3000);
   };
 
+  /* While a pop-up is open the page behind it stays still: swipes and the wheel move only the pop-up. On iPhones
+     overflow: hidden on the page is not enough, so the page is pinned where it was and put back when the last
+     pop-up closes, however it closes (some are removed straight from the page). */
+  var pinnedY = null, pinnedAt = "";
+  function pinPage() {
+    if (pinnedY != null) return;
+    pinnedY = window.scrollY || 0; pinnedAt = location.hash;
+    var b = document.body.style;
+    b.position = "fixed"; b.top = -pinnedY + "px"; b.left = "0"; b.right = "0"; b.width = "100%";
+    document.documentElement.classList.add("modal-open");
+  }
+  function unpinPage() {
+    var root = document.getElementById("modal-root");
+    if (pinnedY == null || (root && root.querySelector(".modal-back"))) return;
+    var y = pinnedY, b = document.body.style;
+    pinnedY = null;
+    b.position = b.top = b.left = b.right = b.width = "";
+    document.documentElement.classList.remove("modal-open");
+    if (location.hash === pinnedAt) window.scrollTo(0, y); // a new page starts at the top
+  }
+
   /* ------------------------------------------------------------------ modal
      UI.modal({ title, sub, body, size, foot: [{label, cls, onClick(el) → false keeps it open}], onMount(el), onClose }) */
   UI.modal = function (o) {
     var root = document.getElementById("modal-root");
+    if (!root._pin && window.MutationObserver) { root._pin = new MutationObserver(unpinPage); root._pin.observe(root, { childList: true }); }
     var back = document.createElement("div");
     back.className = "modal-back";
     var foot = (o.foot || [{ label: "Close" }]).map(function (b, i) {
@@ -32,9 +54,11 @@
       '<div class="modal-body ' + (o.flush ? "flush" : "") + '">' + (o.body || "") + "</div>" +
       (o.foot === false ? "" : '<div class="modal-foot">' + foot + "</div>") + "</div>";
     root.appendChild(back);
+    pinPage();
     var modalEl = back.querySelector(".modal");
     var close = function () {
       back.remove();
+      unpinPage();
       document.removeEventListener("keydown", onKey);
       if (o.onClose) o.onClose();
     };
@@ -53,6 +77,30 @@
     if (first && !o.noFocus) setTimeout(function () { first.focus(); }, 30);
     if (o.onMount) o.onMount(modalEl, close);
     return { el: modalEl, close: close };
+  };
+
+  /** Pages to print, shown first as they will print: o = { title, html (the pages), css (their styles and @page),
+      pageWidth (px, to fit them on the screen) }. They stay until Close, and Print opens the dialog from the tap: a
+      phone's print dialog doesn't wait (the pages used to be gone before it printed), and a print started by the page
+      again and again is blocked. */
+  UI.printSheet = function (o) {
+    var root = document.getElementById("print-root");
+    if (!root) { root = document.createElement("div"); root.id = "print-root"; document.body.appendChild(root); }
+    root.innerHTML = '<div class="print-bar"><b class="grow">' + esc(o.title || "Print") + '</b><button type="button" class="btn btn-primary" data-print-now>' + I("download") + "Print or save as PDF</button>" +
+      '<button type="button" class="btn" data-print-close>' + I("x") + "Close</button></div><style>" + (o.css || "") + '</style><div class="print-pages">' + o.html + "</div>";
+    root.classList.add("open");
+    document.body.classList.add("printing");
+    var pages = root.querySelector(".print-pages");
+    var fit = function () { pages.style.zoom = String(Math.min(1, Math.max(0.3, (root.clientWidth - 24) / (o.pageWidth || 794)))); };
+    var key = function (e) { if (e.key === "Escape") close(); };
+    var close = function () { root.classList.remove("open"); document.body.classList.remove("printing"); root.innerHTML = ""; window.removeEventListener("resize", fit); document.removeEventListener("keydown", key); };
+    fit();
+    UI.fitText(pages);
+    window.addEventListener("resize", fit);
+    document.addEventListener("keydown", key);
+    root.querySelector("[data-print-now]").addEventListener("click", function () { window.print(); });
+    root.querySelector("[data-print-close]").addEventListener("click", close);
+    return { close: close };
   };
 
   UI.confirm = function (msg, opts) {
@@ -93,6 +141,13 @@
     if (y + h > window.innerHeight - 8) y = e.clientY - h - 14;
     tip.style.left = x + "px"; tip.style.top = y + "px";
   }
+  // a tip shown by a tap (phones send a mouseover with it) or by focus goes after 2 seconds; with a mouse it stays while pointed at
+  var tipTimer = null, lastTouch = 0;
+  var tipBriefly = function () { clearTimeout(tipTimer); tipTimer = setTimeout(function () { if (tip) tip.classList.remove("on"); }, 2000); };
+  document.addEventListener("touchstart", function () { lastTouch = A.now(); }, { passive: true, capture: true });
+  // a click (Back, a register mark…): its tip goes 2 seconds later, even if the pointer rests there (the page under it
+  // may be new, so no "pointer left" ever comes)
+  document.addEventListener("click", function () { if (tip && tip.classList.contains("on")) tipBriefly(); }, true);
   document.addEventListener("mouseover", function (e) {
     var t = e.target.closest && e.target.closest("[data-tip]");
     tip = tip || document.getElementById("tip");
@@ -101,6 +156,7 @@
     tip.innerHTML = t.getAttribute("data-tip");
     tip.classList.add("on");
     placeTip(e);
+    if (A.now() - lastTouch < 1000) tipBriefly(); else clearTimeout(tipTimer);
   });
   document.addEventListener("mousemove", function (e) { if (tip && tip.classList.contains("on")) placeTip(e); });
   document.addEventListener("focusin", function (e) {
@@ -110,6 +166,7 @@
     var r = t.getBoundingClientRect();
     tip.innerHTML = t.getAttribute("data-tip"); tip.classList.add("on");
     tip.style.left = r.left + "px"; tip.style.top = r.bottom + 8 + "px";
+    tipBriefly();
   });
   document.addEventListener("focusout", function () { if (tip) tip.classList.remove("on"); });
 
@@ -336,9 +393,83 @@
     });
     el.innerHTML = s + "</svg>";
   }
+  /* ------------------------------------------------------------------ wide tables on touch screens
+     One way per swipe: up and down moves the page (the table doesn't drift sideways under the finger), left and
+     right slides the table (the page doesn't drift up and down). On touch screens the CSS lets the browser do only
+     the up and down (touch-action: pan-y); the sideways slide is done here, with a short glide after a flick. */
+  var COARSE = window.matchMedia ? window.matchMedia("(pointer: coarse)") : null;
+  UI.swipeLock = function (w) {
+    if (w._swipe || !COARSE || !COARSE.matches) return;
+    w._swipe = true;
+    var g = null, glide = 0;
+    w.addEventListener("touchstart", function (e) {
+      cancelAnimationFrame(glide);
+      var t = e.touches[0];
+      g = e.touches.length === 1 && w.scrollWidth > w.clientWidth + 1 ? { x: t.clientX, y: t.clientY, left: w.scrollLeft, axis: "", lx: t.clientX, lt: e.timeStamp, v: 0 } : null;
+    }, { passive: true });
+    w.addEventListener("touchmove", function (e) {
+      if (!g || e.touches.length !== 1) return;
+      var t = e.touches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
+      // a slanting start the browser has already taken as up or down (the move can't be held back): the page carries
+      // on and the table stays put, so the two never move at once (2026-10-26)
+      if (!g.axis) { if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return; g.axis = Math.abs(dx) > Math.abs(dy) && e.cancelable ? "x" : "y"; }
+      if (g.axis !== "x") return;
+      if (e.cancelable) e.preventDefault();
+      w.scrollLeft = g.left - dx;
+      var dt = e.timeStamp - g.lt;
+      if (dt > 0) { g.v = 0.8 * ((g.lx - t.clientX) / dt) + 0.2 * g.v; g.lx = t.clientX; g.lt = e.timeStamp; }
+    }, { passive: false });
+    var end = function () {
+      if (!g || g.axis !== "x") { g = null; return; }
+      var v = Math.max(-4, Math.min(4, g.v)), last = performance.now();
+      g = null;
+      var step = function (now) {
+        var dt = Math.min(32, now - last); last = now;
+        w.scrollLeft += v * dt;
+        v *= Math.pow(0.94, dt / 16);
+        if (Math.abs(v) > 0.02) glide = requestAnimationFrame(step);
+      };
+      if (Math.abs(v) > 0.1) glide = requestAnimationFrame(step);
+    };
+    w.addEventListener("touchend", end);
+    w.addEventListener("touchcancel", end);
+  };
+  /* A table or strip put on the page later (a list a page fills in when the hub answers, a pop-up's table) slides
+     sideways too: the CSS lets touch screens move it only up and down, so without this it didn't move sideways at all. */
+  if (COARSE && COARSE.matches && window.MutationObserver) {
+    var lockQueued = false;
+    new MutationObserver(function () {
+      if (lockQueued) return;
+      lockQueued = true;
+      setTimeout(function () { lockQueued = false; document.querySelectorAll(".table-wrap, .tabs, .pill-tabs, .rc-preview").forEach(UI.swipeLock); }, 60);
+    }).observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  /* ------------------------------------------------------------------ words that fit their box
+     A box marked [data-fit] keeps its size and its words get smaller until they fit (the timetable's lessons, 2026-10-26):
+     from its largest size (data-fit, in px; else a quarter of the box's height, 9 to 15 px) down to 6 px, where a long word
+     may break. Each time the page is drawn and the window changes size (UI.hydrate), and on a printed page (UI.printSheet). */
+  UI.fitText = function (root) {
+    (root || document).querySelectorAll("[data-fit]").forEach(function (el) {
+      var h = el.clientHeight, w = el.clientWidth;
+      if (!h || !w) return; // not on the screen (a phone shows the list instead of the grid)
+      var max = Number(el.getAttribute("data-fit")) || Math.max(9, Math.min(15, h / 4)), min = 6;
+      var fits = function (px) { el.style.fontSize = px + "px"; return el.scrollHeight <= h + 1 && el.scrollWidth <= w + 1; };
+      el.classList.remove("fit-min");
+      if (fits(max)) return;
+      if (!fits(min)) { el.classList.add("fit-min"); return; }
+      var lo = min, hi = max;
+      while (hi - lo > 0.25) { var mid = (lo + hi) / 2; if (fits(mid)) lo = mid; else hi = mid; }
+      fits(Math.floor(lo * 4) / 4);
+    });
+  };
+
   UI.hydrate = function (root) {
     (root || document).querySelectorAll(".js-line").forEach(drawLine);
     UI.strips(root);
+    UI.fitText(root);
   };
   window.addEventListener("resize", A.debounce(function () { UI.hydrate(); }, 150));
+  // the app's own font arriving after the first drawing changes how much fits
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { UI.fitText(); });
 })(window.App);

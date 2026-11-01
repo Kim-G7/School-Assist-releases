@@ -12,22 +12,27 @@
   "use strict";
 
   var DB_NAME = "school-classroom";
-  var STATE_KEY = "state-v1";
-  var LS_KEY = "sca-state-v1";
+  // vacation mode (js/vacation.js): a teacher's holiday records are a second copy of the records under a name of their
+  // own on this device, chosen here at start-up. It is never synced.
+  var VAC = (function () { try { return localStorage.getItem("sca-vacation") || ""; } catch (e) { return ""; } })();
+  var STATE_KEY = VAC ? "vacation-v1:" + VAC : "state-v1";
+  var LS_KEY = VAC ? "sca-vacation-v1:" + VAC : "sca-state-v1";
   var VERSION = 2; // bump when the data model changes; older demo data is rebuilt
 
   var COLLS = ["settings", "users", "credentials", "classes", "syllabi", "materials", "tasks", "submissions", "marks",
     "attendance", "messages", "receipts", "progress", "attempts", "timetable", "lessons", "alerts",
     "devices", "revocations", "netinfo", "enrolments", "pwrequests",
     "assessments", "reports", "schemes", "pnotes", // School Assist Teacher (js/primary.js)
-    "reportmarks"]; // end-of-term marks and comments for the report cards (js/reportcards.js)
+    "reportmarks", // end-of-term marks and comments for the report cards (js/reportcards.js)
+    "notices", // admins' notices to teachers (js/notices.js)
+    "outlines", "coverage"]; // syllabuses and each class's way through them (js/tracker.js)
 
   /* who writes each collection (a user may also change their own PIN / password) */
   var OWNERS = {
     settings: "admin", users: "admin", credentials: "admin", timetable: "admin", revocations: "admin",
     classes: "teacher", syllabi: "teacher", materials: "teacher", tasks: "teacher", marks: "teacher",
     attendance: "teacher", messages: "teacher", lessons: "teacher", alerts: "teacher",
-    assessments: "teacher", reports: "teacher", schemes: "teacher", pnotes: "teacher", reportmarks: "teacher",
+    assessments: "teacher", reports: "teacher", schemes: "teacher", pnotes: "teacher", reportmarks: "teacher", notices: "admin", outlines: "teacher", coverage: "teacher",
     submissions: "student", receipts: "student", progress: "student", attempts: "student",
     devices: "device", netinfo: "server",
   };
@@ -78,7 +83,7 @@
     all: function () { return tx("files", "readonly", function (s) { return s.getAll(); }).catch(function () { return []; }); },
     /** Store a File/Blob from an <input type=file>. Returns the file record. */
     fromInput: function (file) {
-      var rec = { id: A.uid("file"), name: file.name, type: file.type || "application/octet-stream", size: file.size, blob: file, createdAt: Date.now(), uploaded: false };
+      var rec = { id: A.uid("file"), name: file.name, type: file.type || "application/octet-stream", size: file.size, blob: file, createdAt: A.now(), uploaded: false };
       return Files.put(rec);
     },
     url: function (id) {
@@ -97,6 +102,23 @@
     OWNERS: OWNERS,
     state: null,
     backend: "IndexedDB",
+    /** The teacher in vacation mode on this device ("" at school). */
+    vacation: VAC,
+    /** A teacher's holiday records, from either space: read, write or delete them (js/vacation.js). */
+    space: {
+      read: function (uid) {
+        return idb().then(function () { return tx("kv", "readonly", function (s) { return s.get("vacation-v1:" + uid); }); })
+          .catch(function () { try { return JSON.parse(localStorage.getItem("sca-vacation-v1:" + uid) || "null"); } catch (e) { return null; } });
+      },
+      write: function (uid, st) {
+        if (Store.backend !== "IndexedDB") { localStorage.setItem("sca-vacation-v1:" + uid, JSON.stringify(st)); return Promise.resolve(); }
+        return tx("kv", "readwrite", function (s) { return s.put(st, "vacation-v1:" + uid); });
+      },
+      drop: function (uid) {
+        try { localStorage.removeItem("sca-vacation-v1:" + uid); } catch (e) { /* none */ }
+        return Store.backend === "IndexedDB" ? tx("kv", "readwrite", function (s) { return s.delete("vacation-v1:" + uid); }) : Promise.resolve();
+      },
+    },
 
     init: function () {
       return idb()
@@ -110,9 +132,9 @@
           Store.state = saved && saved.colls ? saved : Store.empty();
           COLLS.forEach(function (c) { if (!Store.state.colls[c]) Store.state.colls[c] = {}; });
           if (!Store.state.meta.deviceId) Store.state.meta.deviceId = A.uid("dev");
-          if (!Store.state.meta.seededAt && A.Seed) {
+          if (!Store.state.meta.seededAt && A.Seed && !VAC) { // (holiday records missing: js/vacation.js goes back)
             return Promise.resolve(A.Seed.run(Store)).then(function () {
-              Store.state.meta.seededAt = Date.now();
+              Store.state.meta.seededAt = A.now();
               return Store.flush();
             });
           }
@@ -142,8 +164,8 @@
     /* ----- writes */
     put: function (coll, rec, opts) {
       if (!rec.id) rec.id = A.uid(coll.slice(0, 3));
-      if (!rec.createdAt) rec.createdAt = Date.now();
-      rec.updatedAt = Date.now();
+      if (!rec.createdAt) rec.createdAt = A.now();
+      rec.updatedAt = A.now();
       Store.state.colls[coll][rec.id] = rec;
       if (!(opts && opts.silent)) Store.changed(coll);
       return rec;
@@ -155,7 +177,7 @@
     remove: function (coll, id) {
       var cur = Store.state.colls[coll][id];
       if (!cur) return;
-      Store.state.colls[coll][id] = { id: id, _deleted: true, updatedAt: Date.now() };
+      Store.state.colls[coll][id] = { id: id, _deleted: true, updatedAt: A.now() };
       Store.changed(coll);
     },
     /** Used by sync + import: take a record exactly as given (keeps its updatedAt). */
@@ -192,6 +214,7 @@
     },
     save: A.debounce(function () { Store.flush(); }, 250),
     flush: function () {
+      if (Store.paused) return Promise.resolve(); // another window of the app is the one in use (js/app.js)
       var snapshot = Store.state;
       if (Store.backend === "IndexedDB") {
         return tx("kv", "readwrite", function (s) { return s.put(snapshot, STATE_KEY); }).catch(function (e) {
@@ -208,7 +231,7 @@
 
     /* ----- backup / restore (moving data by USB stick, email, shared folder) */
     exportAll: function (includeFiles) {
-      var out = { app: "school-classroom", exportedAt: Date.now(), state: Store.state, files: [] };
+      var out = { app: "school-classroom", exportedAt: A.now(), state: Store.state, files: [] };
       if (!includeFiles) return Promise.resolve(out);
       return Files.all().then(function (files) {
         return Promise.all(files.map(function (f) {
@@ -241,7 +264,7 @@
       var deviceId = Store.state.meta.deviceId;
       Store.state = Store.empty();
       Store.state.meta.deviceId = deviceId;
-      Store.state.meta.seededAt = Date.now();
+      Store.state.meta.seededAt = A.now();
       return Store.flush();
     },
     reset: function () {
@@ -250,7 +273,7 @@
       Store.state.meta.deviceId = A.uid("dev");
       if (branding) Store.state.colls.settings.branding = branding;
       return Promise.resolve(A.Seed ? A.Seed.run(Store, { demo: true }) : null).then(function () {
-        Store.state.meta.seededAt = Date.now();
+        Store.state.meta.seededAt = A.now();
         return Store.flush();
       }).then(function () { Store.emit("change", "*"); });
     },
@@ -259,9 +282,9 @@
       var branding = Store.state.colls.settings.branding;
       Store.state = Store.empty();
       Store.state.meta.deviceId = A.uid("dev");
-      Store.state.meta.seededAt = Date.now();
+      Store.state.meta.seededAt = A.now();
       if (branding) Store.state.colls.settings.branding = branding;
-      if (keepUser) Store.state.colls.users[keepUser.id] = Object.assign({}, keepUser, { updatedAt: Date.now() });
+      if (keepUser) Store.state.colls.users[keepUser.id] = Object.assign({}, keepUser, { updatedAt: A.now() });
       return Files.all().then(function (files) {
         return Promise.all(files.map(function (f) { return Files.remove(f.id); }));
       }).catch(function () { /* ignore */ }).then(function () { return Store.flush(); }).then(function () { Store.emit("change", "*"); });

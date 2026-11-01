@@ -70,7 +70,7 @@
       var done = g.items.filter(function (x) { return M.paperDone(me.id, x.p.id); }).length;
       return '<details class="card paper-group"' + (gi === 0 ? " open" : "") + '><summary class="card-head"><h3>' + esc(g.title) + '</h3><span class="sub">' + g.items.length + " paper" + (g.items.length === 1 ? "" : "s") + (done ? " · " + done + " sat" : "") + "</span></summary>" +
         g.items.map(function (x) {
-          var r = M.paperSitting(me.id, x.p.id), running = r && r.startedAt && !r.doneAt && Date.now() < r.endsAt, ms = M.markSchemeFor(x.p.id);
+          var r = M.paperSitting(me.id, x.p.id), running = r && r.startedAt && !r.doneAt && A.now() < r.endsAt, ms = M.markSchemeFor(x.p.id);
           var status = running ? '<span class="badge warn">' + I("clock") + "In progress</span>" : r && r.doneAt ? (scoreText(r) ? '<span class="badge good">' + I("award") + esc(scoreText(r)) + "</span>" : '<span class="badge">Sat · not marked</span>') : "";
           return '<div class="list-row"><div class="grow"><div class="title">' + esc(x.name) + '</div><div class="row wrap mt-sm" style="gap:6px">' + M.paperChips(x.p) + A.offlineChip(x.p) + status + "</div></div>" +
             (r && r.doneAt && r.mode === "qs" ? '<a class="btn btn-sm" href="#/s/paper-result/' + x.p.id + '">' + I("key") + (r.pending ? "Finish marking" : "Your marks") + "</a>" :
@@ -90,7 +90,7 @@
     });
   }
   function finish(r, timeUp) {
-    var now = Date.now(), end = Math.min(now, r.endsAt || now);
+    var now = A.now(), end = Math.min(now, r.endsAt || now);
     return S().put("receipts", Object.assign({}, r, { doneAt: end, timeUsedSec: Math.round((end - r.startedAt) / 1000), timeUp: !!timeUp }));
   }
   function exitFs() { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () {}); }
@@ -102,7 +102,7 @@
     var back = syl ? "#/s/test/" + syl.id : "#/s/library";
     var r = M.paperSitting(me.id, paper.id), ms = M.markSchemeFor(paper.id);
     var running = r && r.startedAt && !r.doneAt;
-    if (running && Date.now() >= r.endsAt) { r = finish(r, true); running = false; }
+    if (running && A.now() >= r.endsAt) { r = finish(r, true); running = false; }
     if (r && r.doneAt && r.mode === "qs" && !r.marks) return { redirect: "#/s/paper-result/" + paper.id }; // time ran out while away: mark it
     var top = function (middle, right) {
       return '<div class="exam-top">' + A.Theme.logoHTML() + '<div class="grow" style="min-width:0">' + middle + "</div>" + right + "</div>";
@@ -149,7 +149,7 @@
           var tick = function () {
             var cur = M.paperSitting(me.id, paper.id), el = document.getElementById("sit-time");
             if (!cur || !el || cur.doneAt) return;
-            var left = Math.max(0, Math.round((cur.endsAt - Date.now()) / 1000));
+            var left = Math.max(0, Math.round((cur.endsAt - A.now()) / 1000));
             el.textContent = A.fmtDuration(left);
             var box = document.getElementById("sit-timer");
             box.classList.toggle("warn", left <= 300 && left > 60);
@@ -254,7 +254,7 @@
     var fs = document.getElementById("sit-fs");
     if (fs && fs.checked) { if (A.Screen && A.Screen.kind === "desktop") A.Screen.enter(); else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function () {}); }
     var history = (prev.history || []).concat(prev.doneAt ? [{ doneAt: prev.doneAt, score: prev.score, total: prev.total, mode: prev.mode || "pdf" }] : []);
-    var now = Date.now(), onPaper = document.getElementById("sit-onpaper");
+    var now = A.now(), onPaper = document.getElementById("sit-onpaper");
     var mode = A.SitQs && A.SitQs.ready(paper) && !(onPaper && onPaper.checked) ? "qs" : "pdf";
     S().put("receipts", { id: "pd_" + paper.id + "_" + me.id, kind: "paper-done", paperId: paper.id, studentId: me.id, startedAt: now, endsAt: now + mins * 60000,
       durationMin: mins, doneAt: null, score: null, total: paper.totalMarks || null, leftCount: 0, history: history.slice(-10), mode: mode, answers: {}, flags: {}, qi: 0 });
@@ -263,7 +263,7 @@
   A.act["sit-finish"] = function (el) {
     var me = M.me(), r = M.paperSitting(me.id, el.getAttribute("data-id"));
     if (!r) return;
-    var left = Math.max(0, Math.round((r.endsAt - Date.now()) / 60000));
+    var left = Math.max(0, Math.round((r.endsAt - A.now()) / 60000));
     UI.confirm("Finish now? " + (left ? "You still have " + left + " minute" + (left === 1 ? "" : "s") + ". " : "") + "Then you mark your answers with the marking scheme.", { ok: "Finish and mark" }).then(function (ok) {
       if (!ok) return;
       finish(M.paperSitting(me.id, r.paperId), false); exitFs();
@@ -275,7 +275,7 @@
     var score = Number(form.score.value), total = Number(form.total.value);
     if (!(total > 0)) { UI.toast("Enter the paper's total marks", "bad"); return; }
     if (!(score >= 0) || form.score.value === "" || score > total) { UI.toast("Enter your mark, from 0 to " + total, "bad"); return; }
-    S().put("receipts", Object.assign({}, r, { score: score, total: total, markedAt: Date.now() }));
+    S().put("receipts", Object.assign({}, r, { score: score, total: total, markedAt: A.now() }));
     UI.toast("Saved: " + score + "/" + total + " (" + Math.round((score / total) * 100) + "%)");
     var paper = S().get("materials", id), c = paper && M.cls(paper.classId), syl = paper && M.syllabus(paper.syllabusId || (c && c.syllabusId));
     location.hash = syl ? "#/s/test/" + syl.id : "#/s/library";

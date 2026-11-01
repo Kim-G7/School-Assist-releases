@@ -8,7 +8,12 @@
     <title>School Classroom</title>
     <link rel="icon" href="assets/icon.svg" />
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="assets/icon.svg" />
+    <link rel="apple-touch-icon" href="assets/icon-180.png" />
+    <!-- iPhone and iPad: Add to Home Screen opens it as an app, without Safari's bars -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="School Assist" />
     <!-- Everything is local (no CDN) so the app works with no internet connection. -->
     <link rel="stylesheet" href="css/app.css" />
   </head>
@@ -52,6 +57,7 @@
     <script src="js/theme.js"></script>
     <script src="js/store.js"></script>
     <script src="js/cloud.js"></script>
+    <script src="js/install.js"></script>
     <script src="js/model.js"></script>
     <script src="js/ui.js"></script>
     <!-- 3. Demo content (safe to remove once a school has its own data) -->
@@ -62,6 +68,8 @@
     <script src="js/screen.js"></script>
     <script src="js/devices.js"></script>
     <script src="js/alerts.js"></script>
+    <script src="js/notices.js"></script>
+    <script src="js/vacation.js"></script>
     <script src="js/timetable.js"></script>
     <script src="js/materials.js"></script>
     <script src="js/papers.js"></script>
@@ -77,6 +85,7 @@
     <script src="js/sylread.js"></script>
     <script src="js/tutoradmin.js"></script>
     <script src="js/primary.js"></script>
+    <script src="js/tracker.js"></script>
     <script src="js/teacher.js"></script>
     <script src="js/student.js"></script>
     <script src="js/exam.js"></script>

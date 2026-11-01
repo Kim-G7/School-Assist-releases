@@ -20,7 +20,7 @@
     var classes = M.myClasses(me), today = A.isoDate();
     var studentIds = uniq([].concat.apply([], classes.map(function (c) { return c.studentIds; })));
     var regDone = classes.filter(function (c) { return M.register(c.id, today); }).length;
-    var toMark = [], activity = [], since = Date.now() - 7 * A.DAY;
+    var toMark = [], activity = [], since = A.now() - 7 * A.DAY;
     classes.forEach(function (c) {
       M.tasksForClass(c.id).forEach(function (t) {
         M.assignees(t).forEach(function (u) {
@@ -69,10 +69,10 @@
     });
 
     var noNotes = M.topicsWithoutNotes ? M.topicsWithoutNotes(me) : 0;
-    var html = (A.pwRequestsHtml ? A.pwRequestsHtml(me) : "") + (A.recoveryNote ? A.recoveryNote() : "") + (A.subjectRequestsHtml ? A.subjectRequestsHtml(me, 5) : "") +
+    var html = (A.nameNudge ? A.nameNudge(me) : "") + (A.pwRequestsHtml ? A.pwRequestsHtml(me) : "") + (A.recoveryNote ? A.recoveryNote() : "") + (A.subjectRequestsHtml ? A.subjectRequestsHtml(me, 5) : "") +
       (noNotes ? '<div class="callout mb">' + I("cap") + '<div class="grow"><b>' + noNotes + " topic" + (noNotes === 1 ? "" : "s") + " in your subjects " + (noNotes === 1 ? "has" : "have") + " no notes for the tutor yet.</b> Add notes for each topic, or read a whole textbook and the tutor finds its pages.</div>" +
         '<a class="btn btn-sm" href="#/t/tutor?f=missing">Tutor content ' + I("right") + "</a></div>" : "") +
-      '<section class="hero"><h2>' + A.greeting() + ", " + esc(me.name) + "</h2><p>" + esc(A.fmtDateLong(Date.now())) + " · " + esc((window.SCHOOL_CONFIG || {}).term || "") + " · you teach " + classes.length + " classes and " + studentIds.length + " students</p>" +
+      '<section class="hero"><h2>' + A.greeting() + ", " + esc(me.name) + "</h2><p>" + esc(A.fmtDateLong(A.now())) + " · " + esc((window.SCHOOL_CONFIG || {}).term || "") + " · you teach " + classes.length + " classes and " + studentIds.length + " students</p>" +
       '<div class="hero-actions">' +
       '<button class="btn btn-accent" data-act="quick-register">' + I("calendar") + "Take register</button>" +
       '<button class="btn btn-light" data-act="new-task">' + I("plus") + "New task</button>" +
@@ -201,6 +201,8 @@
     ["notes", "Notifications", "bell"], ["library", "Library", "library"], ["syllabus", "Syllabus & terms", "layers"],
   ];
   A.route("t/class/:id/:tab?", function (p, q, me) {
+    if (A.Primary && !A.Primary.withStudents) return { redirect: "#/t/pupils" }; // School Assist Teacher's class is My class
+    var hr = M.cls(p.id); if (hr && hr.homeroom) return { redirect: hr.teacherId === me.id ? "#/t/pupils" : "#/t/others/" + hr.id }; // (School edition: a form's class)
     var c = ownClass(p.id, me);
     if (!c) return { redirect: "#/t/classes" };
     var tab = p.tab || "students", syl = M.syllabus(c.syllabusId);
@@ -579,7 +581,7 @@
           : s.text || s.fileId ? '<button class="btn btn-sm" data-act="view-sub" data-task="' + t.id + '" data-sid="' + u.id + '">' + I("eye") + "View</button>" : '<span class="muted small">—</span>';
         return "<tr><td><a class=\"row\" href=\"#/t/student/" + u.id + "/" + c.id + '">' + A.avatar(u, "sm") + esc(u.name) + "</a></td>" +
           "<td>" + (s.receivedAt ? '<span class="badge good" data-tip="' + A.fmtDateTime(s.receivedAt) + '">' + I("check") + A.relTime(s.receivedAt) + "</span>" : '<span class="badge">Not yet</span>') + "</td>" +
-          "<td>" + (s.submittedAt ? '<span class="badge brand" data-tip="' + A.fmtDateTime(s.submittedAt) + '">' + (s.confirmedBook ? I("check") + "Book handed in · " : "") + A.relTime(s.submittedAt) + "</span>" + (t.dueAt && s.submittedAt > t.dueAt ? ' <span class="badge bad">Late</span>' : "") : M.canSubmit(t) && t.dueAt && Date.now() > t.dueAt ? '<span class="badge bad">Not submitted</span>' : '<span class="muted small">—</span>') + "</td>" +
+          "<td>" + (s.submittedAt ? '<span class="badge brand" data-tip="' + A.fmtDateTime(s.submittedAt) + '">' + (s.confirmedBook ? I("check") + "Book handed in · " : "") + A.relTime(s.submittedAt) + "</span>" + (t.dueAt && s.submittedAt > t.dueAt ? ' <span class="badge bad">Late</span>' : "") : M.canSubmit(t) && t.dueAt && A.now() > t.dueAt ? '<span class="badge bad">Not submitted</span>' : '<span class="muted small">—</span>') + "</td>" +
           "<td>" + work + "</td>" +
           (t.maxMarks ? '<td class="num"><input class="cell" inputmode="decimal" value="' + (mk.score != null ? mk.score : "") + '" placeholder="' + (eff && eff.source === "auto" ? eff.score : "") + '" data-change="gb-score" data-task="' + t.id + '" data-sid="' + u.id + '" data-max="' + t.maxMarks + '" aria-label="Mark for ' + esc(u.name) + '"></td>' : "") +
           '<td><input class="input sm" style="min-width:200px" value="' + esc(mk.feedback || "") + '" placeholder="Feedback for ' + esc(A.firstName(u.name)) + '" data-change="mark-feedback" data-task="' + t.id + '" data-sid="' + u.id + '"></td></tr>';
@@ -801,6 +803,10 @@
             subject: f.subject.trim(), room: f.room, syllabusId: f.syllabusId, studentIds: UI.pickerValue(el.querySelector("#cls-picker")), teacherId: f.teacherId || c.teacherId || me.id,
           });
           if (!existing) { rec.currentTerm = 1; rec.topicAccess = {}; rec.sequential = false; }
+          // the same class and subject twice ("Form 3A Mathematics") is refused
+          var key = function (s) { return String(s || "").trim().replace(/\s+/g, " ").toLowerCase(); };
+          var twin = S().filter("classes", function (x) { return x.id !== c.id && !x.homeroom && key(x.name) === key(rec.name) && key(x.subject) === key(rec.subject); })[0];
+          if (twin) { UI.toast(M.className(twin) + " already exists. Use that class, or change the group or subject.", "bad"); return false; }
           rec = S().put("classes", rec);
           UI.toast(existing ? "Class updated" : "Class created");
           location.hash = "#/t/class/" + rec.id;
@@ -900,7 +906,10 @@
         },
       }],
       onMount: function (el) {
-        var fill = function () { el.querySelector("#note-students-wrap").innerHTML = UI.picker({ students: M.studentsOf(M.cls(el.querySelector("#note-class").value)), selected: toIds || [] }); };
+        var fill = function () {
+          var c = M.cls(el.querySelector("#note-class").value);
+          el.querySelector("#note-students-wrap").innerHTML = c ? UI.picker({ students: M.studentsOf(c), selected: toIds || [] }) : '<p class="muted small">You have no class to send it to yet.</p>';
+        };
         el.querySelector("#note-class").addEventListener("change", fill);
         el.querySelector("#note-to").addEventListener("click", function (e) {
           var b = e.target.closest("button"); if (!b) return;
@@ -919,12 +928,12 @@
   /* ---- new / edit task. Due Monday–Friday, 08:00–16:00. */
   function taskModal(existing, cls, kind) {
     var me = M.me(), classes = M.myClasses(me);
-    var firstDay = M.schoolDays(Date.now() + 36 * 3600000, 1)[0];
+    var firstDay = M.schoolDays(A.now() + 36 * 3600000, 1)[0];
     var t = existing || { kind: kind || "homework", title: "", instructions: "", maxMarks: "", assignedTo: "all", classId: (cls || classes[0] || {}).id, dueAt: M.schoolDays(firstDay, 3)[2] + A.hm("16:00") * 60000, materialIds: [] };
     if (!t.classId) { UI.toast("Create a class first", "bad"); return; }
     var kinds = Object.keys(M.KINDS);
     var dueDay = A.startOfDay(t.dueAt), dueTime = A.fmtTime(t.dueAt);
-    var days = M.schoolDays(Date.now(), 30);
+    var days = M.schoolDays(A.now(), 30);
     if (days.indexOf(dueDay) < 0) days.unshift(dueDay);
     var times = M.dueTimes();
     if (times.indexOf(dueTime) < 0) times.push(dueTime);
@@ -959,7 +968,7 @@
           if (!f.title.trim()) { UI.toast("Give the task a title", "bad"); return false; }
           var due = Number(f.dueDay) + A.hm(f.dueTime) * 60000;
           if (!M.isSchoolDay(due) || A.hm(f.dueTime) < A.hm(M.DAY_START) || A.hm(f.dueTime) > A.hm(M.DAY_END)) { UI.toast("Work can only be due Monday to Friday, 08:00 to 16:00", "bad"); return false; }
-          if (M.canSubmit({ kind: f.kind }) && due < Date.now() + 5 * 60000 && (!existing || due !== t.dueAt)) { UI.toast("That due time has already passed. Choose a later time.", "bad"); return false; }
+          if (M.canSubmit({ kind: f.kind }) && due < A.now() + 5 * 60000 && (!existing || due !== t.dueAt)) { UI.toast("That due time has already passed. Choose a later time.", "bad"); return false; }
           var mode = el.querySelector("#task-to .on").getAttribute("data-a");
           var to = mode === "all" ? "all" : UI.pickerValue(el.querySelector("#task-students"));
           if (to !== "all" && !to.length) { UI.toast("Choose at least one student", "bad"); return false; }
@@ -986,7 +995,9 @@
         var form = el.querySelector("#task-form");
         var cur = function () { return M.cls(existing ? t.classId : form.querySelector("#task-class").value); };
         function refresh() {
-          var c = cur(), syl = M.syllabus(c.syllabusId), kind = form.kind.value;
+          var c = cur();
+          if (!c) { el.querySelector("#task-students").innerHTML = '<p class="muted small">You have no class to set work for yet.</p>'; return; }
+          var syl = M.syllabus(c.syllabusId), kind = form.kind.value;
           var sel = form.querySelector("#task-topic"), was = sel.value || t.topicId || "";
           sel.innerHTML = '<option value="">None</option>' + (syl ? syl.topics.map(function (tp) { return '<option value="' + tp.id + '"' + (tp.id === was ? " selected" : "") + ">" + esc(tp.title) + "</option>"; }).join("") : "");
           el.querySelector("#task-students").innerHTML = UI.picker({ students: M.studentsOf(c), selected: Array.isArray(t.assignedTo) ? t.assignedTo : [] });

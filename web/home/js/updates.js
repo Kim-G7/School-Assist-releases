@@ -20,12 +20,20 @@
       '<button class="btn btn-sm btn-primary" data-act="update-apply">' + I("refresh") + "Restart now</button>" +
       '<button class="btn btn-sm btn-ghost" data-act="update-later">Later</button>';
   }
+  // a downloaded update loads by itself at a quiet moment (js/app.js; the hub keeps running); the bar shows meanwhile
+  var autoAt = null;
+  function autoApply(st) {
+    if (!st || !st.ready || autoAt === st.ready.date || !A.reloadWhenQuiet) return;
+    autoAt = st.ready.date;
+    A.reloadWhenQuiet(function () { U.apply(); }, "A new version of the app: updating…");
+  }
   U.onChange(function (st) {
     bar(st);
+    autoApply(st);
     var box = document.getElementById("updates-card");
     if (box) box.outerHTML = card(st);
   });
-  U.status().then(bar).catch(function () {});
+  U.status().then(function (st) { bar(st); autoApply(st); }).catch(function () {});
 
   A.act["update-apply"] = function () {
     // a paper being sat keeps going: its answers are saved, but ask first

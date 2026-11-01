@@ -55,14 +55,14 @@
   function token(grant, body) {
     return net(fetch(C.url + "/auth/v1/token?grant_type=" + grant, { method: "POST", headers: headers(null, { "Content-Type": "application/json" }), body: JSON.stringify(body) }))
       .then(asJson).then(function (t) {
-        keep({ access_token: t.access_token, refresh_token: t.refresh_token, expires_at: Date.now() + (t.expires_in || 3600) * 1000, profile: session && session.profile || null });
+        keep({ access_token: t.access_token, refresh_token: t.refresh_token, expires_at: A.now() + (t.expires_in || 3600) * 1000, profile: session && session.profile || null });
         return session;
       });
   }
   /** A valid access token, refreshed shortly before it runs out. */
   function fresh() {
     if (!session) return Promise.reject(new Error("Sign in online first."));
-    if (Date.now() < session.expires_at - 60000) return Promise.resolve(session);
+    if (A.now() < session.expires_at - 60000) return Promise.resolve(session);
     if (!refreshing) {
       refreshing = token("refresh_token", { refresh_token: session.refresh_token })
         .catch(function (e) { if (e.status === 400 || e.status === 401) keep(null); throw e; })
@@ -127,7 +127,7 @@
       return net(fetch(C.url + "/functions/v1/recover", { method: "POST", headers: headers(null, { "Content-Type": "application/json" }), body: JSON.stringify(body) })).then(asJson);
     },
     /** A new recovery code for the signed-in person (shown once; only its hash is kept). */
-    makeRecoveryCode: function () { return Cloud.rpc("make_recovery_code").then(function (c) { Cloud.recoveryAt = Date.now(); return c; }); },
+    makeRecoveryCode: function () { return Cloud.rpc("make_recovery_code").then(function (c) { Cloud.recoveryAt = A.now(); return c; }); },
     /** When this person's recovery code was made: a time, 0 for none, undefined until known. */
     recoveryAt: undefined,
     checkRecovery: function () {
@@ -161,38 +161,7 @@
     },
   });
 
-  /* ------------------------------------------------ install from the website
-     Chrome and Edge (Windows, Android) offer a real install prompt; iPhone and iPad
-     use Share → Add to Home Screen. */
-  A.act = A.act || {}; // the page's action list (js/app.js keeps these)
-  var installEvent = null;
-  window.addEventListener("beforeinstallprompt", function (e) {
-    e.preventDefault();
-    installEvent = e;
-    document.documentElement.classList.add("can-install");
-  });
-  window.addEventListener("appinstalled", function () { installEvent = null; document.documentElement.classList.remove("can-install"); });
-  A.Install = {
-    installed: function () { try { return matchMedia("(display-mode: fullscreen), (display-mode: standalone)").matches || navigator.standalone === true; } catch (e) { return false; } },
-    apple: function () { return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); },
-    /** The login page's install block (web only; the desktop app is already installed). */
-    html: function () {
-      if (window.desktop || A.Install.installed() || !/^https?:$/.test(location.protocol)) return "";
-      return '<div class="install-box">' +
-        '<button class="btn install-btn" data-act="install-app">' + A.icon("download") + "Install the app</button>" +
-        (A.Install.apple() ? '<p class="small">On iPhone or iPad: tap <b>Share</b>, then <b>Add to Home Screen</b>.</p>'
-          : '<p class="small install-hint">Install adds School Assist to this device like any app. It opens full screen and works without the internet.</p>') +
-        "</div>";
-    },
-  };
-  A.act["install-app"] = function () {
-    if (!installEvent) {
-      A.UI.toast(A.Install.apple() ? "Tap Share, then Add to Home Screen" : "Use your browser's menu: Install app (Chrome or Edge)");
-      return;
-    }
-    installEvent.prompt();
-    installEvent.userChoice.then(function (c) { if (c && c.outcome === "accepted") A.UI.toast("Installing School Assist"); installEvent = null; });
-  };
+  // installing from the website (A.Install): js/install.js, for every edition
 
   /* ------------------------------------------------------- admin: people */
   function done(msg) { A.UI.toast(msg); return A.Sync.syncNow().catch(function () {}).then(function () { A.render(); }); }
@@ -271,13 +240,13 @@
     A.UI.confirm("Give " + u.name + " a new password? Their old one stops working.", { ok: "New password" }).then(function (ok) {
       if (!ok) return;
       Cloud.admin("reset", { appId: r.appId }).then(function (res) {
-        A.Store.patch("pwrequests", r.id, { doneAt: Date.now() });
+        A.Store.patch("pwrequests", r.id, { doneAt: A.now() });
         showPassword("New password for " + u.name, u, res.password);
         A.render();
       }).catch(fail);
     });
   };
-  A.act["pwreq-done"] = function (el) { A.Store.patch("pwrequests", el.getAttribute("data-id"), { doneAt: Date.now() }); A.render(); };
+  A.act["pwreq-done"] = function (el) { A.Store.patch("pwrequests", el.getAttribute("data-id"), { doneAt: A.now() }); A.render(); };
 
   A.act["cloud-reset"] = function (el) {
     var id = el.getAttribute("data-id"), u = A.M.user(id);

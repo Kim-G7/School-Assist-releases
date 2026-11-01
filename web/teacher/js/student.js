@@ -44,13 +44,13 @@
 
     var html = "";
     if (running) {
-      var left = Math.max(0, Math.round((running.endsAt - Date.now()) / 1000));
+      var left = Math.max(0, Math.round((running.endsAt - A.now()) / 1000));
       html += '<div class="callout warn mb">' + I("clock") + '<div class="grow"><b>You have an exam in progress: ' + esc(running.title) + ".</b> " + (left ? A.fmtDuration(left) + " left on the clock." : "Time is up, so open it to see your result.") + '</div><a class="btn btn-sm btn-primary" href="#/s/exam-room/' + running.id + '">Resume</a></div>';
     }
     if (A.pendingSubjectsNote) html += A.pendingSubjectsNote(me);
     if (A.recoveryNote) html += A.recoveryNote();
     html += '<section class="hero"><h2>' + A.greeting() + ", " + esc(A.firstName(me.name)) + "</h2><p>" +
-      (fresh.length ? "You have " + fresh.length + " new " + (fresh.length === 1 ? "task" : "tasks") + " from your teachers." : "You're all caught up with your tasks.") + " " + esc(M.studentHome(me)) + " · " + esc(A.fmtDateLong(Date.now())) + "</p>" +
+      (fresh.length ? "You have " + fresh.length + " new " + (fresh.length === 1 ? "task" : "tasks") + " from your teachers." : "You're all caught up with your tasks.") + " " + esc(M.studentHome(me)) + " · " + esc(A.fmtDateLong(A.now())) + "</p>" +
       '<div class="hero-actions">' + (next ? '<a class="btn btn-accent" href="#/s/topic/' + next.syl.id + "/" + next.t.id + '">' + I("play") + "Continue: " + esc(next.t.title) + "</a>" : "") +
       '<a class="btn btn-light" href="#/s/exam">' + I("cap") + "Exam mode</a></div></section>";
 
@@ -60,7 +60,7 @@
         return '<div class="list-row"><span class="kind-bar k-' + t.kind + '"></span><div class="grow"><a class="title" href="#/s/task/' + t.id + '" style="color:inherit">' + esc(t.title) + '</a><div class="meta">' + M.kindBadge(t.kind) + "<span>" + esc(subjectOf(t)) + "</span>" + A.dueBadge(t.dueAt) + "</div></div>" +
           '<button class="btn btn-primary" data-act="ack" data-id="' + t.id + '">' + I("check") + "I've received it</button></div>";
       }).join("") : UI.empty("checkCircle", "Nothing new", "New homework, assignments, tests and presentations appear here.")) + "</div>";
-    html += A.TT.todayCard(me);
+    html += (A.Primary && A.Primary.studentToday && A.Primary.studentToday(me)) || A.TT.todayCard(me); // the class timetable (1.7), or the bell-time one
     html += '<div class="card"><div class="card-head"><h3>To do</h3><span class="sub">received, not yet handed in</span><span class="grow"></span><a class="btn btn-sm btn-ghost" href="#/s/tasks">All tasks ' + I("right") + "</a></div>" +
       (todo.length ? todo.slice(0, 6).map(taskRow.bind(null, me)).join("") : UI.empty("tasks", "Nothing waiting")) + "</div>";
     html += "</div><div class=\"stack-lg\">";
@@ -195,7 +195,7 @@
     var already = M.submission(tid, me.id);
     UI.modal({
       title: already && already.submittedAt ? "Update your submission?" : "Ready to hand in?",
-      body: '<div class="row top">' + I("send") + '<p>We will tell <b>' + esc(teacherOf(c)) + "</b> that you have done <b>" + esc(t.title) + "</b> and handed in your book." + (Date.now() > t.dueAt ? ' <span class="badge bad">This is late</span>' : "") + "</p></div>",
+      body: '<div class="row top">' + I("send") + '<p>We will tell <b>' + esc(teacherOf(c)) + "</b> that you have done <b>" + esc(t.title) + "</b> and handed in your book." + (A.now() > t.dueAt ? ' <span class="badge bad">This is late</span>' : "") + "</p></div>",
       noFocus: true,
       foot: [{ label: "Not yet" }, {
         label: "Yes, notify my teacher", cls: "btn-primary", icon: "check", onClick: function () {

@@ -66,7 +66,7 @@
     return M.claimStudentNo(level).then(function (studentNo) { return registerAs(name, level, pw, subjectIds, studentNo); });
   };
   function registerAs(name, level, pw, subjectIds, studentNo) {
-    var now = Date.now();
+    var now = A.now();
     var u = S().put("users", { id: A.uid("s"), role: "student", name: name, level: level, stream: null, studentNo: studentNo, status: "pending", registeredAt: now, selfRegistered: true });
     M.setPassword(u.id, pw, u.id);
     return M.requestSubjects(u.id, subjectIds).then(function () {
@@ -79,7 +79,9 @@
   A.act["school-approve"] = function (el) {
     var u = M.user(el.getAttribute("data-id")), yes = el.getAttribute("data-yes") === "1";
     if (!u) return;
-    S().patch("users", u.id, { status: yes ? "approved" : "declined", decidedAt: Date.now(), decidedBy: M.me().id });
+    S().patch("users", u.id, { status: yes ? "approved" : "declined", decidedAt: A.now(), decidedBy: M.me().id });
+    var pick = yes && A.Primary && document.querySelector('[data-class-for="' + u.id + '"]');
+    if (pick && pick.value) A.Primary.placeStudent(M.user(u.id), M.cls(pick.value));
     M.alertsDone(u.id);
     UI.toast(yes ? u.name + " can sign in now. Their subjects wait for each teacher's approval." : u.name + " was declined");
     A.render();
@@ -88,7 +90,7 @@
   /* ------------------------------------------------------------------ forgot the password: ask the admin */
   School.askAdmin = function (login, name, note) {
     var u = M.studentById ? M.studentById(login) : null;
-    S().put("pwrequests", { id: A.uid("pwr"), login: login, studentNo: u ? u.studentNo : login, appId: u ? u.id : null, name: u ? u.name : name, said: name, note: String(note || "").slice(0, 300), askedAt: Date.now() });
+    S().put("pwrequests", { id: A.uid("pwr"), login: login, studentNo: u ? u.studentNo : login, appId: u ? u.id : null, name: u ? u.name : name, said: name, note: String(note || "").slice(0, 300), askedAt: A.now() });
     M.alertAdmins({ kind: "password", aboutId: u ? u.id : null, title: (u ? u.name : name || login) + " forgot their password", body: "Give them a new password in Settings → People. Check it really is them first." });
     if (A.Sync) A.Sync.maybe();
     return Promise.resolve();
@@ -108,7 +110,7 @@
       if (!ok) return;
       var pw = newPassword();
       M.setPassword(u.id, pw, M.me().id);
-      S().patch("pwrequests", r.id, { doneAt: Date.now() });
+      S().patch("pwrequests", r.id, { doneAt: A.now() });
       M.alertsDone(u.id);
       UI.modal({
         title: "New password for " + u.name,
@@ -120,7 +122,7 @@
   };
   A.act["school-pw-done"] = function (el) {
     var r = S().get("pwrequests", el.getAttribute("data-id"));
-    S().patch("pwrequests", el.getAttribute("data-id"), { doneAt: Date.now() });
+    S().patch("pwrequests", el.getAttribute("data-id"), { doneAt: A.now() });
     if (r) M.alertsDone(r.appId);
     A.render();
   };
@@ -132,8 +134,11 @@
     if (pend.length) {
       html += '<div class="card mb"><div class="card-head">' + I("users") + '<h3>Registered, waiting for approval</h3><span class="sub">' + pend.length + "</span></div>" + pend.map(function (u) {
         var subs = M.enrolments(u.id).map(function (e) { var s = M.syllabus(e.syllabusId); return s ? s.subject : ""; }).filter(Boolean);
+        // the school's classes of their form (js/primary.js): the admin puts them in theirs as they approve
+        var hrs = A.Primary ? A.Primary.homerooms().filter(function (c) { return c.level === u.level; }) : [];
         return '<div class="list-row">' + A.avatar(u, "sm") + '<div class="grow"><div class="title">' + esc(u.name) + ' <span class="muted small">' + esc(u.studentNo) + '</span></div><div class="meta"><span>' + esc(u.level || "") + "</span>" +
           (subs.length ? '<span class="sep"></span><span>' + esc(subs.join(", ")) + "</span>" : "") + '<span class="sep"></span><span>' + esc(A.relTime(u.registeredAt)) + "</span></div></div>" +
+          (hrs.length ? '<select class="select sm" style="width:auto" data-class-for="' + u.id + '" aria-label="Class for ' + esc(u.name) + '">' + hrs.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + "</option>"; }).join("") + "</select>" : "") +
           '<button class="btn btn-sm btn-primary" data-act="school-approve" data-id="' + u.id + '" data-yes="1">' + I("check") + 'Approve</button><button class="btn btn-sm btn-ghost" data-act="school-approve" data-id="' + u.id + '" data-yes="0">Decline</button></div>';
       }).join("") + "</div>";
     }

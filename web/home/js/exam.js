@@ -343,7 +343,7 @@
     var att = S().get("attempts", p.id);
     if (!att || att.studentId !== me.id) return { redirect: "#/s/exam" };
     if (att.status === "done") return { redirect: "#/s/result/" + att.id };
-    if (att.status === "running" && Date.now() >= att.endsAt) {
+    if (att.status === "running" && A.now() >= att.endsAt) {
       M.finishAttempt(att, true);
       return { redirect: "#/s/result/" + att.id };
     }
@@ -402,7 +402,7 @@
   function tick() {
     var att = cur(), el = document.getElementById("ex-time");
     if (!att || !el || att.status !== "running") return;
-    var left = Math.max(0, Math.round((att.endsAt - Date.now()) / 1000));
+    var left = Math.max(0, Math.round((att.endsAt - A.now()) / 1000));
     el.textContent = A.fmtDuration(left);
     var box = document.getElementById("ex-timer");
     box.classList.toggle("warn", left <= 300 && left > 60);
@@ -490,7 +490,7 @@
       body: '<p>You have answered <b>' + (att.questionIds.length - blank) + " of " + att.questionIds.length + "</b> questions.</p>" +
         (blank ? '<div class="callout warn mt">' + I("alert") + "<div>" + blank + " question" + (blank > 1 ? "s are" : " is") + " unanswered and will score zero.</div></div>" : "") +
         (flagged ? '<p class="small muted mt-sm">' + flagged + " flagged for review.</p>" : "") +
-        '<p class="small muted mt-sm">Time left: ' + A.fmtDuration(Math.max(0, (att.endsAt - Date.now()) / 1000)) + ". You cannot change your answers after submitting.</p>",
+        '<p class="small muted mt-sm">Time left: ' + A.fmtDuration(Math.max(0, (att.endsAt - A.now()) / 1000)) + ". You cannot change your answers after submitting.</p>",
       foot: [{ label: "Keep working" }, {
         label: "Submit paper", cls: "btn-primary", onClick: function () {
           var done = M.finishAttempt(cur(), false);

@@ -55,7 +55,7 @@
   }
 
   Dev.signIn = function (u) {
-    var now = Date.now(), cur = S().get("devices", recId(u.id)) || {};
+    var now = A.now(), cur = S().get("devices", recId(u.id)) || {};
     S().put("devices", Object.assign({}, cur, Dev.detect(), {
       id: recId(u.id), deviceId: Dev.id(), userId: u.id, role: u.role,
       firstSignInAt: cur.firstSignInAt || now, signedInAt: now, lastSeenAt: now, signedIn: true,
@@ -64,13 +64,13 @@
   };
   Dev.signOut = function (u) {
     var cur = u && S().get("devices", recId(u.id));
-    if (cur) S().put("devices", Object.assign({}, cur, { signedIn: false, signedOutAt: Date.now() }));
+    if (cur) S().put("devices", Object.assign({}, cur, { signedIn: false, signedOutAt: A.now() }));
   };
   /** Keep "last seen" fresh without flooding sync (at most every 10 minutes). */
   Dev.heartbeat = function (u) {
     var cur = S().get("devices", recId(u.id));
     if (!cur) { Dev.signIn(u); return; }
-    if (Date.now() - (cur.lastSeenAt || 0) > 10 * 60000) S().put("devices", Object.assign({}, cur, { lastSeenAt: Date.now(), signedIn: true }));
+    if (A.now() - (cur.lastSeenAt || 0) > 10 * 60000) S().put("devices", Object.assign({}, cur, { lastSeenAt: A.now(), signedIn: true }));
   };
   /** An admin signed this device out after this sign-in. */
   Dev.isRevoked = function (u) {
@@ -78,8 +78,8 @@
     return !!(rv && cur && rv.revokedAt > (cur.signedInAt || 0));
   };
   Dev.revoke = function (dev, byId) {
-    S().put("revocations", { id: "rv_" + dev.deviceId + "_" + dev.userId, deviceId: dev.deviceId, userId: dev.userId, revokedAt: Date.now(), by: byId });
-    S().put("devices", Object.assign({}, dev, { signedIn: false, signedOutAt: Date.now(), revoked: true }));
+    S().put("revocations", { id: "rv_" + dev.deviceId + "_" + dev.userId, deviceId: dev.deviceId, userId: dev.userId, revokedAt: A.now(), by: byId });
+    S().put("devices", Object.assign({}, dev, { signedIn: false, signedOutAt: A.now(), revoked: true }));
   };
 
   Dev.forUser = function (uid, all) {

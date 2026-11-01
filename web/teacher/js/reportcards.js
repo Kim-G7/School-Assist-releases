@@ -17,15 +17,20 @@
   var esc = A.esc, I = A.icon, M = A.M, UI = A.UI, S = function () { return A.Store; };
   var CFG = window.SCHOOL_CONFIG || {};
   var R = (A.Report = {});
-  var primary = function () { return A.edition === "teacher" && !!A.Primary; };
+  // School Assist Teacher's cards: in the Teacher edition, and in the School edition once the school has its classes
+  // (Form 1A and its class teacher, js/primary.js); before that the School edition's, from its subject classes
+  var primary = function () { return !!A.Primary && (!A.Primary.withStudents || A.Primary.homerooms().length > 0); };
   var desk = function () { return window.desktop && window.desktop.reports ? window.desktop : null; };
 
   /* ------------------------------------------------------------------ the format */
   R.SOURCES = [
-    ["subject", "Subject name"], ["raw", "Mark as entered (34 / 50)"], ["percent", "Mark (%)"], ["average", "Class average (%)"],
+    ["subject", "Subject name"], ["total", "Subject mark: the end of term total (e.g. 100)"], ["mark", "Mark: the student's end of term mark (e.g. 72)"],
+    ["avgmark", "Class average (marks)"], ["percent", "Mark (%)"], ["average", "Class average (%)"], ["raw", "Mark as entered (34 / 50)"],
     ["grade", "Grade"], ["comment", "Teacher's comment"], ["teacher", "Subject teacher"], ["position", "Position in the class"],
-    ["termwork", "Term work average (%)"], ["blank", "Blank (written by hand)"],
+    ["termwork", "Term work average (%)"], ["outof", "Subject mark: out of 100 (the marks as %)"], ["blank", "Blank (written by hand)"],
   ];
+  // the School edition's columns before 1.6.2: "Subject Mark" showed the student's own mark, as "Mark" did
+  var OLD_DEFAULT = "subject:Subject|raw:Subject Mark|average:Class Average|percent:Mark|grade:Grade|comment:Comment";
   R.SCALES = {
     template: { name: "Report card (A 90%, B 80%, C 60%, D)", grades: [["A", 90], ["B", 80], ["C", 60], ["D", 0]] },
     zimsec: { name: "ZIMSEC O Level (A 75%, B 65%, C 50%, D 40%, E 30%, U)", grades: [["A", 75], ["B", 65], ["C", 50], ["D", 40], ["E", 30], ["U", 0]] },
@@ -33,35 +38,51 @@
     primary: { name: "Primary descriptors (Excellent 80% … Needs support)", grades: [["Excellent", 80], ["Very good", 70], ["Good", 60], ["Satisfactory", 50], ["Fair", 40], ["Needs support", 0]] },
   };
   function defaults() {
-    var p = primary();
+    var p = primary(), form = p && A.Primary.isForm && A.Primary.isForm(); // School Assist Teacher in a high school (Forms)
     return {
       title: "REPORT CARD",
       colours: "template",
-      columns: [
-        { label: p ? "Learning area" : "Subject", source: "subject", on: true },
-        { label: p ? "Term work" : "Subject Mark", source: p ? "termwork" : "raw", on: true },
+      // the School edition: the subject mark is the end of term total (what the paper was out of), then the class's
+      // average and the student's own mark in the same marks
+      columns: p ? [
+        { label: form ? "Subject" : "Learning area", source: "subject", on: true },
+        // (2026-10-26) the end-of-term marks only: most teachers enter those for every student, not exercises and homework
+        { label: "Subject Mark", source: "outof", on: true },
         { label: "Class Average", source: "average", on: true },
-        { label: p ? "End of term" : "Mark", source: "percent", on: true },
-        { label: p ? "Achievement" : "Grade", source: "grade", on: true },
+        { label: "End of term", source: "percent", on: true },
+        { label: "Achievement", source: "grade", on: true },
+        { label: "Comment", source: "comment", on: true },
+        { label: "Teacher", source: "teacher", on: true },
+      ] : [
+        { label: "Subject", source: "subject", on: true },
+        { label: "Subject Mark", source: "total", on: true },
+        { label: "Class Average", source: "avgmark", on: true },
+        { label: "Mark", source: "mark", on: true },
+        { label: "Grade", source: "grade", on: true },
         { label: "Comment", source: "comment", on: true },
       ],
       rows: [],
-      grades: (p ? R.SCALES.primary : R.SCALES.template).grades.map(function (g) { return { grade: g[0], min: g[1] }; }),
+      grades: (form ? R.SCALES.zimsec : p ? R.SCALES.primary : R.SCALES.template).grades.map(function (g) { return { grade: g[0], min: g[1] }; }),
       comments: ["Excellent", "Very good", "Good", "Satisfactory", "Fair", "Poor effort", "Needs to work harder", "Has improved"],
       show: { studentNo: !p, term: true, average: true, position: p, teacherComment: p },
-      headLabel: "Head Comment",
+      headLabel: p ? "Head's signature" : "Head Comment",
       outOf: 100,
     };
   }
   /** The school's format: its own choices over the defaults. */
   R.format = function () {
     var d = defaults(), o = S().get("settings", "reportcard") || {};
+    var cols = o.columns && o.columns.length ? o.columns : d.columns;
+    // a format saved with the old columns: the new ones (a school that changed them keeps its own, but a "Subject
+    // Mark" column showing the student's mark now shows the end of term total)
+    if (o.columns && o.columns.map(function (x) { return x.source + ":" + x.label; }).join("|") === OLD_DEFAULT && !primary()) cols = d.columns.map(function (x, i) { return Object.assign({}, x, { on: o.columns[i].on !== false }); });
+    else cols = cols.map(function (x) { return x.source === "raw" && /^subject mark$/i.test(String(x.label || "").trim()) ? Object.assign({}, x, { source: "total" }) : x; });
     return {
       title: o.title || d.title, colours: o.colours || d.colours,
-      columns: o.columns && o.columns.length ? o.columns : d.columns, rows: o.rows || d.rows,
+      columns: cols, rows: o.rows || d.rows,
       grades: (o.grades && o.grades.length ? o.grades : d.grades).slice().sort(function (a, b) { return b.min - a.min; }),
       comments: o.comments && o.comments.length ? o.comments : d.comments,
-      show: Object.assign({}, d.show, o.show || {}), headLabel: o.headLabel || d.headLabel, outOf: Number(o.outOf) || d.outOf,
+      show: Object.assign({}, d.show, o.show || {}), headLabel: o.headLabel && !(primary() && o.headLabel === "Head Comment") ? o.headLabel : d.headLabel, outOf: Number(o.outOf) || d.outOf,
     };
   };
   R.grade = function (pct, f) {
@@ -78,8 +99,8 @@
   /** The term the school is in, and its year. */
   R.termNow = function () {
     if (primary()) { var c = A.Primary.conf(); return { term: c.term, year: String(c.year) }; }
-    var t = parseInt(String(CFG.term || "").replace(/\D/g, ""), 10), m = new Date().getMonth() + 1;
-    return { term: t >= 1 && t <= 3 ? t : m <= 4 ? 1 : m <= 8 ? 2 : 3, year: String(new Date().getFullYear()) };
+    var t = parseInt(String(CFG.term || "").replace(/\D/g, ""), 10), m = A.date().getMonth() + 1;
+    return { term: t >= 1 && t <= 3 ? t : m <= 4 ? 1 : m <= 8 ? 2 : 3, year: String(A.date().getFullYear()) };
   };
 
   /* ------------------------------------------------------------------ end-of-term marks */
@@ -121,27 +142,28 @@
   /** The comments teachers pick from (any other text can be typed too). */
   R.datalist = function () { return '<datalist id="rm-comments">' + R.format().comments.map(function (c) { return '<option value="' + esc(c) + '">'; }).join("") + "</datalist>"; };
   /** Above the marks: which term, and what the end-of-term mark is out of. */
-  R.entryBar = function (ctx, termHref) {
+  R.entryBar = function (ctx, termHref, ro) {
     var t = R.termNow(), n = R.classMarks(ctx);
     return '<div class="rm-bar"><b>' + I("award") + " End of term</b>" +
       '<select class="select sm" style="width:auto" data-change="rm-term" data-href="' + esc(termHref) + '" aria-label="Term">' + [1, 2, 3].map(function (x) { return '<option value="' + x + '"' + (x === Number(ctx.term) ? " selected" : "") + ">Term " + x + " " + esc(ctx.year) + (x === t.term && String(ctx.year) === t.year ? " (now)" : "") + "</option>"; }).join("") + "</select>" +
-      '<label class="row small" style="gap:6px">Marks out of <input class="input sm" style="width:70px" inputmode="numeric" value="' + R.outOf(ctx) + '" data-change="rm-outof"' + data(ctx) + ' aria-label="End of term marks out of"></label>' +
+      (ro ? '<span class="small">Marks out of <b>' + R.outOf(ctx) + "</b></span>" : '<label class="row small" style="gap:6px">Marks out of <input class="input sm" style="width:70px" inputmode="numeric" value="' + R.outOf(ctx) + '" data-change="rm-outof"' + data(ctx) + ' aria-label="End of term marks out of"></label>') +
       '<span class="muted small rm-count">' + countText(n) + "</span></div>";
   };
   var countText = function (n) { return n.count + " marked" + (n.average != null ? " · class average " + n.average + "%" : ""); };
   R.entryHead = function (ctx) { return '<th class="num rm-col">End of term<div class="tiny">/ ' + R.outOf(ctx) + '</div></th><th class="rm-col">Comment</th>'; };
-  R.entryCells = function (ctx, u) {
+  R.entryCells = function (ctx, u, ro) {
     var r = R.mark(ctx, u.id) || {}, p = R.pct(r);
+    if (ro) return '<td class="num rm-col tnum">' + (r.mark == null ? "—" : esc(r.mark)) + '</td><td class="rm-col small">' + esc(r.comment || "") + "</td>";
     return '<td class="num rm-col"><input class="cell" inputmode="decimal" value="' + (r.mark == null ? "" : esc(r.mark)) + '" data-change="rm-mark"' + data(ctx, u.id) + ' aria-label="' + esc(u.name) + ' end of term mark"' + (p != null ? ' title="' + p + "% · " + esc(R.grade(p)) + '"' : "") + "></td>" +
       '<td class="rm-col"><input class="input sm rm-comment" list="rm-comments" value="' + esc(r.comment || "") + '" placeholder="e.g. Good" data-change="rm-comment"' + data(ctx, u.id) + ' aria-label="' + esc(u.name) + ' comment"></td>';
   };
-  R.entryFoot = function (ctx) { var n = R.classMarks(ctx); return '<td class="num rm-col">' + UI.scoreBadge(n.average) + '</td><td class="rm-col"></td>'; };
+  R.entryFoot = function (ctx) { var n = R.classMarks(ctx); return '<td class="num rm-col rm-avg">' + UI.scoreBadge(n.average) + '</td><td class="rm-col"></td>'; };
   /** A whole table: student, end-of-term mark, %, grade, comment (School Assist Teacher's mark book). */
-  R.entryTable = function (ctx, students) {
+  R.entryTable = function (ctx, students, ro) {
     return R.datalist() + '<div class="table-wrap"><table class="table"><thead><tr><th>Pupil</th>' + R.entryHead(ctx) + '<th class="num">%</th><th>Grade</th></tr></thead><tbody>' +
       students.map(function (u) {
         var p = R.pct(R.mark(ctx, u.id));
-        return "<tr><td>" + esc(u.name) + "</td>" + R.entryCells(ctx, u) + '<td class="num">' + UI.scoreBadge(p) + "</td><td>" + esc(R.grade(p)) + "</td></tr>";
+        return "<tr><td>" + esc(u.name) + "</td>" + R.entryCells(ctx, u, ro) + '<td class="num rm-pct">' + UI.scoreBadge(p) + '</td><td class="rm-grade">' + esc(R.grade(p)) + "</td></tr>";
       }).join("") + '<tr><td class="bold">Class average</td>' + R.entryFoot(ctx) + "<td></td><td></td></tr></tbody></table></div>";
   };
   A.act["rm-mark"] = function (el) {
@@ -154,6 +176,27 @@
     if (cnt) cnt.textContent = countText(R.classMarks(ctx));
     UI.toast(v === "" ? "End of term mark cleared" : "End of term mark saved: " + p + "% (" + R.grade(p) + ")");
   };
+  /* As a mark is typed: its percentage and grade in its row (and the box's tip), and the class average, at once.
+     It is saved when the box is left (rm-mark), as before. */
+  document.addEventListener("input", function (e) {
+    var el = e.target;
+    if (!el.matches || !el.matches('input[data-change="rm-mark"]')) return;
+    var ctx = ctxOf(el), max = R.outOf(ctx), pctOf = function (box) {
+      var v = box.value.trim(), n = Number(v);
+      return v === "" || isNaN(n) || n < 0 || n > max ? null : Math.round(n / max * 100);
+    };
+    var p = pctOf(el), row = el.closest("tr"), bad = el.value.trim() !== "" && p == null;
+    el.classList.toggle("bad", bad);
+    el.title = p == null ? "" : p + "% · " + R.grade(p);
+    var pc = row && row.querySelector(".rm-pct"), gr = row && row.querySelector(".rm-grade");
+    if (pc) pc.innerHTML = UI.scoreBadge(p);
+    if (gr) gr.textContent = R.grade(p);
+    var table = el.closest("table"), avg = table && table.querySelector(".rm-avg");
+    if (avg) {
+      var all = Array.prototype.map.call(table.querySelectorAll('input[data-change="rm-mark"]'), pctOf).filter(function (x) { return x != null; });
+      avg.innerHTML = UI.scoreBadge(all.length ? Math.round(A.avg(all)) : null);
+    }
+  });
   A.act["rm-comment"] = function (el) {
     save(ctxOf(el), el.getAttribute("data-sid"), { comment: el.value.trim().slice(0, 200) });
     UI.toast("Comment saved");
@@ -174,7 +217,7 @@
   function homeClass(u) {
     if (primary()) {
       var c = S().find("classes", function (x) { return x.homeroom && (x.studentIds || []).indexOf(u.id) >= 0; });
-      return c ? { level: c.level || "", name: c.name, cls: c } : { level: u.level || "", name: u.level || "No class" };
+      return c ? { level: c.level || "", name: c.name, cls: c } : { level: u.level || "", name: M.studentHome(u) || u.level || "No class" };
     }
     return { level: u.level || "", name: M.studentHome(u) || u.level || "No class" };
   }
@@ -184,30 +227,82 @@
     var f = R.format(), home = homeClass(u), rows = [];
     // without an end-of-term mark, the grade comes from the term's work only when the card shows that work
     var useWork = f.columns.some(function (x) { return x.on !== false && x.source === "termwork"; });
-    if (primary()) {
-      var c = home.cls, sc = c && A.Primary.scores ? A.Primary.scores(c, t.year, t.term) : null, conf = A.Primary.conf();
-      conf.areas.forEach(function (area) {
-        if (!c) return;
-        var ctx = { year: t.year, term: t.term, classId: c.id, subject: area };
-        rows.push(row(ctx, u, area, M.user(c.teacherId), sc && sc.by[u.id] ? sc.by[u.id].area[area] : null, useWork));
+    if (primary() && (home.cls || !A.Primary.withStudents)) {
+      var c = home.cls, sc = c && A.Primary.scores ? A.Primary.scores(c, t.year, t.term) : null, who = A.Tracker ? A.Tracker.whoTeaches() : {};
+      if (c) classSubjects(c, t, sc).forEach(function (area) {
+        var ctx = { year: t.year, term: t.term, classId: c.id, subject: area }, ids = who[c.id + "|" + area] || [], tch = subjectTeacher(ctx, u, ids, c);
+        var r = row(ctx, u, area, tch, sc && sc.by[u.id] ? sc.by[u.id].area[area] : null, useWork), raw = sc && sc.by[u.id] && sc.by[u.id].raw ? sc.by[u.id].raw[area] : null;
+        r.classId = c.id; r.who = ids.length ? ids : tch ? [tch.id] : [];
+        // the term's work in the Mark book, as its marks: "34/45 (76%)"
+        if (raw) r.termworkText = num(raw.got) + "/" + num(raw.max) + " (" + r.termwork + "%)";
+        rows.push(r);
       });
+      // the School edition: a subject the student takes in a subject class, with an end-of-term mark there (its
+      // Gradebook) and none in their own class, is on the card too
+      if (A.Primary.withStudents) subjectClassRows(u, t, useWork, rows.map(function (r) { return r.subject; }), true).forEach(function (r) { rows.push(r); });
     } else {
-      M.classesForStudent(u.id).filter(function (c) { return !c.homeroom && c.subject; }).sort(function (a, b) { return a.subject.localeCompare(b.subject); }).forEach(function (c) {
-        var ctx = { year: t.year, term: t.term, classId: c.id, subject: c.subject };
-        rows.push(row(ctx, u, c.subject, M.user(c.teacherId), termWork(c, u), useWork));
-      });
+      rows = subjectClassRows(u, t, useWork, [], false);
     }
     f.rows.forEach(function (x) { if (x && x.label) rows.push({ subject: x.label, extra: true }); });
     var pcts = rows.map(function (r) { return r.final; }).filter(function (x) { return x != null; });
     var com = comments(u, t);
     return { u: u, t: t, home: home, rows: rows, average: pcts.length ? Math.round(A.avg(pcts)) : null, head: com.headComment || "", teacher: com.teacherComment || "" };
   };
+  /** A student's rows from their subject classes (the School edition's Gradebook), but for the subjects in `skip`;
+      marked: only those with an end-of-term mark. */
+  function subjectClassRows(u, t, useWork, skip, marked) {
+    var out = [];
+    skip = skip.slice();
+    M.classesForStudent(u.id).filter(function (c) { return c.subject; }).sort(function (a, b) { return a.subject.localeCompare(b.subject); }).forEach(function (c) {
+      var ctx = { year: t.year, term: t.term, classId: c.id, subject: c.subject };
+      if (skip.indexOf(c.subject) >= 0 || (marked && R.pct(R.mark(ctx, u.id)) == null)) return;
+      var r = row(ctx, u, c.subject, M.user(c.teacherId), termWork(c, u), useWork);
+      r.classId = c.id; r.who = c.teacherId ? [c.teacherId] : [];
+      out.push(r); skip.push(c.subject);
+    });
+    return out;
+  }
+  var num = function (x) { return String(Math.round(Number(x) * 10) / 10); };
+  /** The subjects on a class's cards (School Assist Teacher): those with an end-of-term mark in the class, those on its
+      timetable or taught there (the teachers' subjects and classes, js/tracker.js), and those with marked work in the Mark
+      book, in the school's order; a class with none of these yet, every learning area (before 1.6.2 every card listed all). */
+  var subjCache = null;
+  function classSubjects(c, t, sc) {
+    var k = t.year + "|" + t.term + "|" + c.id;
+    if (!subjCache) { subjCache = {}; setTimeout(function () { subjCache = null; }, 0); }
+    if (subjCache[k]) return subjCache[k];
+    var areas = A.Primary.conf().areas, got = {}, who = A.Tracker ? A.Tracker.whoTeaches() : {};
+    S().filter("reportmarks", function (r) { return r.classId === c.id && r.subject && r.studentId && r.mark != null && r.mark !== "" && String(r.year) === String(t.year) && Number(r.term) === Number(t.term); }).forEach(function (r) { got[r.subject] = 1; });
+    S().filter("timetable", function (s) { return s.classId === c.id && !s.scope && s.area; }).forEach(function (s) { got[s.area] = 1; });
+    Object.keys(who).forEach(function (key) { var i = key.indexOf("|"); if (key.slice(0, i) === c.id) got[key.slice(i + 1)] = 1; });
+    if (sc) Object.keys(sc.by).forEach(function (id) { Object.keys(sc.by[id].area || {}).forEach(function (a) { got[a] = 1; }); });
+    // only the subjects the class's form takes (Subjects by form, js/primary.js)
+    var list = areas.filter(function (a) { return got[a]; }).concat(Object.keys(got).filter(function (a) { return areas.indexOf(a) < 0; })).filter(function (a) { return A.Primary.offers(c, a); });
+    return (subjCache[k] = list.length ? list : A.Primary.levelAreas(c.level));
+  }
+  /** A subject's teacher on a card: the one who teaches it in the class (who entered the mark, if they teach it there),
+      else who entered the marks, else the timetable's teacher, else the class teacher. */
+  function subjectTeacher(ctx, u, ids, c) {
+    var rec = R.mark(ctx, u.id), by = rec && rec.teacherId;
+    if (by && ids.indexOf(by) >= 0) return M.user(by);
+    if (ids.length && M.user(ids[0])) return M.user(ids[0]);
+    if (by && M.user(by)) return M.user(by);
+    var other = R.classMarks(ctx).list.filter(function (r) { return r.teacherId && M.user(r.teacherId); })[0];
+    if (other) return M.user(other.teacherId);
+    var slot = S().filter("timetable", function (s) { return s.classId === c.id && s.area === ctx.subject && !s.scope; })[0];
+    return M.user((slot && slot.teacherId) || c.teacherId);
+  }
   function row(ctx, u, subject, teacher, termwork, useWork) {
     var rec = R.mark(ctx, u.id), p = R.pct(rec), cm = R.classMarks(ctx);
     // the grade and the overall average use the end-of-term mark; without one, the term's work (Gradebook or Mark book) if shown
     var final = p != null ? p : !useWork || termwork == null ? null : termwork;
-    return { subject: subject, raw: rec && rec.mark != null ? rec.mark + (Number(rec.outOf) !== 100 ? " / " + rec.outOf : "") : "", percent: p, average: cm.average,
+    // in marks: the end of term total (once the class has marks for it), the class's average, the student's own
+    var marks = cm.list.map(function (r) { return Number(r.mark); }).filter(function (x) { return !isNaN(x); });
+    var avgmark = marks.length ? Math.round(A.avg(marks) * 10) / 10 : null;
+    return { subject: subject, total: rec || cm.count ? Number((rec && rec.outOf) || R.outOf(ctx)) : "", mark: rec && rec.mark != null ? rec.mark : "", avgmark: avgmark,
+      raw: rec && rec.mark != null ? rec.mark + (Number(rec.outOf) !== 100 ? " / " + rec.outOf : "") : "", percent: p, average: cm.average,
       grade: R.grade(final), final: final, comment: (rec && rec.comment) || "", teacher: teacher ? teacher.name : "", position: p == null ? "" : cm.position(p) + " / " + cm.count,
+      outof: rec || cm.count ? 100 : "", // what the % columns beside it are out of
       termwork: termwork == null ? null : termwork };
   }
   /** The average of a student's marked tasks in a class (the Gradebook). */
@@ -246,16 +341,20 @@
     ".rc-foot{position:absolute;left:0;right:0;bottom:12mm;background:var(--band);padding:5mm 16mm 6mm}" +
     ".rc-scale{color:var(--scale);font-weight:700;font-size:10.5pt}.rc-scale b{margin-right:4mm}" +
     ".rc-avg{color:var(--label);font-size:10.5pt;margin-top:1.5mm}" +
-    ".rc-box{background:#fff;margin-top:4mm;padding:3mm 4.5mm;min-height:var(--bh)}.rc-box b{color:var(--label);font-size:11pt}.rc-box p{margin:1.5mm 0 0;font-size:10.5pt;white-space:pre-wrap}";
+    ".rc-box{background:#fff;margin-top:4mm;padding:3mm 4.5mm;min-height:var(--bh)}.rc-box b{color:var(--label);font-size:11pt}.rc-box p{margin:1.5mm 0 0;font-size:10.5pt;white-space:pre-wrap}" +
+    ".rc-sign img{display:block;max-height:15mm;max-width:70mm;margin-top:1.5mm}.rc-sign .rc-line{display:block;width:70mm;height:11mm;border-bottom:.6pt solid #8a8f98}";
 
   /** One A4 report card (a <section>), for the preview, printing and PDFs. */
   R.page = function (rep, f) {
     f = f || R.format();
     var b = A.Theme.get(), c = colours(f), u = rep.u, t = rep.t;
     var cols = f.columns.filter(function (x) { return x.on !== false; });
-    var who = [["Student", u.name], [primary() ? "Grade" : "Form", rep.home.level || "—"], ["Class", rep.home.name]];
-    if (f.show.studentNo && u.studentNo) who.push(["Student ID", u.studentNo]);
-    if (f.show.term) who.push(["Term", "Term " + t.term + " " + t.year]);
+    var who = [["Student", u.name], [primary() ? M.structure().levelLabel || "Grade" : "Form", rep.home.level || "—"], ["Class", rep.home.name]], more = [];
+    if (f.show.studentNo && u.studentNo) more.push(["Student ID", u.studentNo]);
+    if (f.show.term) more.push(["Term", "Term " + t.term + " " + t.year]);
+    // the position in the class, by the overall average: right under the Class (the second of two a line)
+    if (f.show.position && rep.position) more.splice(Math.min(1, more.length), 0, ["Position", rep.position]);
+    who = who.concat(more);
     var boxes = (f.show.teacherComment ? 1 : 0) + 1, n = Math.max(rep.rows.length, 1);
     var top = 56 + (1 + Math.ceil((who.length - 1) / 2)) * 8 + 6; // under the student's details: the name on its own line, then two a line
     var footH = 22 + boxes * 26, avail = 297 - 12 - footH - top - 14;
@@ -263,12 +362,13 @@
     // each column wide enough for its heading's longest word (e.g. "Achievement")
     var widths = cols.map(function (x) {
       var word = Math.max.apply(null, String(x.label || "").split(" ").map(function (w) { return w.length; }).concat([1]));
-      return Math.max(x.source === "subject" ? 2.4 : x.source === "comment" ? 2.2 : x.source === "teacher" ? 1.8 : 1, word * 0.13);
+      return Math.max(x.source === "subject" ? 2.4 : x.source === "comment" ? 2.2 : x.source === "teacher" ? 1.8 : x.source === "termwork" ? 1.6 : 1, word * 0.13);
     });
     var tw = widths.reduce(function (a, x) { return a + x; }, 0);
     var cell = function (r, x) {
       if (r.extra && x.source !== "subject") return "";
       var v = r[x.source];
+      if (x.source === "termwork" && r.termworkText) return r.termworkText;
       if (x.source === "percent" || x.source === "average" || x.source === "termwork") v = v == null ? "" : v + "%";
       return v == null ? "" : String(v);
     };
@@ -281,10 +381,13 @@
         return '<tr class="' + (r.extra ? "x" : "") + '">' + cols.map(function (x) { return '<td class="' + (x.source === "comment" ? "c" : "") + '">' + esc(cell(r, x)) + "</td>"; }).join("") + "</tr>";
       }).join("") : '<tr><td colspan="' + cols.length + '">No subjects</td></tr>') + "</tbody></table>" +
       '<footer class="rc-foot"><div class="rc-scale"><b>GRADING SCALE :</b>' + esc(R.scaleText(f)) + "</div>" +
-      (f.show.average && rep.average != null ? '<div class="rc-avg">Overall average: <b>' + rep.average + "%</b>" + (f.show.position && rep.position ? " · Position in class: <b>" + esc(rep.position) + "</b>" : "") + "</div>" : "") +
+      (f.show.average && rep.average != null ? '<div class="rc-avg">Overall average: <b>' + rep.average + "%</b></div>" : "") +
       (f.show.teacherComment ? '<div class="rc-box"><b>Class Teacher\'s Comment :</b><p>' + esc(rep.teacher) + "</p></div>" : "") +
-      '<div class="rc-box"><b>' + esc(f.headLabel) + " :</b><p>" + esc(rep.head) + "</p></div></footer></section>";
+      (primary() ? '<div class="rc-box rc-sign"><b>' + esc(f.headLabel) + " :</b>" + (R.headSignature() ? '<img src="' + esc(R.headSignature()) + '" alt="">' : '<span class="rc-line"></span>') + "</div>"
+        : '<div class="rc-box"><b>' + esc(f.headLabel) + " :</b><p>" + esc(rep.head) + "</p></div>") + "</footer></section>";
   };
+  /** The head's signature for the cards (Settings → Subjects and terms), a data URL, or "". */
+  R.headSignature = function () { return primary() ? (S().get("settings", "primary") || {}).headSig || "" : ""; };
   /** A whole HTML document for the PDF maker (desktop app) or the print window. */
   R.doc = function (pages) {
     return '<!doctype html><html><head><meta charset="utf-8"><title>Report card</title><style>html,body{margin:0;padding:0;background:#fff}' + R.CSS + "</style></head><body>" + pages.join("") + "</body></html>";
@@ -298,12 +401,15 @@
       var L = levels[level] = levels[level] || {};
       (L[keyId] = L[keyId] || { key: keyId, name: name, students: [] }).students.push(u);
     };
+    var placed = {};
     if (primary()) {
       S().filter("classes", function (c) { return c.homeroom; }).forEach(function (c) {
-        M.studentsOf(c).forEach(function (u) { add(c.level || "No grade", c.name, u, c.id); });
+        M.studentsOf(c).forEach(function (u) { placed[u.id] = 1; add(c.level || "No grade", c.name, u, c.id); });
       });
-    } else {
-      M.students().filter(function (u) { return u.status !== "pending" && u.status !== "declined" && !u.example; }).forEach(function (u) {
+    }
+    // the School edition: its students by their form and stream (those not in one of the school's classes yet, too)
+    if (!primary() || A.Primary.withStudents) {
+      M.students().filter(function (u) { return !placed[u.id] && !u.pupil && u.status !== "pending" && u.status !== "declined" && !u.example; }).forEach(function (u) {
         var name = M.studentHome(u) || "No class", lv = u.level || "No form";
         add(lv, name, u, "h_" + slug(name));
       });
@@ -317,7 +423,8 @@
   function classReports(students, t) {
     var reps = students.map(function (u) { return R.studentReport(u, t); });
     var ranked = reps.filter(function (r) { return r.average != null; }).sort(function (a, b) { return b.average - a.average; });
-    ranked.forEach(function (r, i) { r.position = (i && ranked[i - 1].average === r.average ? ranked[i - 1].posN : i + 1); r.posN = r.position; r.position = r.position + " / " + ranked.length; });
+    // out of everyone in the class (2026-10-26), those with no marks yet too; equal averages share a place
+    ranked.forEach(function (r, i) { r.posN = i && ranked[i - 1].average === r.average ? ranked[i - 1].posN : i + 1; r.position = r.posN + " out of " + students.length; });
     return reps;
   }
   var safe = function (s) { return String(s || "").replace(/[<>:"/\\|?*\x00-\x1f]+/g, " ").replace(/\s+/g, " ").trim().replace(/[. ]+$/, "") || "Report"; };
@@ -354,7 +461,7 @@
       '<button class="btn" data-act="rc-format">' + I("sliders") + "Format</button>" +
       (total ? '<button class="btn btn-primary" data-act="rc-make" data-scope="all">' + I("download") + (canPdf ? "Make every report card" : "Print every report card") + "</button>" : "") + "</div></div>" +
       '<div class="callout mb">' + I("info") + '<div class="small">' + (primary()
-        ? "Each class teacher enters every pupil's <b>end of term</b> mark and a <b>comment</b> for each learning area: in the Mark book, under End of term."
+        ? "Each learning area's teacher enters every pupil's <b>end of term</b> mark and a <b>comment</b>, in every class: in the Mark book, under End of term (the subjects each teacher teaches are set in Settings → People)."
         : "Each subject's teacher enters the <b>end of term</b> mark and a <b>comment</b> for every student: in the class's Gradebook, in the End of term and Comment columns.") +
       (canPdf ? " Saved in <b>Documents\\" + esc(R.folderName(t)) + "</b>." : "") + "</div></div>";
     if (!total) html += '<div class="card">' + UI.empty("users", "No students yet", primary() ? "Add the pupils to their classes first." : "Students appear here once they are approved.") + "</div>";
@@ -379,10 +486,10 @@
   }
   function studentsTable(g, c, t) {
     var reps = classReports(c.students, t);
-    return '<div class="table-wrap" style="margin:0 16px 14px"><table class="table"><thead><tr><th>Student</th><th>ID</th><th class="num">Average</th><th class="num">Position</th><th>' + esc(R.format().headLabel) + "</th><th></th></tr></thead><tbody>" +
+    return '<div class="table-wrap" style="margin:0 16px 14px"><table class="table"><thead><tr><th>Student</th><th>ID</th><th class="num">Average</th><th class="num">Position</th>' + (primary() ? "" : "<th>" + esc(R.format().headLabel) + "</th>") + "<th></th></tr></thead><tbody>" +
       reps.map(function (r) {
         return "<tr><td><b>" + esc(r.u.name) + '</b></td><td class="small">' + esc(r.u.studentNo || "") + '</td><td class="num">' + UI.scoreBadge(r.average) + '</td><td class="num tnum">' + esc(r.position || "—") + "</td>" +
-          '<td><input class="input sm" style="min-width:220px" value="' + esc(r.head) + '" placeholder="Type the head\'s comment" data-change="rc-head" data-sid="' + r.u.id + '" data-term="' + t.term + '" data-year="' + esc(t.year) + '" aria-label="Head\'s comment for ' + esc(r.u.name) + '"></td>' +
+          (primary() ? "" : '<td><input class="input sm" style="min-width:220px" value="' + esc(r.head) + '" placeholder="Type the head\'s comment" data-change="rc-head" data-sid="' + r.u.id + '" data-term="' + t.term + '" data-year="' + esc(t.year) + '" aria-label="Head\'s comment for ' + esc(r.u.name) + '"></td>') +
           '<td class="nowrap"><button class="btn btn-sm btn-ghost" data-act="rc-preview" data-sid="' + r.u.id + '">Preview</button> <button class="btn btn-sm" data-act="rc-make" data-scope="student" data-level="' + esc(g.level) + '" data-key="' + esc(c.key) + '" data-sid="' + r.u.id + '">' + I("download") + (desk() ? "PDF" : "Print") + "</button></td></tr>";
       }).join("") + "</tbody></table></div>";
   }
@@ -398,9 +505,61 @@
   A.act["rc-preview"] = function (el) {
     var u = M.user(el.getAttribute("data-sid")), t = pageTerm();
     var g = R.groups(), files = filesFor(g, t, u.id), rep = files.length ? files[0].rep : R.studentReport(u, t);
-    UI.modal({ title: u.name + ": report card", size: "wide", body: '<div class="rc-preview"><div class="rc-scale-box">' + R.page(rep) + "</div></div>", foot: [{ label: "Close" }] });
+    // the A4 card (210 mm, 794 px) scaled to the pop-up's width, at most 70%; Zoom: 70% (then it scrolls sideways too)
+    var fit = function (pv) {
+      var s = pv.classList.contains("zoomed") ? 0.7 : Math.max(0.3, Math.min(0.7, (pv.clientWidth - 24) / 794));
+      pv.style.setProperty("--rc-s", s.toFixed(3));
+    };
+    UI.modal({ title: u.name + ": report card", size: "wide", body: '<div class="rc-preview"><div class="rc-scale-box">' + R.page(rep) + "</div></div>",
+      onMount: function (m) { var pv = m.querySelector(".rc-preview"); fit(pv); UI.swipeLock(pv); },
+      foot: [{ label: "Zoom", icon: "expand", onClick: function (m) {
+        var pv = m.querySelector(".rc-preview"), on = pv.classList.toggle("zoomed");
+        fit(pv);
+        var b = m.querySelector('[data-mi="0"]'); if (b) b.innerHTML = I(on ? "shrink" : "expand") + (on ? "Fit" : "Zoom");
+        return false; // keep it open
+      } }, { label: "Close", cls: "btn-primary" }] });
   };
-  /** Make the PDFs (desktop app), or print (a browser). */
+  /** The end-of-term marks not in yet on these cards, by teacher: [{ teacher (a user, or null: nobody teaches it),
+      items: [{ subject, cls, missing, of }] }]. */
+  R.missingMarks = function (files) {
+    var by = {}, per = {};
+    files.forEach(function (x) {
+      x.rep.rows.forEach(function (r) {
+        if (r.extra) return;
+        var k = (r.classId || x.rep.home.name) + "|" + r.subject, c = r.classId && M.cls(r.classId);
+        var g = by[k] = by[k] || { subject: r.subject, cls: (c && c.name) || x.rep.home.name, missing: 0, of: 0, who: r.who || [] };
+        g.of++; if (r.percent == null) g.missing++;
+      });
+    });
+    Object.keys(by).forEach(function (k) { var g = by[k]; if (g.missing) (g.who.length ? g.who : [""]).forEach(function (id) { (per[id] = per[id] || []).push(g); }); });
+    return Object.keys(per).map(function (id) { return { teacher: id ? M.user(id) : null, items: per[id] }; })
+      .sort(function (a, b) { return !a.teacher ? 1 : !b.teacher ? -1 : a.teacher.name.localeCompare(b.teacher.name); });
+  };
+  var gapText = function (x) { return x.missing === x.of ? (x.of === 1 ? "no mark yet" : "no marks yet") : x.missing + " of " + x.of + " students without a mark"; };
+  /** Before the cards are made: whose marks aren't in (so they aren't made now and again later). */
+  function warnMissing(gaps, n, go) {
+    UI.modal({
+      title: "Some end-of-term marks aren't in yet", size: "wide", flush: true,
+      sub: "If the " + (n === 1 ? "report card is" : n + " report cards are") + " made now, " + (n === 1 ? "it has" : "they have") + " to be made again when these marks come in.",
+      body: '<div id="rc-gaps">' + gaps.map(function (g) {
+        return '<div class="list-row">' + (g.teacher ? A.avatar(g.teacher, "sm") : '<span class="avatar sm">?</span>') + '<div class="grow"><div class="title">' + esc(g.teacher ? g.teacher.name : "Nobody teaches these yet") + "</div>" +
+          g.items.map(function (x) { return '<div class="small"><b>' + esc(x.subject) + "</b> · " + esc(x.cls) + ': <span class="muted">' + esc(gapText(x)) + "</span></div>"; }).join("") + "</div></div>";
+      }).join("") + '<p class="small muted" style="padding:10px 20px">Remind them: each teacher gets a notice of their own, with the subjects and classes to finish.</p></div>',
+      foot: [{ label: "Cancel" }, { label: "Remind them", icon: "send", onClick: function () { remindMissing(gaps); } }, { label: "Make them anyway", cls: "btn-primary", onClick: function () { setTimeout(go, 60); } }],
+    });
+  }
+  function remindMissing(gaps) {
+    var me = M.me(), n = 0;
+    gaps.forEach(function (g) {
+      if (!g.teacher || !A.Notices || g.teacher.id === me.id) return; // (the admin making them knows their own)
+      var body = "Please enter the end-of-term marks for the report cards (" + (primary() ? "Mark book → End of term" : "the class's Gradebook, End of term") + "):\n" +
+        g.items.map(function (x) { return "• " + x.subject + ", " + x.cls + ": " + gapText(x); }).join("\n");
+      S().put("notices", { id: A.uid("nt"), type: "exam", title: "End-of-term marks needed", body: body.slice(0, 1500), at: null, to: [g.teacher.id], fromId: me.id, createdAt: A.now() });
+      n++;
+    });
+    UI.toast(n ? "Reminder sent to " + n + " teacher" + (n === 1 ? "" : "s") : "Nobody to remind: set who teaches these first", n ? "" : "bad");
+  }
+  /** Make the PDFs (desktop app), or print (a browser); first, a word about any end-of-term marks not in yet. */
   A.act["rc-make"] = function (el) {
     var t = pageTerm(), scope = el.getAttribute("data-scope"), level = el.getAttribute("data-level"), k = el.getAttribute("data-key"), sid = el.getAttribute("data-sid");
     var groups = R.groups().filter(function (g) { return scope === "all" || g.level === level; }).map(function (g) {
@@ -408,8 +567,9 @@
     });
     var files = filesFor(groups, t, scope === "student" ? sid : null), f = R.format();
     if (!files.length) { UI.toast("No students there", "bad"); return; }
-    if (!desk()) { R.print(files.map(function (x) { return R.page(x.rep, f); })); return; }
-    make(files, t, f);
+    var go = function () { if (!desk()) R.print(files.map(function (x) { return R.page(x.rep, f); })); else make(files, t, f); };
+    var gaps = R.missingMarks(files);
+    if (gaps.length) warnMissing(gaps, files.length, go); else go();
   };
   function make(files, t, f) {
     var box, done = 0, folder = R.folderName(t), cancelled = false, BATCH = 6;
@@ -442,15 +602,7 @@
     });
   }
   /** Print some report cards (a browser: choose Save as PDF). */
-  R.print = function (pages) {
-    var root = document.getElementById("print-root");
-    if (!root) { root = document.createElement("div"); root.id = "print-root"; document.body.appendChild(root); }
-    root.innerHTML = '<style>' + R.CSS + "</style>" + pages.join("");
-    document.body.classList.add("printing");
-    var done = function () { document.body.classList.remove("printing"); root.innerHTML = ""; window.removeEventListener("afterprint", done); };
-    window.addEventListener("afterprint", done);
-    setTimeout(function () { window.print(); setTimeout(function () { if (document.body.classList.contains("printing")) done(); }, 1000); }, 50);
-  };
+  R.print = function (pages) { UI.printSheet({ title: pages.length + " report card" + (pages.length === 1 ? "" : "s"), html: pages.join(""), css: R.CSS, pageWidth: 794 }); };
 
   /* ------------------------------------------------------------------ the format, changed by an admin */
   A.act["rc-format"] = function () {
@@ -473,7 +625,7 @@
         '<div class="field full"><span class="label">Grading scale</span><div class="row wrap" style="gap:6px;margin-bottom:6px">' + Object.keys(R.SCALES).map(function (k) { return '<button type="button" class="btn btn-sm btn-ghost" data-scale="' + k + '">' + esc(R.SCALES[k].name) + "</button>"; }).join("") + "</div>" +
         '<div id="rc-grades" class="stack" style="gap:6px">' + f.grades.map(gradeRow).join("") + '</div><button type="button" class="btn btn-sm mt-sm" id="rc-addgrade">' + I("plus") + "Add a grade</button></div>" +
         '<label class="field full"><span>Comments teachers pick from <span class="muted">(one per line; they can also type their own)</span></span><textarea class="input" name="comments" rows="4">' + esc(f.comments.join("\n")) + "</textarea></label>" +
-        '<label class="field"><span>Comment box heading</span><input class="input" name="headLabel" value="' + esc(f.headLabel) + '"></label>' +
+        '<label class="field"><span>' + (primary() ? "Signature box heading" : "Comment box heading") + '</span><input class="input" name="headLabel" value="' + esc(f.headLabel) + '"></label>' +
         '<label class="field"><span>New end-of-term marks are out of</span><input class="input" name="outOf" inputmode="numeric" value="' + f.outOf + '"></label>' +
         '<div class="field full"><span class="label">Also show</span><div class="row wrap" style="gap:14px">' +
         [["studentNo", "Student ID"], ["term", "Term and year"], ["average", "Overall average"], ["position", "Position in the class"], ["teacherComment", "Class teacher's comment box"]].map(function (s) {
@@ -495,7 +647,7 @@
         S().put("settings", { id: "reportcard", title: d.title.trim() || "REPORT CARD", colours: d.colours, columns: cols,
           rows: d.rows.split("\n").map(function (x) { return x.trim(); }).filter(Boolean).map(function (x) { return { label: x }; }),
           grades: grades, comments: d.comments.split("\n").map(function (x) { return x.trim(); }).filter(Boolean),
-          headLabel: d.headLabel.trim() || "Head Comment", outOf: Math.max(1, Math.min(1000, Number(d.outOf) || 100)), show: show });
+          headLabel: d.headLabel.trim() || defaults().headLabel, outOf: Math.max(1, Math.min(1000, Number(d.outOf) || 100)), show: show });
         UI.toast("Report card format saved");
         A.render();
       } }],

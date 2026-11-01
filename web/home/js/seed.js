@@ -130,13 +130,14 @@
   A.Seed = {
     run: function (Store, opts) {
       if (A.edition === "home") return A.Cloud ? null : runHome(Store); // online: everything comes from the cloud
-      if (A.edition === "teacher") return A.Primary ? A.Primary.seed(Store) : null; // the first teacher sets the school up
+      // the first teacher sets the school up; "Open the demo school" builds the demo (named by Grades, or by Forms)
+      if (A.edition === "teacher") return A.Primary ? (opts && opts.demo ? A.Primary.demo(Store, A.demoSystem) : A.Primary.seed(Store)) : null;
       // a new install starts empty, on the set-up page (js/setup.js); the demo school is built only when asked for:
       // "Open the demo school", Reset demo, ?demo=1, or school.config.js → demo: true (a computer for showing the app)
       var cfg = window.SCHOOL_CONFIG || {};
       if (!(opts && opts.demo) && !cfg.demo && !/[?&]demo=1\b/.test(location.search)) return null;
       Store.state.meta.demo = true; // the demo school: never sent to a school hub (js/setup.js)
-      var M = A.M, now = Date.now(), rand = A.rng(20260925);
+      var M = A.M, now = A.now(), rand = A.rng(20260925);
       var put = function (c, r) { return Store.put(c, r, { silent: true }); };
       var at = function (d, h) { return Math.min(now - 60000, A.startOfDay(now + d * DAY) + (h || 10) * 3600000 + Math.floor(rand() * 3600000)); };
       /** n = 0: today (or the next school day); n > 0: n school days ahead; n < 0: n school days back. */
@@ -479,7 +480,7 @@
   A.Seed.cloudStart = function (Store) { runHome(Store, true); };
 
   function runHome(Store, online) {
-    var CFG = window.SCHOOL_CONFIG || {}, H = CFG.home || {}, now = Date.now();
+    var CFG = window.SCHOOL_CONFIG || {}, H = CFG.home || {}, now = A.now();
     var sch = H.school || {}, ad = H.admin || {}, st = H.student || {};
     var put = function (c, r) { return Store.put(c, r, { silent: true }); };
     if (!Store.get("settings", "branding")) {

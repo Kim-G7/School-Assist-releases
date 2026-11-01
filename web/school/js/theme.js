@@ -104,7 +104,7 @@
       "--on-side": onSide,
       "--side-muted": alpha(onSide, 0.72),
       "--side-hover": alpha(onSide, 0.1),
-      "--side-active": alpha(onSide, 0.18),
+      "--side-active": alpha(onSide, 0.28), // where you are: plain to see (2026-10-23)
       "--accent": s,
       "--accent-soft": mix(surface, s, dark ? 0.2 : 0.16),
       "--accent-text": ensureContrast(s, surface, 4.5),
@@ -122,9 +122,13 @@
     var meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute("content", v["--brand-side"]);
     var fav = document.querySelector('link[rel="icon"]');
-    if (fav) fav.setAttribute("href", b.logo || "data:image/svg+xml;charset=utf-8," + encodeURIComponent(Theme.crestSVG(b)));
+    // (the school's icon the hub put in the page stays, until this device has the school's own logo)
+    if (fav && (b.logo || !/^school-icon\.png/.test(fav.getAttribute("href") || ""))) fav.setAttribute("href", b.logo || "data:image/svg+xml;charset=utf-8," + encodeURIComponent(Theme.crestSVG(b)));
     var touch = document.querySelector('link[rel="apple-touch-icon"]'), ai = A.edition !== "home" && A.Store && A.Store.state && A.Store.get("settings", "appicon");
     if (touch && ai && ai.png) touch.setAttribute("href", ai.png); // iPad and iPhone: Add to Home Screen
+    // the app for every school: added to a home screen, it is this school's app (its name and icon, from its hub)
+    var man = document.querySelector('link[rel="manifest"]'), base = A.multiHost && A.SchoolId && A.SchoolId.hubBase ? A.SchoolId.hubBase() : "";
+    if (man && base && A.SchoolId.id && A.SchoolId.id()) man.setAttribute("href", base + "/manifest.webmanifest");
     Theme.queueAppIcon();
   };
 
@@ -189,16 +193,25 @@
     b = b || Theme.get();
     var words = String(b.name || b.shortName).split(/\s+/).filter(function (w) { return /^[A-Z]/.test(w); });
     var ini = words.length > 1 ? words.slice(0, 3).map(function (w) { return w[0]; }).join("") : String(b.shortName || b.name).slice(0, 2);
+    // the abbreviation the school chose at set-up (ECS for Eagles Christian Group of Schools), when this is its own name
+    var sch = A.Store && A.Store.state ? A.Store.get("settings", "school") : null;
+    if (sch && /^[A-Za-z]{2,6}$/.test(sch.abbr || "") && (!sch.name || sch.name === b.name)) ini = sch.abbr;
     ini = A.esc(ini.toUpperCase());
     var fill = mix(b.primary, "#000000", 0.12), on = readableOn(fill);
     return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 108" role="img" aria-label="' + A.esc(b.name) + ' crest">' +
       '<path d="M50 4 93 17v37c0 26-19 43-43 50C26 97 7 80 7 54V17Z" fill="' + fill + '" stroke="' + b.secondary + '" stroke-width="5" stroke-linejoin="round"/>' +
       '<path d="M50 13 85 23.5V54c0 21-15 35-35 41.5C30 89 15 75 15 54V23.5Z" fill="none" stroke="' + on + '" stroke-opacity=".3" stroke-width="1.5"/>' +
-      '<text x="50" y="56" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-weight="800" font-size="' + (ini.length > 2 ? 23 : ini.length > 1 ? 29 : 36) + '" fill="' + on + '">' + ini + "</text>" +
+      '<text x="50" y="56" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-weight="800" font-size="' + (ini.length > 4 ? 15 : ini.length > 3 ? 19 : ini.length > 2 ? 23 : ini.length > 1 ? 29 : 36) + '" fill="' + on + '">' + ini + "</text>" +
       '<path d="M29 68q10.5-5 21 0 10.5-5 21 0v12q-10.5-5-21 0-10.5-5-21 0Z" fill="' + b.secondary + '"/>' +
       '<path d="M50 68v12" stroke="' + fill + '" stroke-width="1.6"/></svg>';
   };
 
+  /** The app's icon as the school has it (notifications, the joining page): the icon drawn from its logo (settings
+      "appicon"), its logo, else School Assist's. */
+  Theme.iconURL = function () {
+    var ai = A.edition !== "home" && A.Store && A.Store.state && A.Store.get("settings", "appicon");
+    return (ai && ai.png) || Theme.get().logo || "assets/icon.svg";
+  };
   Theme.logoHTML = function (cls) {
     var b = Theme.get();
     var inner = b.logo ? '<img src="' + A.esc(b.logo) + '" alt="' + A.esc(b.name) + ' logo">' : Theme.crestSVG(b);

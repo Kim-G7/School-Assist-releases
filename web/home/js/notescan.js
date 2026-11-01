@@ -345,7 +345,7 @@
         return A.Files.fromInput(file).then(function (fr) {
           // pages the admin set by hand stay as they are
           var cur = A.Store.get("materials", mat.id) || mat, pages = cur.topicPagesBy === "hand" && cur.topicPages ? cur.topicPages : scan.topicPages;
-          A.Store.patch("materials", mat.id, { tutorFileId: fr.id, tutorTopics: A.M.tutorTopicsOf(pages, scan.cards), tutorSections: scan.sections.length, tutorCards: scan.cards.length, tutorAt: Date.now(),
+          A.Store.patch("materials", mat.id, { tutorFileId: fr.id, tutorTopics: A.M.tutorTopicsOf(pages, scan.cards), tutorSections: scan.sections.length, tutorCards: scan.cards.length, tutorAt: A.now(),
             topicPages: pages, topicPagesBy: cur.topicPagesBy === "hand" ? "hand" : "scan", pageCount: scan.pages, tutorCardTopics: A.M.tutorTopicsOf({}, scan.cards) });
           return scan;
         });

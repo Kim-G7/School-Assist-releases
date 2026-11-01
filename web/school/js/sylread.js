@@ -18,7 +18,7 @@
   var RIGHT = /^(supplement|extended|notes and guidance|notes and examples|guidance|notes)$/i;
   // "1 Enzymes", "Theme 1: Population and settlement", "C1 Number" / "E1 Number" (Core and Extended),
   // "B1 …", "C1 …", "P1 …" (the Biology, Chemistry and Physics sections of a combined science)
-  var TOPIC = /^(?:(?:[Tt]opic|[Tt]heme|[Uu]nit|[Ss]ection)\s+)?([A-Z]?)(\d{1,2})(?:[.:)]|\s*[–—-])?\s+(\S.{2,110})$/;
+  var TOPIC = /^(?:(?:[Tt]opic|TOPIC|[Tt]heme|THEME|[Uu]nit|UNIT|[Ss]ection|SECTION)\s+)?([A-Z]?)(\d{1,2})(?:[.:)]|\s*[–—-])?\s+(\S.{2,110})$/;
   var PART = /^([A-Z]?)(\d{1,2})\.(\d{1,2})\.?\s+([A-Z(].{1,140})$/; // not "6.02 × 10²³"
   var SUB = /^(?:[A-Z]?\d{1,2}\.\d{1,2}\.\d{1,2})\.?\s+(\S.*)$/;
   var SECTIONS = { B: "Biology", C: "Chemistry", P: "Physics" };
@@ -301,7 +301,7 @@
         if (!result) { UI.toast("Choose the syllabus PDF first", "bad"); return false; }
         var addNew = box.querySelector("#sr-new") ? box.querySelector("#sr-new").checked : false;
         var topics = merge(syl, result, addNew);
-        S().patch("syllabi", syl.id, { topics: topics, outlineAt: Date.now(), outlineFrom: result.title || "" });
+        S().patch("syllabi", syl.id, { topics: topics, outlineAt: A.now(), outlineFrom: result.title || "" });
         var n = topics.filter(function (t) { return t.outline && t.outline.length; }).length;
         UI.toast("What to study is now shown for " + n + " topic" + (n === 1 ? "" : "s"));
         A.render();

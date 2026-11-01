@@ -41,9 +41,12 @@
   M.classesForTeacher = function (tid) {
     // online, every admin looks after the classes of subjects that have no teacher of their own
     var u = A.Cloud && S().get("users", tid), pool = u && u.isAdmin && tid !== "t_admin";
-    return S().filter("classes", function (c) { return c.teacherId === tid || (pool && c.teacherId === "t_admin"); }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+    // (a school's own classes, homeroom: Form 1A and its class teacher, are My class and View other classes: js/primary.js)
+    return S().filter("classes", function (c) { return !c.homeroom && (c.teacherId === tid || (pool && c.teacherId === "t_admin")); }).sort(function (a, b) { return a.name.localeCompare(b.name); });
   };
-  M.classesForStudent = function (sid) { return S().filter("classes", function (c) { return (c.studentIds || []).indexOf(sid) >= 0; }); };
+  /** A student's subject classes (not their own class, Form 1A: M.homeroomOf). */
+  M.classesForStudent = function (sid) { return S().filter("classes", function (c) { return !c.homeroom && (c.studentIds || []).indexOf(sid) >= 0; }); };
+  M.homeroomOf = function (sid) { return S().find("classes", function (c) { return c.homeroom && (c.studentIds || []).indexOf(sid) >= 0; }) || null; };
   M.studentsOf = function (cls) { return (cls.studentIds || []).map(M.user).filter(Boolean).sort(byName); };
   M.className = function (c) { return c ? c.name + " · " + c.subject : "—"; };
 
@@ -82,14 +85,14 @@
   M.credential = function (uid) { return S().get("credentials", "cr_" + uid); };
   M.hasPassword = function (uid) { var c = M.credential(uid), u = M.user(uid); return !!(c && (c.hash || c.password)) || !!(u && u.pin != null && u.pin !== ""); };
   M.setPassword = function (uid, pw, by) {
-    var rec = S().put("credentials", { id: "cr_" + uid, userId: uid, hash: A.Secret.hash(pw), setAt: Date.now(), setBy: by || uid });
+    var rec = S().put("credentials", { id: "cr_" + uid, userId: uid, hash: A.Secret.hash(pw), setAt: A.now(), setBy: by || uid });
     var u = S().get("users", uid);
     if (u && u.pin != null) { var plain = Object.assign({}, u); delete plain.pin; S().put("users", plain); } // a PIN from before 1.6
     return rec;
   };
   M.setPin = M.setPassword;
   M.resetPassword = function (uid, by) {
-    return S().put("credentials", { id: "cr_" + uid, userId: uid, hash: null, resetAt: Date.now(), setBy: by });
+    return S().put("credentials", { id: "cr_" + uid, userId: uid, hash: null, resetAt: A.now(), setBy: by });
   };
   /** Does the password or PIN match? true or false; null when this device doesn't hold that person's record (ask the hub). */
   M.checkSecret = function (uid, secret) {
@@ -297,19 +300,19 @@
   M.acknowledge = function (tid, sid) {
     var cur = M.submission(tid, sid) || { id: subId(tid, sid), taskId: tid, studentId: sid };
     if (cur.receivedAt) return cur;
-    cur.receivedAt = Date.now();
+    cur.receivedAt = A.now();
     return S().put("submissions", Object.assign({}, cur));
   };
   M.submit = function (tid, sid, fields) {
     var cur = M.submission(tid, sid) || { id: subId(tid, sid), taskId: tid, studentId: sid };
-    return S().put("submissions", Object.assign({}, cur, { receivedAt: cur.receivedAt || Date.now(), submittedAt: Date.now() }, fields));
+    return S().put("submissions", Object.assign({}, cur, { receivedAt: cur.receivedAt || A.now(), submittedAt: A.now() }, fields));
   };
   M.setMark = function (tid, sid, score, feedback) {
     var id = "mk_" + tid + "_" + sid, cur = S().get("marks", id) || { id: id, taskId: tid, studentId: sid };
     var rec = Object.assign({}, cur);
     if (score !== undefined) rec.score = score === "" || score == null ? null : Number(score);
     if (feedback !== undefined) rec.feedback = feedback;
-    rec.markedAt = Date.now();
+    rec.markedAt = A.now();
     return S().put("marks", rec);
   };
   /** Teacher mark wins; otherwise an online test's auto-score is scaled to the task's max. */
@@ -324,7 +327,7 @@
     var sub = M.submission(task.id, sid), sc = M.effectiveScore(task, sid);
     if (sc) return { key: "graded", label: "Graded", tone: "good" };
     if (sub && sub.submittedAt) return { key: "submitted", label: task.kind === "presentation" ? "Ready" : "Submitted", tone: "brand" };
-    var overdue = task.dueAt && task.dueAt < Date.now();
+    var overdue = task.dueAt && task.dueAt < A.now();
     if (sub && sub.receivedAt) return overdue ? { key: "overdue", label: "Overdue", tone: "bad" } : { key: "received", label: "Received", tone: "" };
     return overdue ? { key: "overdue", label: "Not received", tone: "bad" } : { key: "new", label: "New", tone: "accent" };
   };
@@ -342,8 +345,8 @@
     var out = [], n = M.taskCounts(task), mark = M.needsMarking(task);
     if (M.canSubmit(task) && n.total && n.submitted === n.total) out.push('<span class="badge good">' + A.icon("checkCircle") + "All submitted</span>");
     if (mark) out.push('<span class="badge serious">' + A.icon("pen") + "Needs marking · " + mark + "</span>");
-    if (M.canSubmit(task) && task.dueAt && Date.now() >= task.dueAt - 5 * 60000 && n.submitted < n.total) {
-      out.push('<span class="badge bad">' + A.icon("alert") + (Date.now() < task.dueAt ? "Due now" : "Not submitted") + " · " + (n.total - n.submitted) + "</span>");
+    if (M.canSubmit(task) && task.dueAt && A.now() >= task.dueAt - 5 * 60000 && n.submitted < n.total) {
+      out.push('<span class="badge bad">' + A.icon("alert") + (A.now() < task.dueAt ? "Due now" : "Not submitted") + " · " + (n.total - n.submitted) + "</span>");
     }
     return out.join("");
   };
@@ -365,7 +368,7 @@
   M.DAY_END = "16:00";
   M.isSchoolDay = function (ts) { var d = new Date(ts).getDay(); return d >= 1 && d <= 5; };
   M.schoolDays = function (from, count) {
-    var out = [], d = A.startOfDay(from == null ? Date.now() : from);
+    var out = [], d = A.startOfDay(from == null ? A.now() : from);
     while (out.length < count) { if (M.isSchoolDay(d)) out.push(d); d = A.startOfDay(d + 36 * 3600000); }
     return out;
   };
@@ -393,7 +396,7 @@
   M.isRead = function (mid, sid) { return !!S().get("receipts", "rc_" + mid + "_" + sid); };
   M.markRead = function (mid, sid) {
     if (M.isRead(mid, sid)) return;
-    S().put("receipts", { id: "rc_" + mid + "_" + sid, messageId: mid, studentId: sid, readAt: Date.now() });
+    S().put("receipts", { id: "rc_" + mid + "_" + sid, messageId: mid, studentId: sid, readAt: A.now() });
   };
   M.unreadCount = function (sid) { return M.messagesForStudent(sid).filter(function (m) { return !M.isRead(m.id, sid); }).length; };
   M.recipients = function (msg) {
@@ -457,11 +460,11 @@
   };
   M.markNotesRead = function (sid, sylId, tid) {
     var cur = M.topicProgress(sid, tid) || { id: prId(sid, tid), studentId: sid, syllabusId: sylId, topicId: tid };
-    return S().put("progress", Object.assign({}, cur, { notesReadAt: cur.notesReadAt || Date.now(), lastStudiedAt: Date.now() }));
+    return S().put("progress", Object.assign({}, cur, { notesReadAt: cur.notesReadAt || A.now(), lastStudiedAt: A.now() }));
   };
   M.touchTopic = function (sid, sylId, tid) {
     var cur = M.topicProgress(sid, tid) || { id: prId(sid, tid), studentId: sid, syllabusId: sylId, topicId: tid };
-    return S().put("progress", Object.assign({}, cur, { lastStudiedAt: Date.now() }));
+    return S().put("progress", Object.assign({}, cur, { lastStudiedAt: A.now() }));
   };
   M.recordPractice = function (sid, sylId, tid, pct) {
     var cur = M.topicProgress(sid, tid) || { id: prId(sid, tid), studentId: sid, syllabusId: sylId, topicId: tid };
@@ -469,9 +472,9 @@
       practiceAttempts: (cur.practiceAttempts || 0) + 1,
       practiceLast: pct,
       practiceBest: Math.max(cur.practiceBest || 0, pct),
-      lastStudiedAt: Date.now(),
+      lastStudiedAt: A.now(),
     });
-    if (rec.practiceBest >= EXAM.topicMasteryMark && !rec.completedAt) rec.completedAt = Date.now();
+    if (rec.practiceBest >= EXAM.topicMasteryMark && !rec.completedAt) rec.completedAt = A.now();
     return S().put("progress", rec);
   };
   /** Syllabus coverage for one student. */
@@ -549,7 +552,7 @@
   };
   M.startAttempt = function (att) {
     if (att.status !== "ready") return att;
-    return S().put("attempts", Object.assign({}, att, { status: "running", startedAt: Date.now(), endsAt: Date.now() + att.durationSec * 1000 }));
+    return S().put("attempts", Object.assign({}, att, { status: "running", startedAt: A.now(), endsAt: A.now() + att.durationSec * 1000 }));
   };
   M.scoreAttempt = function (att) {
     var syl = M.syllabus(att.syllabusId), idx = syl ? M.questionIndex(syl) : {}, got = 0, total = 0, pending = 0, perTopic = {};
@@ -565,7 +568,7 @@
     return { got: got, total: total, pct: pct, grade: M.gradeFor(pct, syl), perTopic: perTopic, pending: pending, passed: pct >= EXAM.passMark };
   };
   M.finishAttempt = function (att, auto) {
-    var done = Object.assign({}, att, { status: "done", finishedAt: Date.now(), autoSubmitted: !!auto });
+    var done = Object.assign({}, att, { status: "done", finishedAt: A.now(), autoSubmitted: !!auto });
     done.timeUsedSec = Math.min(att.durationSec, Math.round((done.finishedAt - (att.startedAt || done.finishedAt)) / 1000));
     done.result = M.scoreAttempt(done);
     S().put("attempts", done);

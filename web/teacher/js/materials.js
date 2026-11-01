@@ -9,7 +9,7 @@
   /** neutralPast: for teachers, or work already handed in, a past date is not "overdue". */
   A.dueBadge = function (ts, neutralPast) {
     var d = A.dueLabel(ts);
-    if (neutralPast && ts && ts < Date.now()) d = { text: "Was due " + A.fmtDateTime(ts), tone: "" };
+    if (neutralPast && ts && ts < A.now()) d = { text: "Was due " + A.fmtDateTime(ts), tone: "" };
     return '<span class="badge ' + d.tone + '">' + I("clock") + esc(d.text) + "</span>";
   };
 
@@ -109,7 +109,7 @@
         : '<button class="btn btn-sm btn-ghost" data-act="add-ms" data-paper="' + mat.id + '">' + I("plus") + "Marking scheme</button>";
     } else if (me) {
       // students sit the paper in the exam room; its marking scheme opens once they have finished
-      var sit = M.paperSitting(me.id, mat.id), running = sit && sit.startedAt && !sit.doneAt && Date.now() < sit.endsAt;
+      var sit = M.paperSitting(me.id, mat.id), running = sit && sit.startedAt && !sit.doneAt && A.now() < sit.endsAt;
       if (sit && sit.doneAt) out.meta += '<span class="sep"></span><span>' + (M.paperScoreText(sit) ? "Your mark " + M.paperScoreText(sit) : "Sat " + A.fmtDate(sit.doneAt)) + "</span>";
       out.button = '<button class="btn btn-sm' + (running ? " btn-danger" : sit && sit.doneAt ? "" : " btn-primary") + '" data-act="goto" data-href="#/s/sit/' + mat.id + '">' + I("clock") + (running ? "Continue" : sit && sit.doneAt ? "Sit again" : "Sit it") + "</button>" +
         (ms && M.canSeeMarkScheme(ms, me.id) ? '<button class="btn btn-sm" data-act="open-mat" data-id="' + ms.id + '">' + I("key") + "Marking scheme</button>" : "");

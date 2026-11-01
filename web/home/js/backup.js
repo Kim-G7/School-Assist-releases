@@ -66,7 +66,7 @@
         (split && st.keyChangedAt ? "<b>The school's key is now in three parts.</b> Write down parts 1 and 2: the old recovery key doesn't open the new backups. " : split ? "<b>Write down parts 1 and 2 of the school's key.</b> " : "<b>Write down the recovery key.</b> ") +
         'Without them the backup can\'t be opened. Keep them on paper, in two different safe places.</div><button class="btn btn-sm" data-act="bk-key">Show the key</button></div>' : "") +
       '<dl class="kv mt"><dt>Last backup</dt><dd>' + esc(when(st.lastOkAt)) + (st.lastOkAt && last.at ? ' <span class="muted small">(' + lastText(last) + ")</span>" : "") + "</dd>" +
-      "<dt>Next backup</dt><dd>" + esc(st.nextAt && st.nextAt > Date.now() + 60000 ? when(st.nextAt) : "Now, while this computer is on") + "</dd>" +
+      "<dt>Next backup</dt><dd>" + esc(st.nextAt && st.nextAt > A.now() + 60000 ? when(st.nextAt) : "Now, while this computer is on") + "</dd>" +
       "<dt>Online</dt><dd>" + (t.archives ? t.archives + " sealed backup" + (t.archives === 1 ? "" : "s") + ", " + mb(t.bytes) : t.records != null ? t.records + " records, " + t.files + " files, " + mb(t.bytes) : "—") +
         (st.waiting ? ' <span class="badge warn">' + st.waiting + " waiting to go online</span>" : "") + "</dd>" +
       "<dt>On this computer</dt><dd>" + (st.localCopies ? st.localCopies + " backup file" + (st.localCopies === 1 ? "" : "s") + ' <button class="btn btn-sm btn-ghost" data-act="bk-folder">' + I("external") + "Open the folder</button>" : '<span class="muted">none yet</span>') + "</dd>" +

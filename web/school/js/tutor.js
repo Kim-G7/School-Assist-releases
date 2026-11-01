@@ -103,11 +103,11 @@
     var cur = M.topicProgress(me.id, t.id) || { id: "pr_" + me.id + "_" + t.id, studentId: me.id, syllabusId: syl.id, topicId: t.id };
     var tu = JSON.parse(JSON.stringify(cur.tutor || { read: {}, cards: {}, check: null }));
     fn(tu);
-    return S().put("progress", Object.assign({}, cur, { tutor: tu, lastStudiedAt: Date.now() }));
+    return S().put("progress", Object.assign({}, cur, { tutor: tu, lastStudiedAt: A.now() }));
   }
   /** Cards due now (seen before and their time has come). */
   M.cardsDue = function (sid, sylId) {
-    var now = Date.now(), n = 0;
+    var now = A.now(), n = 0;
     S().filter("progress", function (r) { return r.studentId === sid && (!sylId || r.syllabusId === sylId) && r.tutor; }).forEach(function (r) {
       Object.keys(r.tutor.cards || {}).forEach(function (k) { if ((r.tutor.cards[k].d || 0) <= now) n++; });
     });
@@ -242,7 +242,7 @@
   A.act["tutor-go"] = function (el) { var i = Number(el.getAttribute("data-i")); if (i < 0 || i >= T.steps.length) return; T.i = i; T.flash = null; T.quiz = null; draw(); };
   A.act["tutor-read"] = function () {
     var st = T.steps[T.i];
-    saveTutor(T.me, T.syl, T.t, function (tu) { tu.read[st.type === "topic" || st.type === "study" ? st.type : st.x.key] = Date.now(); });
+    saveTutor(T.me, T.syl, T.t, function (tu) { tu.read[st.type === "topic" || st.type === "study" ? st.type : st.x.key] = A.now(); });
     // everything read, and no quiz to pass: the topic counts as revised
     var tu = tutorState(T.me, T.t);
     if (!T.steps.some(function (s) { return s.type === "check"; }) && T.steps.filter(function (s) { return s.type === "read" || s.type === "topic" || s.type === "study"; }).every(function (s) { return stepDone(s, tu); })) M.markNotesRead(T.me.id, T.syl.id, T.t.id);
@@ -252,7 +252,7 @@
 
   /* ------------------------------------------------------------ flashcards */
   function queue() {
-    var tu = tutorState(T.me, T.t), now = Date.now();
+    var tu = tutorState(T.me, T.t), now = A.now();
     var due = [], fresh = [], later = [];
     T.data.cards.forEach(function (x) { var st = tu.cards[x.key]; if (!st) fresh.push(x); else if ((st.d || 0) <= now) due.push(x); else later.push(x); });
     return { list: due.concat(fresh), later: later.length, total: T.data.cards.length };
@@ -281,7 +281,7 @@
       var st = tu.cards[x.key] || { b: 0, n: 0 };
       st.n = (st.n || 0) + 1;
       st.b = v === 2 ? Math.min(BOXES.length - 1, (st.b || 0) + 1) : v === 1 ? Math.max(1, st.b || 0) : 0;
-      st.d = v === 0 ? Date.now() + 60000 : Date.now() + BOXES[st.b] * DAY; // a card she didn't know comes back in this session
+      st.d = v === 0 ? A.now() + 60000 : A.now() + BOXES[st.b] * DAY; // a card she didn't know comes back in this session
       tu.cards[x.key] = st;
     });
     if (v === 0) F.list.push(x); // again at the end
@@ -349,10 +349,10 @@
       q.ok = q.type === "choice" ? q.given === q.answer : same(q.given, q.answer);
     });
     Q.right = Q.qs.filter(function (q) { return q.ok; }).length; Q.pct = Math.round(Q.right / Q.qs.length * 100); Q.done = true;
-    saveTutor(T.me, T.syl, T.t, function (tu) { tu.check = { best: Math.max(tu.check ? tu.check.best : 0, Q.pct), last: Q.pct, at: Date.now() }; });
+    saveTutor(T.me, T.syl, T.t, function (tu) { tu.check = { best: Math.max(tu.check ? tu.check.best : 0, Q.pct), last: Q.pct, at: A.now() }; });
     M.recordPractice(T.me.id, T.syl.id, T.t.id, Q.pct); // passing completes the topic, like practice questions
     // cards answered wrongly come back soon
-    saveTutor(T.me, T.syl, T.t, function (tu) { Q.qs.forEach(function (q) { if (!q.ok) tu.cards[q.x.key] = Object.assign({}, tu.cards[q.x.key] || { n: 1 }, { b: 0, d: Date.now() }); }); });
+    saveTutor(T.me, T.syl, T.t, function (tu) { Q.qs.forEach(function (q) { if (!q.ok) tu.cards[q.x.key] = Object.assign({}, tu.cards[q.x.key] || { n: 1 }, { b: 0, d: A.now() }); }); });
     var keep = T.quiz; draw(); T.quiz = keep;
   };
   A.act["tutor-retry"] = function () { T.quiz = null; drawStep(); };
@@ -368,7 +368,7 @@
         var topics = syl.topics.filter(function (t) { return M.tutorMaterials(me.id, syl.id, t.id).length; });
         Promise.all(topics.map(function (t) { return gather(me, syl, t).then(function (d) { return { t: t, d: d }; }); })).then(function (list) {
           var root = document.getElementById("fc-root"); if (!root) return;
-          var now = Date.now(), rows = list.map(function (x) {
+          var now = A.now(), rows = list.map(function (x) {
             var tu = tutorState(me, x.t), due = 0, fresh = 0;
             x.d.cards.forEach(function (c) { var st = tu.cards[c.key]; if (!st) fresh++; else if ((st.d || 0) <= now) due++; });
             return { t: x.t, n: x.d.cards.length, due: due, fresh: fresh };

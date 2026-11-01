@@ -7,8 +7,11 @@
  *    (js/licence-key.js). Changing a single letter of a key, or writing one by hand, makes it invalid.
  *    The check runs in plain JavaScript, so it works offline and on any device, including tablets that
  *    open the app from the hub over http:// (where the browser's own crypto is switched off).
- *  - Plans: Standard (US$2,000 a term) is School Assist as it is; Premium (US$4,000 a term) adds the
- *    Premium features below. Premium features stay off until the school's admin turns them on.
+ *  - Plans: Standard is School Assist as it is; Premium adds the Premium features below. Each is paid a term
+ *    or a year (12 months, holidays included): the key and each renewal say which (period). The app shows no
+ *    prices: Golden Technologies gives schools its price list on paper. Premium features stay off until the
+ *    school's admin turns them on.
+ *  - School Assist Teacher: vacation mode (js/vacation.js) also comes with Standard paid a year (yearly: true).
  *  - When an update brings a new feature, the admins hear about it in their notifications: on Premium as
  *    something they can turn on, on Standard as news of what Premium offers.
  *  - A school keeps ONE key. Each payment extends it with a renewal (scripts/licence.cjs renew): a short signed
@@ -29,15 +32,15 @@
   var CFG = window.SCHOOL_CONFIG || {};
   var GRACE_DAYS = 30, DAY = 86400000;
 
-  var PLANS = {
-    standard: { name: "Standard", fee: "US$2,000 a term" },
-    premium: { name: "Premium", fee: "US$4,000 a term" },
-  };
-  /** Premium features. `built: false` ones are on the way; an update that builds one flips it to true. */
+  var PLANS = { standard: { name: "Standard" }, premium: { name: "Premium" } };
+  var TEACHER = A.edition === "teacher";
+  /** Premium features. `built: false` ones are on the way; an update that builds one flips it to true.
+   *  yearly: Standard paid a year has it too. school: School Assist only (not listed in School Assist Teacher). */
   var FEATURES = [
-    { id: "ai-marking", name: "AI marking", built: true, about: "Written answers in practice papers are marked against the marking scheme, with a line of feedback for the student." },
+    { id: "ai-marking", name: "AI marking", built: true, school: true, about: "Written answers in practice papers are marked against the marking scheme, with a line of feedback for the student." },
     { id: "consultation", name: "Consultation mode", built: false },
-    { id: "vacation", name: "Vacation mode", built: false },
+    { id: "vacation", name: "Vacation mode", built: A.edition !== "home", yearly: TEACHER, // (the School edition too since 2026-10-28)
+      about: "Teachers keep working in the holidays (lessons, marks, plans) in a space of their own on their device, kept apart from the school's records so nothing is doubled." },
     { id: "parent-monitor", name: "Parent and student monitoring", built: false },
   ];
 
@@ -173,6 +176,13 @@
 
   /* ------------------------------------------------------------------ the school's licence */
   var Lic = (A.Licence = { PLANS: PLANS, FEATURES: FEATURES, read: read, Ed: Ed });
+  /** A key checked whatever its edition (the app for every school becomes the key's edition): as read(), and data.ed. */
+  Lic.readAny = function (key) {
+    var r = read(key);
+    return r.ok || !r.data || !/^This key is for /.test(r.error || "") ? r : { ok: true, data: r.data, key: String(key || "").replace(/\s+/g, "") };
+  };
+  /** School Assist Teacher: how many teachers Standard covers (Premium: any number). */
+  Lic.STANDARD_TEACHERS = 20;
 
   /** Keys are for the school editions; Home needs none. */
   Lic.applies = function () { return A.edition !== "home"; };
@@ -180,10 +190,17 @@
   /** The key's details, extended by a renewal of the same licence that runs later (or changes the plan). */
   function withRenewal(d, code) {
     var rr = code ? read(code) : null;
-    if (!rr || !rr.ok || !rr.renewal || rr.data.no !== d.no || (rr.data.until <= d.until && (rr.data.plan || d.plan) === d.plan)) return d;
-    return Object.assign({}, d, { until: rr.data.until > d.until ? rr.data.until : d.until, plan: rr.data.plan || d.plan, renewed: rr.data.issued || true });
+    // (1.6.2) a renewal names its school: a licence number given to a new school after its old school was deleted
+    // never renews the old school's copy
+    if (!rr || !rr.ok || !rr.renewal || rr.data.no !== d.no || (rr.data.sid && d.sid && rr.data.sid !== d.sid) || (rr.data.until <= d.until && (rr.data.plan || d.plan) === d.plan)) return d;
+    return Object.assign({}, d, { until: rr.data.until > d.until ? rr.data.until : d.until, plan: rr.data.plan || d.plan, renewed: rr.data.issued || true,
+      period: rr.data.period || periodOf(rr.data.issued, rr.data.until) });
   }
   Lic.withRenewal = withRenewal;
+  /** A term or a year: keys and renewals made from 1.6.2 on say so; an older one is a year when it runs past 200 days. */
+  function periodOf(from, until) { var a = Date.parse(from), b = Date.parse(until); return a && b && b - a > 200 * DAY ? "year" : "term"; }
+  /** "year" or "term": how the plan in force was paid. */
+  Lic.period = function () { var st = Lic.status(), d = st.data || {}; return d.period || periodOf(d.from, d.until); };
   /** state: home | trial (no key) | invalid | active | grace (paid date passed, 30 days' grace) | expired */
   Lic.status = function () {
     if (!Lic.applies()) return { state: "home" };
@@ -192,7 +209,7 @@
     var r = read(rec.key);
     if (!r.ok) return { state: "invalid", error: r.error };
     // now: this computer's clock, but never earlier than the last real date seen (noteServerTime)
-    var clock = S().get("settings", "clock"), now = Math.max(Date.now(), (clock && !clock._deleted && clock.seen) || 0);
+    var clock = S().get("settings", "clock"), now = Math.max(A.now(), (clock && !clock._deleted && clock.seen) || 0);
     var d = withRenewal(r.data, rec.renewal), end = Date.parse(d.until + "T23:59:59");
     var graceLeft = Math.ceil((end + GRACE_DAYS * DAY - now) / DAY);
     return { state: now <= end ? "active" : graceLeft > 0 ? "grace" : "expired", data: d, plan: d.plan,
@@ -203,10 +220,18 @@
   Lic.abbr = function () { var st = Lic.status(); return (st.data && !st.data.master && st.data.abbr) || ""; };
   /** Is the school running on a temporary master key? */
   Lic.isMaster = function () { var st = Lic.status(); return !!(st.data && st.data.master); };
-  /** May this school use the feature? (Its plan includes it.) */
+  /** May this school use the Premium feature? (Its plan includes it.) Fails closed: an id that isn't in FEATURES
+   *  (a typo, or a feature this copy doesn't know) is never unlocked, so a slip in an update can't open Premium to a Standard school. */
   Lic.has = function (id) {
-    var f = FEATURES.filter(function (x) { return x.id === id; })[0];
-    return !f || Lic.plan() === "premium";
+    var f = FEATURES.filter(function (x) { return x.id === id; })[0], plan = Lic.plan();
+    return !!f && (plan === "premium" || (!!f.yearly && plan === "standard" && Lic.period() === "year"));
+  };
+  /** School Assist Teacher on Standard: room for one more teacher? null, or why not. Every staff account counts
+   *  (admins too); waiting registrations only once approved. */
+  Lic.teacherLimit = function () {
+    if (!TEACHER || Lic.plan() !== "standard") return null;
+    var n = S().filter("users", function (u) { return u.role === "teacher" && u.status !== "pending" && u.status !== "declined"; }).length;
+    return n < Lic.STANDARD_TEACHERS ? null : "The Standard plan covers " + Lic.STANDARD_TEACHERS + " teachers, and the school has " + n + ". To add more, contact Golden Technologies about Premium.";
   };
   /** Is the feature in use: on the plan, and turned on by the admin. */
   Lic.isOn = function (id) {
@@ -221,11 +246,12 @@
     if (announced || !me || !me.isAdmin || !Lic.applies()) return;
     announced = true;
     var st = Lic.status();
-    if ((st.state !== "active" && st.state !== "grace") || st.plan !== "premium") return; // Standard schools don't hear about what they can't use
+    if (st.state !== "active" && st.state !== "grace") return;
     var rec = S().get("settings", "features") || { id: "features" }, seen = rec.seen || [];
-    var fresh = FEATURES.filter(function (x) { return x.built && seen.indexOf(x.id) < 0; });
+    // only what the school's plan has: Standard schools don't hear about what they can't use (they do when they move up)
+    var fresh = FEATURES.filter(function (x) { return x.built && !(TEACHER && x.school) && Lic.has(x.id) && seen.indexOf(x.id) < 0; });
     if (!fresh.length) return;
-    var now = Date.now();
+    var now = A.now();
     var admins = S().filter("users", function (u) { return u.role === "teacher" && u.isAdmin && u.status !== "pending"; });
     fresh.forEach(function (x) {
       admins.forEach(function (adm) {
@@ -237,45 +263,18 @@
     S().put("settings", Object.assign({}, rec, { id: "features", seen: seen.concat(fresh.map(function (x) { return x.id; })) }));
   };
 
-  /* ------------------------------------------------------------------ the notice at the top of the page */
-  var SNOOZE = "sca-licence-snooze";
-  function bar(text, act) {
-    return '<div class="callout warn licence-bar">' + I("key") + '<div class="grow small">' + text + "</div>" + (act || "") + "</div>";
-  }
+  /* ------------------------------------------------------------------ no notice at the top of the page
+     Golden Technologies tells each school about its licence itself (the trial, payments, renewals), so the pages
+     carry no licence notice. The state is in Settings → Plan & licence. On an admin's screen this still does the
+     licence's quiet work: new Premium features announced, and a renewal fetched when online. */
   Lic.banner = function (me) {
-    if (!me || me.role !== "teacher" || !Lic.applies()) return "";
-    var st = Lic.status(), admin = !!me.isAdmin, where = '<a href="#/t/settings?s=licence">Settings → Plan &amp; licence</a>';
-    if (admin) setTimeout(function () { Lic.announce(me); Lic.checkOnline(me); }, 0);
-    var d = st.data || {};
-    if (st.state === "expired") {
-      return bar("<b>This school's School Assist licence ended on " + esc(longDate(d.until)) + ".</b> Premium features are off. " +
-        (admin ? "Once Golden Technologies has the payment, the renewal arrives by itself when this computer is online, or enter the renewal code in " + where + "." : "Please ask the school office to renew it."));
-    }
-    if (!admin) return "";
-    if (st.state === "invalid") return bar("<b>The School Assist key saved here doesn't work.</b> " + esc(st.error) + " Enter the key Golden Technologies gave your school in " + where + ".");
-    if (st.state === "grace") return bar("<b>Your School Assist licence ended on " + esc(longDate(d.until)) + ".</b> Everything keeps working for " + st.graceLeft + " more day" + (st.graceLeft === 1 ? "" : "s") + ". Once Golden Technologies has the payment, the renewal arrives by itself when this computer is online (or enter the renewal code in " + where + ").");
-    if (st.state === "active" && d.master) return bar("<b>This school is using a temporary master key</b> (until " + esc(longDate(d.until)) + "). Enter the school's own key from Golden Technologies in " + where + " when it arrives.");
-    if (st.state === "active" && st.daysLeft <= 14) return bar("Your School Assist licence runs until " + esc(longDate(d.until)) + " (" + st.daysLeft + " day" + (st.daysLeft === 1 ? "" : "s") + "). Next term's payment renews the same key.");
-    if (st.state === "trial") {
-      var until = 0; try { until = Number(localStorage.getItem(SNOOZE)) || 0; } catch (e) { /* private mode */ }
-      if (Date.now() < until) return "";
-      return bar("This copy of School Assist isn't activated yet. Enter your school's key in " + where + ".",
-        '<button class="btn btn-sm btn-ghost" data-act="licence-snooze">Not now</button>');
-    }
+    if (me && me.role === "teacher" && me.isAdmin && Lic.applies()) setTimeout(function () { Lic.announce(me); Lic.checkOnline(me); }, 0);
     return "";
-  };
-  A.act["licence-snooze"] = function () {
-    try { localStorage.setItem(SNOOZE, String(Date.now() + 7 * DAY)); } catch (e) { /* private mode */ }
-    A.render();
   };
 
   /* ------------------------------------------------------------------ Settings → Plan & licence */
-  function contact() {
-    var c = CFG.company || {};
-    return esc(c.name || "Golden Technologies") + (c.phone || c.email ? " (" + esc([c.phone, c.email].filter(Boolean).join(", ")) + ")" : "");
-  }
   Lic.section = function (me) {
-    var st = Lic.status(), d = st.data || {}, plan = Lic.plan(), html = '<div class="card card-pad" style="max-width:760px">';
+    var st = Lic.status(), d = st.data || {}, html = '<div class="card card-pad" style="max-width:760px">';
     if (st.state === "trial") {
       html += '<h3>Not activated yet</h3><p class="muted small mt-sm">Paste the school\'s key from Golden Technologies.</p>';
     } else if (st.state === "invalid") {
@@ -298,22 +297,13 @@
       '<span class="hint">' + (st.state === "trial" ? "Paste the whole key, or open the key file." : "Renewals arrive by themselves when online.") + "</span></label>" +
       '<div class="row wrap mt-sm"><button class="btn btn-primary" type="submit">' + I("key") + 'Activate</button><label class="btn btn-ghost">' + I("upload") + 'Open key file<input type="file" id="licence-file" accept=".txt,.sakey,text/plain" hidden></label></div></form></div>';
 
-    // the two plans, and what Premium holds
-    // a Standard (or not yet activated) school sees no Premium features at all: nothing locked to look at
-    var rows = plan !== "premium" ? "" : FEATURES.map(function (f) {
-      var right = !f.built ? '<span class="muted small">Coming soon</span>'
-        : '<label class="check" style="margin:0"><input type="checkbox" data-licence-feature="' + f.id + '"' + (Lic.isOn(f.id) ? " checked" : "") + "> On</label>";
-      return '<div class="list-row"><div class="grow"><div class="title">' + esc(f.name) + "</div>" + (f.about ? '<div class="meta"><span>' + esc(f.about) + "</span></div>" : "") + "</div>" + right + "</div>";
+    // no plan card (2026-10-22): nothing "coming soon" to raise expectations, no prices (Golden Technologies' price
+    // list is on paper). Only the features this school has and that are built, each with its switch.
+    var rows = FEATURES.filter(function (f) { return f.built && !(TEACHER && f.school) && Lic.has(f.id); }).map(function (f) {
+      return '<div class="list-row"><div class="grow"><div class="title">' + esc(f.name) + "</div>" + (f.about ? '<div class="meta"><span>' + esc(f.about) + "</span></div>" : "") + "</div>" +
+        '<label class="check" style="margin:0"><input type="checkbox" data-licence-feature="' + f.id + '"' + (Lic.isOn(f.id) ? " checked" : "") + "> On</label></div>";
     }).join("");
-    // School Assist Teacher has one plan (priced per teacher): no Standard / Premium comparison
-    if (A.edition !== "teacher") html += '<div class="card mt" style="max-width:760px"><div class="card-head">' + I("layers") + "<h3>Plans</h3></div>" +
-      '<div class="card-pad" style="padding-top:0"><p class="small"><b>Standard</b> · ' + PLANS.standard.fee + (plan === "standard" ? " · <b>your plan</b>" : "") +
-      "</p>" +
-      '<p class="small mt"><b>Premium</b> · ' + PLANS.premium.fee + (plan === "premium" ? " · <b>your plan</b>" : "") +
-      "</p></div>" +
-      rows + (plan === "premium"
-        ? '<p class="tiny muted" style="padding:10px 20px 14px">Want something made for your school? Tell ' + contact() + ", at your monthly visit or any time.</p>"
-        : '<p class="tiny muted" style="padding:10px 20px 14px">To move to Premium, ask ' + contact() + " for a Premium key.</p>") + "</div>";
+    if (rows) html += '<div class="card mt" style="max-width:760px"><div class="card-head">' + I("sliders") + "<h3>Features</h3></div>" + rows + "</div>";
     return {
       html: html,
       mount: function () {
@@ -354,17 +344,17 @@
   function applyRenewal(r, ask) {
     var rec = S().get("settings", "licence"), cur = rec && rec.key ? read(rec.key) : null;
     if (!cur || !cur.ok) { if (ask) UI.toast("Enter the school's key first, then the renewal code.", "bad"); return Promise.resolve(false); }
-    if (r.data.no !== cur.data.no) { if (ask) UI.toast("That renewal is for licence " + r.data.no + ", not this school's (" + cur.data.no + ").", "bad"); return Promise.resolve(false); }
+    if (r.data.no !== cur.data.no || (r.data.sid && cur.data.sid && r.data.sid !== cur.data.sid)) { if (ask) UI.toast("That renewal is for licence " + r.data.no + (r.data.sid && r.data.sid !== cur.data.sid ? " of another school" : "") + ", not this school's (" + cur.data.no + ").", "bad"); return Promise.resolve(false); }
     var before = withRenewal(cur.data, rec.renewal), after = withRenewal(cur.data, r.key);
     if (after.until === before.until && after.plan === before.plan) { if (ask) UI.toast("This school is already paid until " + longDate(before.until) + ".", "bad"); return Promise.resolve(false); }
     var plan = (PLANS[after.plan] || {}).name || after.plan;
     return (ask ? UI.confirm("Renew School Assist for " + cur.data.name + ": " + plan + " plan, paid until " + longDate(after.until) + "?", { ok: "Renew" }) : Promise.resolve(true)).then(function (ok) {
       if (!ok) return false;
-      S().put("settings", Object.assign({}, rec, { renewal: r.key, renewedAt: Date.now() }));
+      S().put("settings", Object.assign({}, rec, { renewal: r.key, renewedAt: A.now() }));
       if (A.Sync && A.Sync.maybe) A.Sync.maybe();
       if (ask) UI.toast("Renewed: paid until " + longDate(after.until));
       else {
-        var now = Date.now();
+        var now = A.now();
         S().filter("users", function (u) { return u.role === "teacher" && u.isAdmin && u.status !== "pending"; }).forEach(function (adm) {
           S().put("alerts", { id: "al_renewed_" + r.data.no + "_" + after.until + "_" + adm.id, teacherId: adm.id, kind: "feature", createdAt: now,
             title: "School Assist renewed: paid until " + longDate(after.until), body: "Thank you. The " + plan + " plan carries on with the same key." });
@@ -393,8 +383,8 @@
     var feed = CFG.licenceFeed, rec = S().get("settings", "licence"), cur = rec && rec.key ? read(rec.key) : null;
     if (!feed || !cur || !cur.ok) return;
     var last = 0; try { last = Number(localStorage.getItem(LAST_CHECK)) || 0; } catch (e) { /* private mode */ }
-    if (Math.abs(Date.now() - last) < 12 * 3600000) return; // (a clock set back far looks again at once)
-    try { localStorage.setItem(LAST_CHECK, String(Date.now())); } catch (e) { /* private mode */ }
+    if (Math.abs(A.now() - last) < 12 * 3600000) return; // (a clock set back far looks again at once)
+    try { localStorage.setItem(LAST_CHECK, String(A.now())); } catch (e) { /* private mode */ }
     var base = feed.replace(/\/?$/, "/"), get = function (name) { return fetch(base + name, { cache: "no-store" }).then(function (res) { noteServerTime(res); return res.ok ? res.json() : null; }); };
     // index.json lists the licences that have a renewal, so a key without one asks for nothing that isn't there
     return get("index.json")
@@ -414,7 +404,7 @@
       UI.confirm("Use Golden Technologies' temporary master key until " + longDate(d.until) + "? Every feature unlocks for " + b.name + ". Replace it with the school's own key when it arrives.", { ok: "Use it" }).then(function (ok) {
         if (!ok) return;
         var me = M.me();
-        S().put("settings", { id: "licence", key: r.key, appliedAt: Date.now(), appliedBy: me ? me.id : null, master: true });
+        S().put("settings", { id: "licence", key: r.key, appliedAt: A.now(), appliedBy: me ? me.id : null, master: true });
         form.key.value = "";
         if (A.Sync && A.Sync.maybe) A.Sync.maybe();
         UI.toast("Master key in use until " + longDate(d.until));
@@ -426,7 +416,7 @@
       (b.name !== d.name ? " The school's name in the app becomes \"" + d.name + "\"." : ""), { ok: "Activate" }).then(function (ok) {
       if (!ok) return;
       var me = M.me(), was = S().get("settings", "licence");
-      S().put("settings", { id: "licence", key: r.key, appliedAt: Date.now(), appliedBy: me ? me.id : null });
+      S().put("settings", { id: "licence", key: r.key, appliedAt: A.now(), appliedBy: me ? me.id : null });
       var old = S().get("settings", "branding") || {};
       if (b.name !== d.name) S().put("settings", Object.assign({}, old, { id: "branding", name: d.name, shortName: old.shortName && old.shortName !== b.name ? old.shortName : d.name }));
       var sch = S().get("settings", "school"); // the school's own record follows the key (its name, and the abbreviation in student numbers)
