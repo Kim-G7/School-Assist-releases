@@ -11,9 +11,10 @@
   "use strict";
   var KEY = "sca-sync";
   var timer = null, running = null, filesBusy = null, lastError = "", state = "local";
-  // how often to sync: every 30–45 seconds while the app is on screen (a little random, so a school's devices
-  // don't all ask at the same moment), every 2 minutes while it is hidden, and straight away on coming back
-  var EVERY = 30000, SPREAD = 15000, HIDDEN = 120000;
+  // how often to sync: every 1–5 seconds while the app is on screen, so notices, marks and registers reach everyone
+  // at once (a little random, so a school's devices don't all ask at the same moment; an answer with nothing new is
+  // small, and the hub writes nothing for it), every minute while it is hidden, and straight away on coming back
+  var EVERY = 1000, SPREAD = 4000, HIDDEN = 60000;
 
   function cfg() {
     if (A.Store && A.Store.vacation) return { url: "", vacation: true }; // vacation mode: this device only, never the hub
@@ -252,7 +253,7 @@
       window.addEventListener("online", function () { Sync.maybe(); });
       document.addEventListener("visibilitychange", function () { if (!document.hidden) Sync.catchUp(); Sync.schedule(); });
       window.addEventListener("focus", function () { Sync.catchUp(); });
-      A.Store.on("change", A.debounce(function () { Sync.maybe(); }, 2500));
+      A.Store.on("change", A.debounce(function () { Sync.maybe(); }, 600)); // what was just saved goes up at once
       Sync.schedule();
       Sync.maybe();
     },

@@ -258,12 +258,14 @@
   }
 
   function statusChip() {
+    var me = M.me();
+    if (me && me.role === "student") return ""; // students' work goes up by itself; the school hub and its status are the staff's
     var s = A.Sync ? A.Sync.status() : { state: "local" }, online = navigator.onLine;
     // what matters is whether new work can be sent and received: a computer on the Wi-Fi whose school hub is off
     // (or School Assist online can't be reached) is "Not connected", not "Online"
     var cut = online && s.state === "error", where = A.Cloud ? "School Assist online" : "the school hub";
     var cls = online ? (cut ? "error" : "") : "offline", txt = !online ? "Offline" : cut ? "Not connected" : "Online";
-    var me = M.me(), href = me && me.role === "student" ? "#/s/settings?s=sync" : "#/t/settings?s=sync";
+    var href = "#/t/settings?s=sync";
     // School Assist Teacher with no school hub: everything is simply on this device
     if (s.state === "pending") {
       return '<a class="status-chip error" id="status-chip" href="' + href + '" data-tip="' + esc(s.lastError || "Waiting for an admin to let this device join the school hub.") + '"><span class="pip"></span>' + I("lock") + '<span class="txt">Waiting to join</span></a>';

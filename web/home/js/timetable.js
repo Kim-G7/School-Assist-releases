@@ -13,6 +13,8 @@
 (function (A) {
   "use strict";
   var esc = A.esc, I = A.icon, M = A.M, UI = A.UI, S = function () { return A.Store; };
+  /** Rooms are for staff: students hear theirs from the teacher. */
+  var staffView = function () { var me = M.me(); return !!me && me.role === "teacher"; };
   var CFG = window.SCHOOL_CONFIG || {};
   var TT = (A.TT = {});
   // School Assist Teacher has its own timetable page (js/primary.js): the bells, modes and keys here, not these routes;
@@ -70,7 +72,7 @@
   /* ------------------------------------------------------------- whose lessons */
   function describe(slot) {
     var c = slot.classId ? M.cls(slot.classId) : null, t = c ? M.user(c.teacherId) : null;
-    return { slot: slot, cls: c, subject: c ? c.subject : slot.subject, teacher: t ? t.name : slot.teacherName || "", room: slot.room || (c && c.room) || "", group: c ? c.name : M.homeClassName(slot.level, slot.stream) };
+    return { slot: slot, cls: c, subject: c ? c.subject : slot.subject, teacher: t ? t.name : slot.teacherName || "", room: staffView() ? slot.room || (c && c.room) || "" : "", group: c ? c.name : M.homeClassName(slot.level, slot.stream) };
   }
   TT.forStudent = function (u, key) {
     var seen = {}, out = [];

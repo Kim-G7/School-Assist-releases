@@ -1448,6 +1448,8 @@
     return own.length ? own : all.filter(function (s) { return !s.scope; });
   }
   var teacherOf = function (s, c) { return s.teacherId || (c && c.teacherId) || null; };
+  /** A lesson's room, for staff only: students hear theirs from the teacher. */
+  var roomOf = function (s) { var me = M.me(); return me && me.role === "teacher" ? s.room || "" : ""; };
   /** "Form 1A", or "Form 1 · Lions" when the class's name doesn't say its form. */
   P.homerooms = homerooms;
   var classLabel = function (c) { return !c ? "" : !c.level || String(c.name || "").indexOf(c.level) === 0 ? c.name : c.level + " · " + c.name; };
@@ -1510,7 +1512,7 @@
     var inner = function (list) {
       return list.map(function (e) {
         var t = M.user(teacherOf(e.s, e.c)), other = e.c && t && t.id !== e.c.teacherId;
-        return '<div class="tt-lesson"><b>' + esc(e.s.area) + "</b><span>" + esc(o.mine ? classLabel(e.c) : other ? t.name : "") + (e.s.room ? (o.mine || other ? " · " : "") + esc(e.s.room) : "") + "</span></div>";
+        return '<div class="tt-lesson"><b>' + esc(e.s.area) + "</b><span>" + esc(o.mine ? classLabel(e.c) : other ? t.name : "") + (roomOf(e.s) ? (o.mine || other ? " · " : "") + esc(roomOf(e.s)) : "") + "</span></div>";
       }).join("");
     };
     var head = '<tr><th class="tt-corner">Day</th>' + cols.map(function (c) {
@@ -1561,7 +1563,7 @@
         var e = x.e, t = M.user(teacherOf(e.s, e.c)), other = e.c && t && t.id !== e.c.teacherId;
         var kind = x.tm.mins >= sd.period * 1.5 ? "Double period" : x.tm.mins <= sd.period * 0.6 ? "Half period" : "";
         return '<div class="tt-row"><div class="tt-time"><b>' + hhmm(x.tm.start) + "</b><span>" + hhmm(x.tm.start + x.tm.mins) + '</span></div><div class="grow"><b>' + esc(e.s.area) + "</b>" + (kind ? ' <span class="badge">' + kind + "</span>" : "") +
-          '<div class="small muted">' + esc([o.mine ? classLabel(e.c) : other ? t.name : "", e.s.room].filter(Boolean).join(" · ")) + "</div></div></div>";
+          '<div class="small muted">' + esc([o.mine ? classLabel(e.c) : other ? t.name : "", roomOf(e.s)].filter(Boolean).join(" · ")) + "</div></div></div>";
       }).join("") + "</div>";
     }).join("") + "</div>";
   }
@@ -1835,7 +1837,7 @@
         if (state === "now") badge = '<span class="badge accent">Now</span>';
         else if (state === "later" && isToday && !next) { next = true; badge = '<span class="badge brand">Next</span>'; }
         return '<div class="tt-row' + (state === "done" ? " past" : state === "now" ? " now" : "") + '"><div class="tt-time"><b>' + hhmm(x.start) + "</b><span>" + hhmm(x.end) + "</span></div>" +
-          '<div class="grow"><div class="row wrap"><b>' + esc(x.s.area) + "</b>" + badge + '</div><div class="small muted">' + esc(t ? t.name : "") + (x.s.room ? (t ? " · " : "") + esc(x.s.room) : "") + "</div></div></div>";
+          '<div class="grow"><div class="row wrap"><b>' + esc(x.s.area) + "</b>" + badge + '</div><div class="small muted">' + esc(t ? t.name : "") + "</div></div></div>"; // (no room: students hear it from the teacher)
       }).join("");
     return '<div class="card"><div class="card-head">' + I("grid") + "<h3>" + (isToday ? "Today's timetable" : WEEKDAYS[wd - 1] + "'s timetable") + '</h3><span class="sub">' + esc(c.name) + "</span>" +
       '<span class="grow"></span><a class="btn btn-sm btn-ghost" href="#/s/timetable">Full week ' + I("right") + "</a></div>" + (rows || UI.empty("grid", "No lessons on this day")) + "</div>";

@@ -109,6 +109,10 @@ svg.i { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none;
 .brand-name { font-weight: 700; font-size: 16px; line-height: 1.2; }
 .brand-motto { font-size: 11.5px; color: var(--side-muted); margin-top: 2px; line-height: 1.3; }
 .nav { flex: 1; overflow-y: auto; padding: 6px 10px 12px; }
+/* the menu and the page scroll without a scrollbar showing: a bar cuts across the blue and white (tables, tab strips and
+   pop-ups keep theirs, where it shows there is more to see) */
+html, .nav { scrollbar-width: none; }
+html::-webkit-scrollbar, body::-webkit-scrollbar, .nav::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .nav-section { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--side-muted); padding: 16px 12px 6px; }
 .nav-item {
   display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; color: var(--on-side);

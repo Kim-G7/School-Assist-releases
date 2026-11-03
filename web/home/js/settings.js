@@ -13,7 +13,8 @@
     if (admin) sections.push(["branding", "School branding", "palette"], ["structure", "Classes & streams", "layers"]);
     if (me.role === "teacher" && A.edition !== "teacher") sections.push(["subjects", A.Primary ? "My syllabuses" : "My subjects", "layers"]); // (School edition: My subjects is a page of its own, js/tracker.js)
     if (A.Primary && admin) sections.push(["primary", "Learning areas & terms", "book"]);
-    if (A.edition !== "teacher" || admin) sections.push(["sync", "Offline & sync", "refresh"]); // School Assist Teacher: admins only
+    // (not for students: the school decides where its records are, and a student can't point the app anywhere else)
+    if (me.role !== "student" && (A.edition !== "teacher" || admin)) sections.push(["sync", "Offline & sync", "refresh"]); // School Assist Teacher: admins only
     if (admin) sections.push(["people", "People", "users"], ["devices", "Devices", "phone"]);
     if (me.role === "teacher" && A.edition !== "teacher") sections.push(["integrity", "Exam integrity", "shield"]);
     if (admin && A.edition !== "teacher" && A.AI && (!A.Licence || A.Licence.has("ai-marking"))) sections.push(["ai", "AI marking", "bulb"]); // Premium (hidden on Standard); online, or through the school hub
@@ -167,7 +168,7 @@
     var relayCard = M.me().isAdmin && A.Sync.hubMode() && !A.multiHost ? '<div class="card card-pad mb" id="relay-card" hidden></div>' : "";
     var html = hubCard + whereCard() + relayCard + linkCard + '<div class="grid g-main"><div class="card card-pad"><h3>School hub address</h3><p class="muted small mt-sm">Empty: this device only.</p>' +
       '<form data-submit="sync-save" class="mt"><div class="row wrap"><input class="input grow" name="url" value="' + esc(cfg.url) + '" placeholder="http://192.168.1.20:8080" aria-label="Sync server address">' +
-      '<button class="btn" type="submit">Save</button></div><label class="check mt-sm"><input type="checkbox" name="auto"' + (cfg.auto ? " checked" : "") + ">Sync automatically when online (every 30 to 45 seconds)</label></form></div>" +
+      '<button class="btn" type="submit">Save</button></div><label class="check mt-sm"><input type="checkbox" name="auto"' + (cfg.auto ? " checked" : "") + ">Sync automatically when online (every few seconds)</label></form></div>" +
       '<div class="card card-pad" style="align-self:start"><h3>Status</h3><dl class="kv mt">' +
       "<dt>Connection</dt><dd>" + (navigator.onLine ? '<span class="badge good">' + I("wifi") + "Online</span>" : '<span class="badge warn">' + I("wifiOff") + "Offline</span>") + "</dd>" +
       "<dt>Sync server</dt><dd>" + (cfg.url ? esc(cfg.url) : '<span class="muted">Not set</span>') + "</dd>" +

@@ -119,17 +119,33 @@
       graded: function (t) { return M.taskStatus(t, me.id).key === "graded"; },
     };
     var labels = { all: "All", new: "New", todo: "To do", submitted: "Handed in", graded: "Marked" };
-    var pills = '<div class="pill-tabs">' + Object.keys(labels).map(function (k) { return '<button class="' + (k === f ? "on" : "") + '" data-act="goto" data-href="#/s/tasks?f=' + k + '">' + labels[k] + " (" + all.filter(test[k]).length + ")</button>"; }).join("") + "</div>";
     var classes = M.classesForStudent(me.id).sort(function (a, b) { return a.subject.localeCompare(b.subject); });
-    var html = pills + '<div class="grid g-2">' + classes.map(function (c) {
-      var list = all.filter(function (t) { return t.classId === c.id && (test[f] || test.all)(t); });
-      var mine = all.filter(function (t) { return t.classId === c.id; });
-      var fresh = mine.filter(test.new).length, todo = mine.filter(test.todo).length;
-      return '<div class="card subject-panel"><div class="card-head"><div class="subject-dot"></div><div class="grow"><h3>' + esc(c.subject) + '</h3><div class="sub">' + esc(teacherOf(c)) + " · " + esc(c.name) + "</div></div>" +
-        (fresh ? '<span class="badge accent">' + fresh + " new</span>" : "") + (todo ? '<span class="badge">' + todo + " to do</span>" : "") + "</div>" +
-        (list.length ? list.map(taskRow.bind(null, me)).join("") : '<div class="empty small" style="padding:22px">' + (f === "all" ? "No tasks in " + esc(c.subject) + " yet." : "Nothing here.") + "</div>") + "</div>";
+    var c = q.c ? classes.filter(function (x) { return x.id === q.c; })[0] : null;
+    if (q.c && !c) return { redirect: "#/s/tasks" + (f !== "all" ? "?f=" + f : "") };
+    var here = c ? all.filter(function (t) { return t.classId === c.id; }) : all;
+    var pills = '<div class="pill-tabs">' + Object.keys(labels).map(function (k) {
+      return '<button class="' + (k === f ? "on" : "") + '" data-act="goto" data-href="#/s/tasks?' + (c ? "c=" + c.id + "&" : "") + "f=" + k + '">' + labels[k] + " (" + here.filter(test[k]).length + ")</button>";
     }).join("") + "</div>";
-    if (!classes.length) html += '<div class="card">' + UI.empty("tasks", "You're not in any class yet") + "</div>";
+    // one subject: its tasks in full
+    if (c) {
+      var list = here.filter(test[f] || test.all);
+      var head = '<div class="card subject-panel mb"><div class="card-head"><div class="subject-dot"></div><div class="grow"><h3>' + esc(c.subject) + '</h3><div class="sub">' + esc(teacherOf(c)) + " · " + esc(c.name) + "</div></div></div></div>";
+      return { title: c.subject, crumbs: [{ label: "My tasks", href: "#/s/tasks" + (f !== "all" ? "?f=" + f : "") }, { label: c.subject }],
+        html: head + pills + '<div class="card">' + (list.length ? list.map(taskRow.bind(null, me)).join("") : UI.empty("tasks", f === "all" ? "No tasks in " + c.subject + " yet" : "Nothing here")) + "</div>" };
+    }
+    // every subject in a short list (ten subjects would be a long page of tasks): what waits in each, then its tasks on a tap
+    var now = A.now(), shown = classes.filter(function (x) { return f === "all" || all.some(function (t) { return t.classId === x.id && test[f](t); }); });
+    var rows = shown.map(function (x) {
+      var mine = all.filter(function (t) { return t.classId === x.id; }), n = function (k) { return mine.filter(test[k]).length; };
+      var late = mine.filter(function (t) { return M.taskStatus(t, me.id).key === "overdue"; }).length, todo = n("todo") - late;
+      var next = mine.filter(function (t) { var k = M.taskStatus(t, me.id).key; return (k === "new" || k === "received") && t.dueAt >= now; }).sort(function (a, b) { return a.dueAt - b.dueAt; })[0];
+      var badges = (n("new") ? '<span class="badge accent">' + n("new") + " new</span>" : "") + (late ? '<span class="badge bad">' + late + " overdue</span>" : "") + (todo > 0 ? '<span class="badge">' + todo + " to do</span>" : "") +
+        (n("submitted") ? '<span class="badge">' + n("submitted") + " handed in</span>" : "") + (n("graded") ? '<span class="badge good">' + n("graded") + " marked</span>" : "");
+      return '<a class="list-row" href="#/s/tasks?c=' + x.id + (f !== "all" ? "&f=" + f : "") + '"><div class="subject-dot" style="height:30px"></div><div class="grow"><div class="title">' + esc(x.subject) + "</div>" +
+        '<div class="meta"><span>' + esc(teacherOf(x)) + "</span>" + (next ? '<span class="sep"></span><span>Next due ' + esc(A.fmtDate(next.dueAt)) + "</span>" : "") + (mine.length ? "" : '<span class="sep"></span><span>No tasks yet</span>') + "</div>" +
+        (badges ? '<div class="row wrap mt-sm" style="gap:6px">' + badges + "</div>" : "") + "</div>" + I("right") + "</a>";
+    }).join("");
+    var html = pills + '<div class="card">' + (rows || (classes.length ? UI.empty("tasks", "Nothing here") : UI.empty("tasks", "You're not in any class yet"))) + "</div>";
     return { title: "My tasks", html: html };
   }, { role: "student" });
 
@@ -180,7 +196,7 @@
         (mk && mk.feedback ? '<div class="callout mt">' + I("message") + "<div><b>" + esc(teacherOf(c)) + ":</b> " + esc(mk.feedback) + "</div></div>" : "") + "</div>";
     }
     html += '<div class="stack-lg">' + side + "</div></div>";
-    return { title: t.title, crumbs: [{ label: "My tasks", href: "#/s/tasks" }, { label: subjectOf(t) }], html: html };
+    return { title: t.title, crumbs: [{ label: "My tasks", href: "#/s/tasks" }, { label: subjectOf(t), href: "#/s/tasks?c=" + t.classId }], html: html };
   }, { role: "student" });
 
   /** Tick the box, then confirm before the teacher is notified. */
