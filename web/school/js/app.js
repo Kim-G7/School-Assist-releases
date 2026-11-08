@@ -9,7 +9,7 @@
   A.act = A.act || {}; // js/cloud.js may have added its actions already
   A.route = function (pattern, fn, opts) { routes.push({ parts: pattern.split("/"), fn: fn, opts: opts || {} }); };
   A.go = function (hash) { if (location.hash === hash) A.render(); else location.hash = hash; };
-  A.home = function (u) { return u && u.role === "student" ? "#/s/home" : "#/t/home"; };
+  A.home = function (u) { return u && u.role === "student" ? "#/s/home" : A.Fees && A.Fees.isFinance(u) ? "#/t/fees" : "#/t/home"; };
 
   function parseHash() {
     var raw = location.hash.replace(/^#\/?/, ""), q = {}, qi = raw.indexOf("?");
@@ -63,6 +63,7 @@
       M.signOut(); me = null;
     }
     // a new install: the set-up page; a copy for a school (its school file, or opened from the hub): joining it
+    if (A.Parents && A.Parents.active()) { lastPath = "parents"; A.Parents.render(app); return; } // a parent's phone (js/parents.js)
     var stage = A.SchoolId ? A.SchoolId.stage(me) : "ready";
     if (stage !== "ready") { lastPath = "setup"; app.innerHTML = A.SchoolId.page(stage); A.SchoolId.mount(stage); return; }
     if (A.Screen) A.Screen.paint();
@@ -70,6 +71,7 @@
     if (A.Devices) A.Devices.heartbeat(me);
     var prefix = me.role === "student" ? "s" : "t";
     if (!h.parts.length || h.parts[0] !== prefix) { location.replace(A.home(me)); return; }
+    if (A.Fees && A.Fees.isFinance(me) && !A.Fees.allowed(h.parts[1])) { location.replace(A.home(me)); return; } // the bursar's and accountant's view: fees only
     var m = match(h.parts);
     if (!m) { location.replace(A.home(me)); return; }
 
@@ -150,6 +152,7 @@
     }
   }
   function navItems(me) {
+    if (A.Fees && A.Fees.isFinance(me)) return A.Fees.nav();
     if (A.Primary && me.role !== "student" && !A.Primary.withStudents) return A.Primary.nav(me);
     if (me.role === "student") {
       var newTasks = M.tasksForStudent(me.id).filter(function (t) { return M.taskStatus(t, me.id).key === "new"; }).length;
@@ -182,8 +185,10 @@
     // join beside My class, and the library and materials after Schemes & records
     if (A.Primary) {
       var items = A.Primary.nav(me), after = function (key) { var i = items.map(function (it) { return it.key; }).indexOf(key); return i < 0 ? items.length : i + 1; };
-      items.splice(after("others"), 0, classes, requests);
-      items.splice.apply(items, [after("schemes"), 0].concat(teaching));
+      var noClassPages = A.Primary.notTeaching(me); // a director, head or principal with no subject ticked in People
+      if (!noClassPages) items.splice(after("others"), 0, classes);
+      if (requests.count && !noClassPages) items.splice(after("classes"), 0, requests); // (older requests only: the school registers subjects now)
+      items.splice.apply(items, [after("schemes"), 0].concat(noClassPages ? teaching.filter(function (it) { return it.key === "syllabi"; }) : teaching));
       items[items.length - 1] = settings;
       return items;
     }
@@ -339,7 +344,7 @@
       var notice = A.loginNotice ? '<div class="callout warn mb">' + I("shield") + "<div>" + esc(A.loginNotice) + "</div></div>" : "";
       var ctl = A.Screen ? '<div class="scr-float">' + A.Screen.controls() + "</div>" : "";
       var install = A.Install ? A.Install.html() : "";
-      return '<div class="login">' + left + '<section class="login-panel"><div class="login-box">' + notice + '<div id="login-step">' + Login.step() + "</div>" + install + "</div></section>" + ctl + "</div>";
+      return '<div class="login">' + left + '<section class="login-panel"><div class="login-box">' + notice + presentBox() + '<div id="login-step">' + Login.step() + "</div>" + install + "</div></section>" + ctl + "</div>";
     },
     step: function () {
       var back = '<button class="btn btn-ghost btn-sm" data-act="login-back">' + I("back") + "Back</button>";
@@ -397,7 +402,6 @@
           msg + '<button class="btn btn-primary btn-lg btn-block mt" type="submit">Sign in</button></form>' +
           (A.School ? '<div class="row mt-sm" style="justify-content:center"><button class="btn btn-ghost btn-sm" data-act="login-goto" data-step="forgotask">' + I("key") + "Forgot your password?</button></div>" : "") +
           '<div class="divider"></div><div class="row wrap spread"><span class="small">First time signing in?</span><button class="btn" data-act="login-setup">' + I("key") + "Set up your account</button></div>" +
-          (A.School ? '<div class="row wrap spread mt-sm"><span class="small">New and not on the school\'s list yet?</span><button class="btn" data-act="login-goto" data-step="register">' + I("plus") + "Register</button></div>" : "") +
           Login.example();
       }
       if (L.step === "setup") {
@@ -603,6 +607,13 @@
     var name = (A.Theme.get() || {}).name || "";
     if (name) d.school.folder(name).catch(function () { /* the folder is made again next time */ });
   };
+  /* A copy made for showing School Assist (the flash drive, made by desk/stick-prep.cjs: this device's meta.presentation):
+     open as each kind of person without a password, with no internet. */
+  function presentBox() {
+    var who = (A.Store.state.meta || {}).presentation;
+    return who && who.length ? '<div class="callout mb"><div class="grow"><b>Presentation copy</b><div class="small muted">Open School Assist as:</div><div class="row wrap mt-sm">' + who.map(function (p) { return '<button class="btn btn-sm" data-act="present-as" data-id="' + esc(p.id) + '">' + esc(p.label) + "</button>"; }).join("") + "</div></div></div>" : "";
+  }
+  A.act["present-as"] = function (el) { var u = M.user(el.getAttribute("data-id")); if (u) finishSignIn(u); };
   function finishSignIn(u) {
     if (A.LastUser) A.LastUser.set(u, { email: A.Cloud && u.role !== "student" ? L.email || null : null });
     M.signIn(u.id);

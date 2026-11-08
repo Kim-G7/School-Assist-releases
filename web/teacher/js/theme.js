@@ -52,8 +52,10 @@
     { name: "Charcoal", primary: "#2F3640", secondary: "#44BD32" },
   ];
 
+  /** The parents' app (js/parents.js) shows the school the parent chose, not this device's. */
+  Theme.use = function (b) { Theme.override = b || null; Theme.apply(); };
   Theme.get = function () {
-    var o = (A.Store && A.Store.state && A.Store.get("settings", "branding")) || {};
+    var o = Theme.override || (A.Store && A.Store.state && A.Store.get("settings", "branding")) || {};
     var colors = CFG.colors || {};
     var base = A.edition === "home" && CFG.home && CFG.home.school ? Object.assign({}, CFG, CFG.home.school) : CFG;
     return {

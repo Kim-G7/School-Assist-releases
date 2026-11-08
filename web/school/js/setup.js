@@ -64,7 +64,7 @@
   var linkSid = "";
   Id.boot = function () {
     // the app for every school, opened from a school's link (/?school=ecs, which /join/ecs leads to)
-    if (A.multiHost && A.Store.state && !Id.id() && !Id.isDemo()) {
+    if (A.multiHost && A.Store.state && !Id.id() && !Id.isDemo() && !/[?&]parent=/.test(location.search)) { // (a parents' link: js/parents.js)
       linkSid = schoolCode(location.search);
       if (linkSid) try { history.replaceState(null, "", location.pathname + location.hash); } catch (e) { /* old browser */ }
     }
@@ -155,9 +155,14 @@
     // of School Assist's, when the hub has one
     if (stage === "connect" && servedByHub() && !(meta().pack && meta().pack.logo)) {
       var im = new Image();
-      im.onload = function () { document.querySelectorAll("img[data-school-icon]").forEach(function (x) { x.src = im.src; }); };
+      im.onload = function () {
+        document.querySelectorAll("img[data-school-icon]").forEach(function (x) { x.src = im.src; });
+        var touch = document.querySelector('link[rel="apple-touch-icon"]');
+        if (touch) touch.setAttribute("href", im.src); // (iPhone: Add to Home Screen)
+      };
       im.src = (A.multiHost && meta().multi ? schoolHub() : "") + "/school-icon.png";
     }
+    if (stage === "connect") schoolManifest();
     if (stage === "choose" && linkSid) { var sid = linkSid; linkSid = ""; joinSchool(sid); }
     if (stage === "connect" && !C.busy && !C.timer && !C.waiting) Id.connect(); // (not while the code waits for an admin)
     if (stage === "wizard" && W.step === "hub") hubStatus();
@@ -165,6 +170,14 @@
     if (stage === "wizard" && A.Backup) A.Backup.revokedNote(); // this computer was a hub that Golden Technologies signed out
   };
   function redraw() { A.render(); window.scrollTo(0, 0); }
+  /** Added to a home screen from the join page, the app is this school's: its name, and it opens with the school
+      chosen (server.cjs / multi-hub.cjs manifest), so an iPhone's Home Screen app goes straight to this school. */
+  function schoolManifest() {
+    var man = document.querySelector('link[rel="manifest"]'), base = hubBase(), m = meta(), name = C.name || (m.multi && m.multi.name);
+    if (man && base) man.setAttribute("href", base + "/manifest.webmanifest");
+    var t = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+    if (t && base && name) t.setAttribute("content", String(name).slice(0, 30));
+  }
 
   /* ------------------------------------------------------------------ connecting to the school's hub */
   var C = { busy: false, error: "", name: "", timer: null };
@@ -232,6 +245,8 @@
     var logo = p.logo ? '<div class="logo"><img src="' + esc(p.logo) + '" alt=""></div>' : '<div class="logo"><img src="assets/icon.svg" alt="" data-school-icon></div>';
     return '<div class="setup-card setup-connect">' + logo + "<h1>" + esc(name || "Your school") + "</h1>" +
       (C.pendingCode ? '<p class="mt">This ' + thisDevice() + ' is waiting to join the school hub. Show an admin this code:</p><p class="join-code">' + esc(C.pendingCode) + '</p><p class="small muted">The admin lets it in under Settings → Devices. This page carries on by itself.</p><div class="setup-spin" aria-hidden="true"></div>' +
+          // the Home Screen app of a phone let in already in its browser: the number from there, and no admin asked again
+          (A.Install && A.Install.installed() ? '<form data-submit="su-join-carry" class="mt-lg" style="text-align:left"><label class="field"><span>Let in already in this ' + thisDevice() + '\'s browser? Type the 6-digit number it shows under Install the app</span><input class="input" name="n" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123 456" spellcheck="false"></label><button class="btn btn-primary" type="submit">' + I("check") + "Let this app in</button></form>" : "") +
           // a teacher or admin needn't wait: the school's staff code lets this device in at once
           '<form data-submit="su-join-code" class="mt-lg" style="text-align:left"><label class="field"><span>Staff? Type the school\'s staff code instead</span><input class="input" name="code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="e.g. ' + esc((name && M.schoolAbbr(name)) || "ABC") + '-4K7-9QP"></label><button class="btn" type="submit">' + I("key") + "Let this device in</button></form>"
         : C.error ? '<div class="callout warn mt" style="text-align:left">' + I("wifiOff") + "<div>" + esc(C.error) + "</div></div>" +
@@ -240,6 +255,7 @@
           '<span class="hint">It is on the hub computer, in Settings → Offline &amp; sync.</span></label><button class="btn" type="submit">' + I("wifi") + "Connect</button></form>" : "")
         : '<p class="muted mt">' + (C.searching ? "Looking for the school hub on the network…" : "Connecting to the school hub…") + '</p><div class="setup-spin" aria-hidden="true"></div>') +
       (A.multiHost && meta().multi ? '<p class="small mt"><button class="link" data-act="su-other-school">Not your school? Choose another</button></p>' : "") +
+      (A.Install ? A.Install.html("join") : "") +
       '<p class="tiny muted mt-lg">This copy of School Assist is set up for ' + esc(name || "your school") + (location.protocol === "https:" ? ". It joins the school's online hub over the internet; then teachers and students sign in." // the cloud hub; a school's own hub is http on the Wi-Fi
         : ". It joins the school hub over the school Wi-Fi; then teachers and students sign in.") + "</p></div>";
   }
@@ -313,6 +329,16 @@
     if (!code) return;
     A.Sync.joinWithCode(code).then(function (r) {
       if (!r || !r.key) throw new Error("That staff code isn't right.");
+      clearTimeout(C.timer); C.timer = null; C.pendingCode = ""; C.waiting = false; C.error = "";
+      Id.connect(); redraw();
+    }).catch(function (e) { UI.toast(e.message || String(e), "bad"); });
+  };
+  /** The 6-digit number from School Assist in this device's browser: the hub lets this app in as that one is. */
+  A.act["su-join-carry"] = function (form) {
+    var n = String(form.n.value || "").replace(/\D/g, "");
+    if (n.length !== 6) return UI.toast("Type the 6 digits the other app shows.", "bad");
+    A.Sync.joinWithCarry(n).then(function (r) {
+      if (!r || !r.key) throw new Error("That number isn't right.");
       clearTimeout(C.timer); C.timer = null; C.pendingCode = ""; C.waiting = false; C.error = "";
       Id.connect(); redraw();
     }).catch(function (e) { UI.toast(e.message || String(e), "bad"); });
@@ -395,6 +421,7 @@
       '<form data-submit="su-join-school" class="mt"><label class="field"><span>School code</span><input class="input input-lg" name="school" value="' + esc(Ch.typed) + '" placeholder="Enter the school code" autocomplete="off" autocapitalize="none" spellcheck="false" enterkeyhint="go"></label>' +
       '<button class="btn btn-primary btn-lg btn-block mt" type="submit"' + (Ch.busy ? " disabled" : "") + ">" + I("right") + (Ch.busy ? "Looking for it…" : "Join") + "</button>" +
       (scan ? '<button type="button" class="btn btn-lg btn-block mt-sm" data-act="su-scan">' + I("image") + "Scan the QR code</button>" : "") + "</form></div>" +
+      (A.Install ? A.Install.html("join") : "") +
       '<p class="setup-links">Setting up a new school? <button class="link" data-act="su-view" data-v="setup">Set up a school</button></p>';
   }
   /** Setting a school up: the school's key from Golden Technologies; and, for a school with a server of its own, its

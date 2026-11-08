@@ -255,6 +255,7 @@
   };
   var WEEK = 7 * 86400000;
   A.route("s/subjects", function (p, q, me) {
+    if (A.Enrol && A.Enrol.applies()) return A.Enrol.studentPage(me); // School Assist: the school registers each student's subjects
     var ens = M.enrolments(me.id).filter(function (e) { return e.status !== "dropped"; });
     var byId = {}; ens.forEach(function (e) { byId[e.syllabusId] = e; });
     // subjects the student is in without an enrolment record (added before subjects were chosen)

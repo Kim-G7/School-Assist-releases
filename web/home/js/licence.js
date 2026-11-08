@@ -35,13 +35,15 @@
   var PLANS = { standard: { name: "Standard" }, premium: { name: "Premium" } };
   var TEACHER = A.edition === "teacher";
   /** Premium features. `built: false` ones are on the way; an update that builds one flips it to true.
-   *  yearly: Standard paid a year has it too. school: School Assist only (not listed in School Assist Teacher). */
+   *  yearly: Standard paid a year has it too. school: School Assist only (not listed in School Assist Teacher).
+   *  always: comes with the plan, with no switch to turn it on. */
   var FEATURES = [
     { id: "ai-marking", name: "AI marking", built: true, school: true, about: "Written answers in practice papers are marked against the marking scheme, with a line of feedback for the student." },
     { id: "consultation", name: "Consultation mode", built: false },
     { id: "vacation", name: "Vacation mode", built: A.edition !== "home", yearly: TEACHER, // (the School edition too since 2026-10-28)
       about: "Teachers keep working in the holidays (lessons, marks, plans) in a space of their own on their device, kept apart from the school's records so nothing is doubled." },
-    { id: "parent-monitor", name: "Parent and student monitoring", built: false },
+    { id: "parent-monitor", name: "Parents", built: true, school: true, always: true, about: "Parents follow their own child from their phone: attendance, subjects and teachers, marks, progress and the timetable." },
+    { id: "fees", name: "School fees", built: true, school: true, always: true, about: "The bursar and accountant get their own view: fees by form and student, payment plans, transport and candidate registration." },
   ];
 
   /* ------------------------------------------------------------------ checking a key
@@ -236,6 +238,7 @@
   /** Is the feature in use: on the plan, and turned on by the admin. */
   Lic.isOn = function (id) {
     if (!Lic.has(id)) return false;
+    if (FEATURES.some(function (x) { return x.id === id && x.always; })) return true;
     if (id === "ai-marking") return !!(S().get("settings", "ai") || {}).enabled;
     return !!((S().get("settings", "features") || {}).on || {})[id];
   };
@@ -257,7 +260,7 @@
       admins.forEach(function (adm) {
         S().put("alerts", { id: "al_feature_" + x.id + "_" + adm.id, teacherId: adm.id, kind: "feature", createdAt: now,
           title: "New for your school: " + x.name,
-          body: (x.about ? x.about + " " : "") + "It stays off until you turn it on in Settings → Plan & licence." });
+          body: (x.about ? x.about + " " : "") + (x.always ? "It comes with your plan." : "It stays off until you turn it on in Settings → Plan & licence.") });
       });
     });
     S().put("settings", Object.assign({}, rec, { id: "features", seen: seen.concat(fresh.map(function (x) { return x.id; })) }));
@@ -299,7 +302,7 @@
 
     // no plan card (2026-10-22): nothing "coming soon" to raise expectations, no prices (Golden Technologies' price
     // list is on paper). Only the features this school has and that are built, each with its switch.
-    var rows = FEATURES.filter(function (f) { return f.built && !(TEACHER && f.school) && Lic.has(f.id); }).map(function (f) {
+    var rows = FEATURES.filter(function (f) { return f.built && !f.always && !(TEACHER && f.school) && Lic.has(f.id); }).map(function (f) {
       return '<div class="list-row"><div class="grow"><div class="title">' + esc(f.name) + "</div>" + (f.about ? '<div class="meta"><span>' + esc(f.about) + "</span></div>" : "") + "</div>" +
         '<label class="check" style="margin:0"><input type="checkbox" data-licence-feature="' + f.id + '"' + (Lic.isOn(f.id) ? " checked" : "") + "> On</label></div>";
     }).join("");

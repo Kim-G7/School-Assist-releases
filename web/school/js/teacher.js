@@ -844,19 +844,20 @@
   A.act["add-students"] = function (el) {
     var c = M.cls(el.getAttribute("data-class")), st = M.structure();
     var others = M.students().filter(function (u) { return c.studentIds.indexOf(u.id) < 0; });
+    var typeNew = !(A.Enrol && A.Enrol.applies()); // (School Assist: new students are entered on Enter students, js/enrol.js)
     UI.modal({
       title: "Add students to " + M.className(c), size: "wide",
-      body: '<div class="label">Students already at the school</div>' + UI.picker({ students: others, id: "add-picker", empty: "Every student is already in this class." }) +
+      body: '<div class="label">Students already at the school</div>' + UI.picker({ students: others, id: "add-picker", empty: "Every student is already in this class." }) + (!typeNew ? "" :
         '<div class="divider"></div><div class="label">New students <span class="muted">(one per line: full name. Each gets the next student ID in the form; type an ID after a comma only if they already have one)</span></div>' +
         '<div class="form-grid"><label class="field"><span>' + esc(st.levelLabel) + '</span><select class="select" id="new-level">' + st.levels.map(function (l) { return "<option" + (l === c.level ? " selected" : "") + ">" + esc(l) + "</option>"; }).join("") + "</select></label>" +
         '<label class="field"><span>Class</span><select class="select" id="new-stream">' + st.streams.map(function (s) { return "<option" + (s === c.stream ? " selected" : "") + ">" + esc(s) + "</option>"; }).join("") + "</select></label></div>" +
         '<textarea class="textarea mt-sm" id="new-studs" rows="4" placeholder="Tendai Moyo&#10;Grace Banda"></textarea>' +
-        '<p class="hint small muted mt-sm">New students sign in the first time with their name and student ID, then create their own password.</p>',
+        '<p class="hint small muted mt-sm">New students sign in the first time with their name and student ID, then create their own password.</p>'),
       foot: [{ label: "Cancel" }, {
         label: "Add to class", cls: "btn-primary", onClick: function (m) {
           var ids = UI.pickerValue(m.querySelector("#add-picker")), bad = [];
-          var lv = m.querySelector("#new-level").value, sm = m.querySelector("#new-stream").value;
-          var rows = m.querySelector("#new-studs").value.split("\n").map(function (l) { return l.trim(); }).filter(Boolean).map(function (line) {
+          var lv = typeNew ? m.querySelector("#new-level").value : "", sm = typeNew ? m.querySelector("#new-stream").value : "";
+          var rows = (typeNew ? m.querySelector("#new-studs").value : "").split("\n").map(function (l) { return l.trim(); }).filter(Boolean).map(function (line) {
             var parts = line.split(","); return { name: parts[0].trim(), no: (parts[1] || "").trim() };
           });
           // one after another: each student without an ID gets the next one in the form from the school hub

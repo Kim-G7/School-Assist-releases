@@ -16,6 +16,7 @@
     // (not for students: the school decides where its records are, and a student can't point the app anywhere else)
     if (me.role !== "student" && (A.edition !== "teacher" || admin)) sections.push(["sync", "Offline & sync", "refresh"]); // School Assist Teacher: admins only
     if (admin) sections.push(["people", "People", "users"], ["devices", "Devices", "phone"]);
+    if (admin && A.Parents && A.Parents.available()) sections.push(["parents", "Parents", "users"]); // Premium
     if (me.role === "teacher" && A.edition !== "teacher") sections.push(["integrity", "Exam integrity", "shield"]);
     if (admin && A.edition !== "teacher" && A.AI && (!A.Licence || A.Licence.has("ai-marking"))) sections.push(["ai", "AI marking", "bulb"]); // Premium (hidden on Standard); online, or through the school hub
     if (admin && A.Licence && A.Licence.applies()) sections.push(["licence", "Plan & licence", "key"]);
@@ -23,6 +24,7 @@
     if (admin) sections.push(["data", "Backup & data", "database"]); // the online backup is in it too (SECTIONS.data)
     if (A.Updates) sections.push(["updates", "App updates", "download"]);
     sections.push(["account", me.role === "student" || A.Cloud || A.staffPassword(me) ? "My password" : "My PIN", "lock"]);
+    if (A.Fees && A.Fees.isFinance(me)) sections = sections.filter(function (s) { return ["appearance", "updates", "account"].indexOf(s[0]) >= 0; }); // the bursar's and accountant's view
     var want = q.s === "backup" ? "data" : q.s; // (Online backup had a tab of its own before 1.6.2)
     var sec = sections.some(function (s) { return s[0] === want; }) ? want : sections[0][0];
     var base = me.role === "student" ? "#/s/settings" : "#/t/settings";
@@ -157,6 +159,8 @@
       },
     };
   };
+
+  SECTIONS.parents = function (me, q) { return A.Parents.settings(me, q); };
 
   /* ------------------------------------------------------------------ sync */
   SECTIONS.sync = function () {
@@ -618,7 +622,7 @@
     var html = '<div class="row spread wrap mb">' + (A.edition === "teacher" ? '<p class="muted small" style="max-width:520px">The teachers who sign in on this device or the school hub. Pupils are added in <a href="#/t/pupils">My class</a>.</p><div class="hidden">' : '<div class="pill-tabs" style="margin:0">') + '<button class="' + (role === "student" ? "on" : "") + '" data-act="goto" data-href="#/t/settings?s=people&r=student">Students</button><button class="' + (role === "teacher" ? "on" : "") + '" data-act="goto" data-href="#/t/settings?s=people&r=teacher">Teachers</button></div>' +
       '<form data-submit="people-search" class="row"><input class="input sm" name="q" value="' + esc(q.q || "") + '" placeholder="Search name or ID" style="width:220px" aria-label="Search people"><button class="btn btn-sm" type="submit">' + I("search") + "</button></form>" +
       (A.Cloud ? (role === "student" ? '<button class="btn btn-primary" data-act="cloud-add-student">' + I("plus") + "Add student</button>" : '<button class="btn btn-primary" data-act="teacher-add">' + I("plus") + "Add teacher</button>") :
-        '<button class="btn btn-primary" data-act="person-edit" data-role="' + role + '">' + I("plus") + "Add " + role + "</button>") + "</div>";
+        (role === "student" && A.Enrol && A.Enrol.applies() ? (A.Enrol.may(me) ? '<a class="btn btn-primary" href="#/t/enrol?add=1">' + I("plus") + "Enter a student</a>" : "") : '<button class="btn btn-primary" data-act="person-edit" data-role="' + role + '">' + I("plus") + "Add " + role + "</button>")) + "</div>";
     if (!A.Cloud && A.School && role === "student") html += A.School.peopleHtml(me);
     if (A.Cloud) {
       html += A.pwRequestsHtml ? A.pwRequestsHtml(me) : "";
@@ -695,6 +699,7 @@
               (isNew ? '<span class="hint">Leave it empty for the next number in the form.</span>' : "") + "</label>" +
             '<label class="field"><span>' + esc(st.levelLabel) + '</span><select class="select" name="level">' + st.levels.map(function (l) { return "<option" + (l === u.level ? " selected" : "") + ">" + esc(l) + "</option>"; }).join("") + "</select></label>" +
             '<label class="field"><span>Class</span><select class="select" name="stream">' + st.streams.map(function (x) { return "<option" + (x === u.stream ? " selected" : "") + ">" + esc(x) + "</option>"; }).join("") + "</select></label>" +
+            (A.Parents ? A.Parents.fields(u) : "") + // Premium: who may follow this student in the parents' app
             (A.Cloud ? '<div class="field full"><span class="label">Password</span><div class="row wrap"><button type="button" class="btn btn-sm" data-act="cloud-reset" data-id="' + u.id + '">' + I("refresh") + 'Give a new password</button></div><span class="hint">You get a new password to pass on. Their old one stops working.</span></div>'
               : isNew ? '<p class="field small muted">The student creates a password the first time they sign in.</p>'
               : '<div class="field full"><span class="label">Password</span><div class="row wrap">' + (M.hasPassword(u.id) ? '<span class="badge good">' + I("check") + "Set</span>" : '<span class="badge warn">Not set yet</span>') +
@@ -721,6 +726,7 @@
           if (n && n.error) { UI.toast(n.error, "bad"); return false; }
           if (!n && !f.name.trim()) { UI.toast("Enter a name", "bad"); return false; }
           var rec = Object.assign({}, u, n ? M.nameRec(n, u.id) : { name: f.name.trim() });
+          if (u.role === "student" && A.Parents && A.Parents.available()) rec.parents = A.Parents.readFields(f);
           var pin = u.role === "student" || A.Cloud ? "" : String(f.pin || "").trim();
           delete rec.pin; // PINs from before 1.6 lived on the user
           var save = function (msg) {
@@ -748,6 +754,7 @@
               rec.classIdsAsked = null;
             } else rec.subjects = f.subjects;
             rec.title = f.title; rec.isAdmin = !!f.isAdmin; if (u.id === me.id) rec.isAdmin = true;
+            else if (/^(bursar|accountant)$/i.test(String(f.title || "").trim())) rec.isAdmin = false; // fees only
             if (isNew && !A.Cloud) return M.claimStaffNo(rec.isAdmin).then(function (no) { rec.staffNo = no; save(rec.name + "'s staff number is " + no); });
           }
           save();
@@ -848,6 +855,7 @@
       '<div class="row wrap mt-sm"><button class="btn" data-act="invite-copy">' + I("copy") + 'Copy the link</button><button class="btn" data-act="invite-print">' + I("download") + "Print it</button></div>" +
       '<p class="tiny muted mt-sm">Or type the school\'s code on the first page of School Assist: <b>' + esc(code) + "</b></p></div></div></div>";
   }
+  A.qrSvg = function (text) { return qrSvg(text); }; // (the parents' link too: js/parents.js)
   var qrLoading = null;
   /** A QR code of `text` as SVG (vendor/qrcode, loaded the first time). */
   function qrSvg(text) {

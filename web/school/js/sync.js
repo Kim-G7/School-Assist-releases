@@ -22,8 +22,9 @@
     var c = {};
     try { c = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { c = {}; }
     if (c.url == null) {
-      // served by server.cjs? then sync with it by default
-      c.url = /^https?:$/.test(location.protocol) && !A.staticHost() ? location.origin : "";
+      // served by server.cjs? then sync with it by default (not the page for every school: there, only once a school
+      // is chosen, which sets the address; its own /api/ answers "choose your school first")
+      c.url = /^https?:$/.test(location.protocol) && !A.staticHost() && !A.multiHost ? location.origin : "";
       c.auto = true;
       c.probe = true;
     }
@@ -58,6 +59,19 @@
     return h;
   }
   function readJson(r) { return r.json().catch(function () { return {}; }); }
+  /* School fees and Parents rely on the hub to keep those records off other people's devices (hub-fees.cjs, hub-parents.cjs).
+     A school hub on an older installer has no such rules and answers "method not allowed" here: the two stay off until it has. */
+  var rulesAskedAt = 0;
+  function askHubRules(c) {
+    if (meta().hubRules === true || Date.now() - rulesAskedAt < 600000) return;
+    rulesAskedAt = Date.now();
+    fetch(c.url + "/api/fees/summary", { method: "POST", headers: headers({ "Content-Type": "application/json" }), body: "{}" }).then(function (r) {
+      var has = r.status === 200 || r.status === 403 ? true : r.status === 405 ? false : null;
+      if (has === null || meta().hubRules === has) return;
+      meta().hubRules = has;
+      A.Store.flush(); A.softRefresh();
+    }).catch(function () { /* asked again later */ });
+  }
   /** The school moved its records to a server of its own (1.7, hub-move.cjs): its old place answers 410 with the new
       address. This device goes there with the same key (the move took every device's key along) and takes everything
       once from there. True when it is now pointed at the new address. */
@@ -87,25 +101,34 @@
       return j;
     }).catch(function () { return ""; });
   }
-  /** Register this device with the hub (once): the school file's secret, a staff code, or an admin's approval. */
-  function join(c, staffCode) {
+  /** Register this device with the hub (once): the school file's secret, a staff code, a number from another app on
+      this device (carry), or an admin's approval. One ask at a time: the join page's check and a sync asking together
+      used to cross at the hub, one taking the admin's yes and the other making a new code for the admin (2026-11-04). */
+  var joining = null;
+  function join(c, staffCode, carry) {
     var m = meta();
+    if (m.hubKey && !staffCode && !carry) return Promise.resolve({ key: true }); // let in already (by the other ask)
+    if (joining) return joining.then(function (r) { return staffCode || carry ? join(c, staffCode, carry) : r; }, function () { return join(c, staffCode, carry); });
     m.joinAskedAt = A.now();
-    return packSecret(m).then(function (secret) {
+    joining = packSecret(m).then(function (secret) {
       return fetch(c.url + "/api/join", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId: A.Devices ? A.Devices.id() : m.deviceId, label: deviceLabel(), secret: secret || undefined, staffCode: staffCode || undefined }) });
+        body: JSON.stringify({ deviceId: A.Devices ? A.Devices.id() : m.deviceId, label: deviceLabel(), secret: secret || undefined, staffCode: staffCode || undefined, carry: carry || undefined }) });
     })
       .then(function (r) {
         return readJson(r).then(function (j) {
-          if (r.status === 410 && follow(j)) return join(cfg(), staffCode); // the school moved: ask there (a request waiting moved with it)
+          joining = null;
+          if (r.status === 410 && follow(j)) return join(cfg(), staffCode, carry); // the school moved: ask there (a request waiting moved with it)
           if (r.status === 200 && j.key) { m.hubKey = j.key; m.joinCode = null; m.blocked = false; m.oldHub = null; return A.Store.flush().then(function () { return { key: true }; }); }
           // a hub still on 1.5 has no /api/join (it answers 405, or 404): sync as before; once it is updated it
           // answers 401 "join" and this device joins
           if (r.status === 404 || r.status === 405) { m.oldHub = A.now(); return { old: true }; }
           if (r.status === 202 && j.pending) { m.joinCode = j.code; return { pending: true, code: j.code }; }
+          // let in a moment ago, by an ask whose answer hasn't arrived here (another window): the code stays as it is
+          if (r.status === 409 && j.joined) return { pending: true, code: m.joinCode };
           throw err(j.declined ? "declined" : "refused", j.error || "The school hub replied " + r.status + ".");
         });
-      });
+      }, function (e) { joining = null; throw e; });
+    return joining;
   }
   /** Before anything else: this device's key (or the hub computer's token). Rejects with code "pending" while an admin hasn't let it in. */
   function ready(c, staffCode) {
@@ -135,6 +158,14 @@
       var all = S.state.colls[coll] || {};
       Object.keys(all).forEach(function (id) { var r = all[id]; if ((r.updatedAt || 0) <= sent && !keep(r)) delete all[id]; }); // never a change not yet sent
     };
+    if (res.scope === "finance") { // the bursar's and accountant's devices keep only what their pages need
+      var fin = ["settings", "users", "credentials", "classes", "devices", "revocations", "alerts", "feeschedules", "feeaccounts", "feepayments", "transportlist", "candidates"];
+      Object.keys(S.state.colls).forEach(function (coll) { if (fin.indexOf(coll) < 0) drop(coll, function () { return false; }); });
+      drop("classes", function (c) { return c._deleted || c.homeroom; });
+      drop("users", function (u) { return u._deleted || u.role === "student" || devKnown[u.id] || /^(bursar|accountant)$/i.test(u.title || ""); });
+      m.financeView = true;
+      return;
+    }
     // passwords: only the people who sign in here; PINs from before 1.6 never stay on a device
     drop("credentials", function (r) { return r._deleted || devKnown[r.userId]; });
     Object.keys(S.state.colls.users || {}).forEach(function (id) { var u = S.state.colls.users[id]; if (u && u.pin != null) { var p = Object.assign({}, u); delete p.pin; S.state.colls.users[id] = p; } });
@@ -206,6 +237,13 @@
     joinCheck: function () { var c = cfg(); return c.url ? join(c) : Promise.reject(err("nohub", "No school hub.")); },
     /** Join with a staff code typed on this device (a teacher registering or signing in). */
     joinWithCode: function (code) { var c = cfg(); return c.url ? join(c, code) : Promise.reject(err("nohub", "No school hub.")); },
+    /** Join with the 6-digit number another app on this device made (Sync.carryCode, below). */
+    joinWithCarry: function (n) { var c = cfg(); return c.url ? join(c, null, n) : Promise.reject(err("nohub", "No school hub.")); },
+    /** A device let in already: a 6-digit number (15 minutes, once) that lets another app on it in too, such as an
+        iPhone's Home Screen app, which keeps storage of its own. Resolves { code, until }; rejects on a hub without it. */
+    carryCode: function () { return Sync.hubPost("/api/join/carry", {}); },
+    /** Does this device's hub keep fee records and parents' details to the right people? (No hub: nothing leaves this device.) */
+    hubHasRules: function () { var c = cfg(); return !c.url || !!c.cloud || meta().hubRules === true; },
     /** Sign someone in through the hub: { userId | studentNo, secret, staffCode }. Resolves with { user, credential }; the
         error's code says why not: wrong, locked, needCode, pending, declined, offline. */
     hubSignIn: function (o) { return hubAuth("/api/signin", o); },
@@ -281,6 +319,11 @@
       if (c.cloud && !A.Cloud.session()) return Promise.reject(new Error("Sign in online to sync"));
       if (running) return running;
       var S = A.Store, meta = S.state.meta, startedAt = A.now(), sentAt = 0;
+      // someone else after the bursar or accountant on this device: the fee records go, and what their view dropped comes down again
+      if (meta.financeView && !(A.Fees && A.Fees.isFinance(A.M && A.M.me && A.M.me())) && !c.cloud) {
+        meta.financeView = false; meta.serverSince = 0;
+        ["feeschedules", "feeaccounts", "feepayments", "transportlist", "candidates"].forEach(function (coll) { var all = S.state.colls[coll] || {}; Object.keys(all).forEach(function (id) { if ((all[id].updatedAt || 0) <= (meta.lastPushAt || 0)) delete all[id]; }); });
+      }
       // null: this device has no school yet (the demo, or a new install): it only receives
       var school = !c.cloud && A.SchoolId && A.SchoolId.applies() ? A.SchoolId.id() : undefined;
       var changes = school === null ? {} : S.changedSince(meta.lastPushAt || 0), sent = 0;
@@ -329,7 +372,7 @@
         if (A.SchoolId && A.SchoolId.hubOk) A.SchoolId.hubOk();
         meta.lastPushAt = startedAt;
         meta.serverSince = res.now;
-        if (!c.cloud) meta.syncUser = who;
+        if (!c.cloud) { meta.syncUser = who; askHubRules(c); }
         meta.lastSyncAt = A.now();
         state = "ok"; lastError = "";
         return S.flush().then(function () {

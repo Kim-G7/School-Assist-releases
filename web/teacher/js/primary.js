@@ -100,6 +100,12 @@
   };
   // the school's leaders, by their role: everyone above the teachers in the school's hierarchy (A.rank: directors, the
   // RA, the principal, the deputy, the senior master and senior lady, heads of department)
+  /** A director, head or principal is taken not to teach until a subject is ticked for them in Settings → People, or they
+      are a class teacher: their menu then leaves out the teaching pages, and the classes are in View other classes. */
+  P.notTeaching = function (u) {
+    var r = u ? A.rank(u.title) : -1;
+    return (r === 0 || r === 2) && !(u.areas || []).length && !homerooms().some(function (c) { return c.teacherId === u.id; });
+  };
   P.isLeader = function (u) { return !!u && u.role === "teacher" && A.rank(u.title) < A.RANK_STAFF; };
   /** The subjects a person teaches themselves, an admin too (the school's subjects among theirs). */
   P.ownAreas = function (me) { return me ? P.conf().areas.filter(function (a) { return (me.areas || []).indexOf(a) >= 0; }) : []; };
@@ -111,7 +117,7 @@
     chosen = chosen || [];
     return '<div class="field full"><span class="label">Subjects they teach</span><div class="row wrap" style="gap:4px 14px">' + P.conf().areas.map(function (a) {
       return '<label class="check"><input type="checkbox" data-area="' + esc(a) + '"' + (chosen.indexOf(a) >= 0 ? " checked" : "") + "> " + esc(a) + "</label>";
-    }).join("") + '</div><span class="hint">They record the end-of-term marks of these, in every class. The head records any.</span></div>';
+    }).join("") + '</div><span class="hint">They record the end-of-term marks of these, in every class. The head records any. A director, head or principal gets the teaching pages in their menu once a subject is ticked here.</span></div>';
   };
   P.areasPicked = function (root) { return Array.prototype.map.call(root.querySelectorAll("[data-area]:checked"), function (x) { return x.getAttribute("data-area"); }); };
   /** A subject that isn't on the school's list: typed when registering or asking, for the admins to add (user.areasNew). */
@@ -206,6 +212,7 @@
     var asked = me.homeAsk && S().get("classes", me.homeAsk);
     return { view: { title: title, html: '<div class="card">' + (me.isAdmin && !homerooms().length
       ? UI.empty("users", "No class yet", "Create the school's classes: each one's form or grade, stream and class teacher. Then add their pupils.", '<button class="btn btn-primary" data-act="pclass-new">' + I("plus") + "Create a class</button>")
+      : P.notTeaching(me) ? UI.empty("school", "Your school", "The school's classes, their class teachers and students are in View other classes.", '<a class="btn btn-primary" href="#/t/others">' + I("users") + "View other classes</a>")
       : me.isAdmin ? UI.empty("users", "No class of your own", "The school's classes, their class teachers and students are in View other classes, where you also create and edit them. To be a class teacher yourself, take one on.",
         '<a class="btn btn-primary" href="#/t/others">' + I("users") + 'View other classes</a> <button class="btn" data-act="pclass-choose">Take on a class</button>')
       : asked && !asked._deleted ? UI.empty("clock", "Waiting for the head", "You asked to be the class teacher of " + asked.name + ". When the head agrees, its pupils and registers are yours here.", '<button class="btn" data-act="psubj-unask">Take back my request</button>')
@@ -256,13 +263,14 @@
 
   /* ------------------------------------------------------------------ navigation */
   P.nav = function (me) {
-    var c = P.cls(me), today = A.isoDate(), taken = c && M.register(c.id, today);
+    var c = P.cls(me), today = A.isoDate(), taken = c && M.register(c.id, today), noClassPages = P.notTeaching(me);
     return [
       { href: "#/t/home", icon: "home", label: "Today", key: "home" },
       A.Notices ? A.Notices.nav(me) : null,
       A.Tracker ? A.Tracker.nav(me) : null, // My subjects (js/tracker.js)
       { href: "#/t/pupils", icon: "users", label: "My class", key: "pupils", match: ["pupils", "pupil"] },
       { href: "#/t/others", icon: "school", label: "View other classes", key: "others", match: ["others"] },
+      A.Enrol ? A.Enrol.nav(me) : null, // who enters students, with their class and subjects
       { href: "#/t/register", icon: "check", label: "Register", key: "register", count: c && !taken && M.isSchoolDay(A.now()) ? "!" : 0 },
       { href: "#/t/timetable", icon: "grid", label: "Timetable", key: "timetable" },
       { href: "#/t/markbook", icon: "edit", label: "Mark book", key: "markbook", match: ["markbook", "assessment"] },
@@ -270,9 +278,11 @@
       me.isAdmin && A.Report ? { href: "#/t/reportcards", icon: "download", label: "Report cards", key: "reportcards" } : null,
       { href: "#/t/schemes", icon: "book", label: "Schemes & records", key: "schemes" },
       A.Tracker ? A.Tracker.overviewNav(me) : null, // the Teachers' overview, for the school's leaders
+      A.Parents ? A.Parents.nav(me) : null, // Premium: how many parents use School Assist
+      A.Fees ? A.Fees.headNav(me) : null, // Premium: the term's fee totals, for the head or principal
       A.Vacation ? A.Vacation.nav(me) : null,
       { href: me.isAdmin && A.joinsWaiting ? "#/t/settings?s=devices" : "#/t/settings", icon: "sliders", label: "Settings", key: "settings", count: me.isAdmin ? A.joinsWaiting || 0 : 0 }, // devices waiting to join
-    ].filter(Boolean);
+    ].filter(function (it) { return it && !(noClassPages && ["pupils", "register", "markbook", "reports"].indexOf(it.key) >= 0); });
   };
 
   /* ------------------------------------------------------------------ first run: the school and the class */
@@ -390,6 +400,11 @@
   }
   /** u joins class c (the School edition: a student who signed up, put in their class): out of any other class of the
       school's, and their form and stream become c's. */
+  /** School Assist: students are entered by the roles the school chose (js/enrol.js); School Assist Teacher's teachers add their own. */
+  function addPupils() {
+    if (P.withStudents) return A.Enrol && A.Enrol.may(M.me()) ? '<a class="btn btn-primary" href="#/t/enrol?add=1">' + I("plus") + "Enter a student</a>" : "";
+    return '<button class="btn btn-primary" data-act="pupils-add">' + I("plus") + "Add pupils</button>";
+  }
   P.placeStudent = function (u, c) {
     if (!u || !c || !c.homeroom) return;
     homerooms().forEach(function (x) { if (x.id !== c.id && (x.studentIds || []).indexOf(u.id) >= 0) S().patch("classes", x.id, { studentIds: x.studentIds.filter(function (y) { return y !== u.id; }) }); });
@@ -549,7 +564,7 @@
   A.route("t/others", function (p, q, me) {
     var all = homerooms(), levels = M.structure().levels.slice();
     all.forEach(function (c) { var L = c.level || "No form"; if (levels.indexOf(L) < 0) levels.push(L); });
-    var html = '<div class="row wrap spread mb"><div><h2 style="font-size:22px">View other classes</h2><p class="muted">The school\'s classes, form by form, with their class teachers and students</p></div></div>';
+    var html = '<div class="row wrap spread mb"><div><h2 style="font-size:22px">View other classes</h2><p class="muted">The school\'s classes, form by form, with their class teachers and students</p></div>' + (P.notTeaching(me) ? '<a class="btn" href="#/t/reports?v=top">' + I("award") + "Top students</a>" : "") + "</div>";
     if (!all.length && !me.isAdmin) return { title: "View other classes", html: html + '<div class="card">' + UI.empty("users", "No classes yet", "The head creates the school's classes.") + "</div>" };
     levels.forEach(function (L) {
       var list = all.filter(function (c) { return (c.level || "No form") === L; });
@@ -810,11 +825,11 @@
       kids.filter(function (u) { return u.sex === "M"; }).length + " boys · " + kids.filter(function (u) { return u.sex === "F"; }).length + " girls</span></div>" +
       '<div class="row wrap">' + classSwitch(me, c, "pupils") + (me.isAdmin ? '<button class="btn" data-act="pclass-edit">' + I("edit") + 'Class</button><button class="btn" data-act="pclass-new">' + I("plus") + "Another class</button>"
         : '<button class="btn" data-act="pclass-choose">' + I("users") + "Change my class</button>") +
-      '<button class="btn" data-act="pupils-csv">' + I("download") + 'Excel (CSV)</button><button class="btn btn-primary" data-act="pupils-add">' + I("plus") + "Add pupils</button></div></div>";
+      '<button class="btn" data-act="pupils-csv">' + I("download") + 'Excel (CSV)</button>' + addPupils() + "</div></div>";
     if (samples) html += '<div class="callout mb">' + I("info") + '<div class="grow"><b>' + samples + " sample pupils</b> are here so you can try everything. Remove them when you add your own class.</div>" +
       '<button class="btn btn-sm" data-act="pupils-clear-sample">' + I("trash") + "Remove sample pupils</button></div>";
     if (!kids.length) return { title: "My class", html: html + '<div class="card">' + UI.empty("users", "No pupils yet", "Add your class list: type the names, or paste them from a list, one per line.",
-      '<button class="btn btn-primary" data-act="pupils-add">' + I("plus") + "Add pupils</button>") + "</div>", mount: function () { if (q.add) A.act["pupils-add"](); } };
+      addPupils()) + "</div>", mount: function () { if (q.add) A.act["pupils-add"](); } };
     html += '<div class="card table-wrap"><table class="table"><thead><tr><th class="num">No.</th><th>Pupil</th><th>Sex</th><th class="num">Age</th><th>Guardian</th><th>Phone</th><th class="num">Attendance</th></tr></thead><tbody>' +
       kids.map(function (u, i) {
         var att = M.attendanceRate(u.id, c.id);
@@ -918,7 +933,7 @@
       body: '<form id="pupil-form" class="form-grid">' + f("name", "Full name") +
         '<label class="field"><span>Sex</span><select class="select" name="sex"><option value=""></option><option value="M"' + (u.sex === "M" ? " selected" : "") + '>Boy</option><option value="F"' + (u.sex === "F" ? " selected" : "") + ">Girl</option></select></label>" +
         f("dob", "Date of birth", "date") + f("birthNo", "Birth entry number (optional)") + f("guardian", "Parent or guardian") + f("phone", "Phone", "tel") + f("address", "Address", "text", " full") +
-        f("health", "Health notes (allergies, asthma…)", "text", " full") + "</form>",
+        f("health", "Health notes (allergies, asthma…)", "text", " full") + (A.Parents ? A.Parents.fields(u) : "") + "</form>",
       foot: [{ label: "Remove from class", cls: "btn-danger", onClick: function () {
         return UI.confirm("Remove " + u.name + " from the class? Their marks and registers are kept in old reports.", { danger: true, ok: "Remove" }).then(function (ok) {
           if (!ok) return false;
@@ -930,6 +945,7 @@
         var d = UI.formData(m.querySelector("#pupil-form"));
         if (d.name.trim().length < 2) { UI.toast("Enter the pupil's name", "bad"); return false; }
         S().patch("users", u.id, { name: d.name.trim(), sex: d.sex, dob: d.dob, birthNo: d.birthNo.trim(), guardian: d.guardian.trim(), phone: d.phone.trim(), address: d.address.trim(), health: d.health.trim(), sample: false });
+        if (A.Parents && A.Parents.available()) S().patch("users", u.id, { parents: A.Parents.readFields(d) });
         UI.toast("Saved"); A.render();
       } }],
     });

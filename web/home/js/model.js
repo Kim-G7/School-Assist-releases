@@ -133,11 +133,13 @@
   M.staffPrefix = function (admin) { return M.idAbbr() + "-" + (admin ? "AD" : "TC"); };
   /** The next number after the ones this device knows: { field: "studentNo" | "staffNo", pad: 3 | 0 }. */
   M.nextNumber = function (prefix, field, pad) {
-    var top = 0;
+    var top = 0, used = {};
     S().filter("users", function (u) { return String(u[field] || "").indexOf(prefix) === 0; }).forEach(function (u) {
-      var n = parseInt(String(u[field]).slice(prefix.length), 10); if (n > top) top = n;
+      var n = parseInt(String(u[field]).slice(prefix.length), 10); used[n] = 1; if (n > top) top = n;
     });
-    return prefix + (pad ? String(top + 1).padStart(pad, "0") : String(top + 1));
+    var next = top + 1;
+    if (field === "studentNo") { next = 1; while (used[next]) next++; } // (a deleted student's ID is given again: the lowest free one)
+    return prefix + (pad ? String(next).padStart(pad, "0") : String(next));
   };
   /** The next number from the school hub when it answers (it remembers what it has handed out), else this device's. */
   M.claimNumber = function (prefix, field, pad) {
@@ -154,7 +156,7 @@
         body: JSON.stringify({ prefix: prefix, field: field, pad: pad, school: A.SchoolId ? A.SchoolId.id() : null }), signal: ctl ? ctl.signal : undefined })
         .then(function (r) { if (r.status === 401 || r.status === 403) throw refused(); return r.ok ? r.json() : null; })
         // a hub older than 1.3.3 only knows the old pattern and refuses: this device counts then
-        .then(function (j) { clearTimeout(t); var no = j && (j.number || j.studentNo); return no && String(no).indexOf(prefix) === 0 && num(no) >= num(local) ? no : local; })
+        .then(function (j) { clearTimeout(t); var no = j && (j.number || j.studentNo); return no && String(no).indexOf(prefix) === 0 && (field === "studentNo" ? !M.studentById(no) : num(no) >= num(local)) ? no : local; })
         .catch(function (e) { clearTimeout(t); if (e && e.refused) throw e; return local; });
     });
   };

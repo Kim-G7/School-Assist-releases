@@ -8,7 +8,7 @@
   "use strict";
   var esc = A.esc, I = A.icon, M = A.M, UI = A.UI, S = function () { return A.Store; };
   var Al = (A.Alerts = {});
-  var ICON = { submitted: "checkCircle", due: "clock", copy: "shield", register: "users", join: "phone", notice: "bell" };
+  var ICON = { submitted: "checkCircle", due: "clock", copy: "shield", register: "users", join: "phone", notice: "bell", enrol: "users" };
   var TONE = { submitted: "good", due: "bad", copy: "serious", register: "good", join: "", notice: "" };
 
   Al.mine = function (tid) {
@@ -17,7 +17,7 @@
   Al.unread = function (tid) { return Al.mine(tid).filter(function (a) { return !a.readAt; }).length; };
   /** Where a notification takes you: a new teacher or admin waiting (staff) to People, where they are approved; a
       teacher's request about their subjects or class to My subjects, where the head agrees or says no. */
-  Al.href = function (a) { return a.kind === "notice" ? "#/t/notices" : a.kind === "join" || a.kind === "device" ? "#/t/settings?s=devices" : a.kind === "feature" ? "#/t/settings?s=licence" : a.kind === "register" || a.kind === "password" || a.kind === "staff" ? "#/t/settings?s=people" : a.kind === "subjects" ? "#/t/subjects" : a.attemptId ? "#/t/attempt/" + a.attemptId : a.taskId ? "#/t/task/" + a.taskId : "#/t/home"; };
+  Al.href = function (a) { return a.kind === "notice" ? "#/t/notices" : a.kind === "join" || a.kind === "device" ? "#/t/settings?s=devices" : a.kind === "feature" ? "#/t/settings?s=licence" : a.kind === "register" || a.kind === "password" || a.kind === "staff" ? "#/t/settings?s=people" : a.kind === "subjects" || a.kind === "enrol" ? "#/t/subjects" : a.attemptId ? "#/t/attempt/" + a.attemptId : a.taskId ? "#/t/task/" + a.taskId : "#/t/home"; };
 
   Al.check = function () {
     var me = M.me();

@@ -7,11 +7,15 @@
   var KEY = "sca-device-id";
   var Dev = (A.Devices = {});
 
+  // (kept here too: where the browser keeps no storage, every ask would otherwise come from a "new" device, and the
+  // join page would show the admin a new code each time)
+  var known = null;
   Dev.id = function () {
     var id = null;
     try { id = localStorage.getItem(KEY); } catch (e) { /* private mode */ }
+    if (!id) id = known;
     if (!id) { id = A.uid("dev"); try { localStorage.setItem(KEY, id); } catch (e) { /* ignore */ } }
-    return id;
+    return (known = id);
   };
   var recId = function (uid) { return "dv_" + Dev.id() + "_" + uid; };
 

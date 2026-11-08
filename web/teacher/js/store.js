@@ -25,7 +25,9 @@
     "assessments", "reports", "schemes", "pnotes", // School Assist Teacher (js/primary.js)
     "reportmarks", // end-of-term marks and comments for the report cards (js/reportcards.js)
     "notices", // admins' notices to teachers (js/notices.js)
-    "outlines", "coverage"]; // syllabuses and each class's way through them (js/tracker.js)
+    "outlines", "coverage", // syllabuses and each class's way through them (js/tracker.js)
+    "parents", // parents who use the parents' app (the hub makes these; admins see them: js/parents.js)
+    "feeschedules", "feeaccounts", "feepayments", "transportlist", "candidates"]; // school fees (js/fees.js): the bursar's and accountant's devices only
 
   /* who writes each collection (a user may also change their own PIN / password) */
   var OWNERS = {
@@ -34,7 +36,7 @@
     attendance: "teacher", messages: "teacher", lessons: "teacher", alerts: "teacher",
     assessments: "teacher", reports: "teacher", schemes: "teacher", pnotes: "teacher", reportmarks: "teacher", notices: "admin", outlines: "teacher", coverage: "teacher",
     submissions: "student", receipts: "student", progress: "student", attempts: "student",
-    devices: "device", netinfo: "server",
+    devices: "device", netinfo: "server", parents: "admin", feeschedules: "teacher", feeaccounts: "teacher", feepayments: "teacher", transportlist: "teacher", candidates: "teacher",
   };
 
   /* ------------------------------------------------------------ IndexedDB */
