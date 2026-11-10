@@ -79,7 +79,7 @@
   /* -------------------------------------------------- passwords and PINs (js/secret.js)
      Students sign in with their student ID and a password they create the first time; staff with a 4-digit PIN.
      Both are kept only scrambled, in the credentials record "cr_<user id>" { hash }: nobody can read them, admins
-     included; an admin gives a new one instead (Settings → People). The school hub checks them too (server.cjs) and
+     included; an admin gives a new one instead (Settings → People & devices). The school hub checks them too (server.cjs) and
      sends a device someone's record only after they have signed in there. Records from before 1.6 may still hold the
      plain password, or the PIN on the user: they are checked as they are, then scrambled on this device. */
   M.credential = function (uid) { return S().get("credentials", "cr_" + uid); };
@@ -146,7 +146,7 @@
     var local = M.nextNumber(prefix, field, pad), c = A.Sync ? A.Sync.config() : {};
     if (!c.url || c.cloud || A.Cloud || typeof fetch !== "function") return Promise.resolve(local);
     var num = function (no) { return parseInt(String(no).slice(prefix.length), 10) || 0; };
-    var refused = function (msg) { var e = new Error(msg || "This device hasn't joined the school hub yet, so it can't give out IDs. Ask an admin to let it in (Settings → Devices)."); e.refused = true; return e; };
+    var refused = function (msg) { var e = new Error(msg || "This device hasn't joined the school hub yet, so it can't give out IDs. Ask an admin to let it in (Settings → People & devices)."); e.refused = true; return e; };
     // 1.6: this device's key (or the hub computer's token) first. Waiting for an admin or turned away: no number is
     // made up here, it could be someone else's. The hub not reachable: this device counts, as before.
     var asked = A.Sync && A.Sync.ready ? A.Sync.ready().catch(function (e) { if (e && e.code && e.code !== "offline") throw refused(e.message); }) : Promise.resolve();

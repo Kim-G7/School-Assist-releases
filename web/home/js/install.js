@@ -53,7 +53,7 @@
       var carry = Install.joined();
       A.UI.modal({ title: "Install " + name(), size: "sm", body: '<ol class="install-steps"><li>Tap <b>Share</b> ' + A.icon("upload") + " at the bottom of Safari (at the top on an iPad).</li>" +
         "<li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li><li>Open " + name() + " from the Home Screen." +
-        (carry ? ' When it asks to join, type this number: <b class="carry-code">…</b> <span class="small muted carry-note">(making it)</span>' : A.Sync && A.Sync.hubMode && A.Sync.hubMode() ? " It shows a code once: an admin lets it in under Settings → Devices, then you sign in." : "") + "</li></ol>",
+        (carry ? ' When it asks to join, type this number: <b class="carry-code">…</b> <span class="small muted carry-note">(making it)</span>' : A.Sync && A.Sync.hubMode && A.Sync.hubMode() ? " It shows a code once: an admin lets it in under Settings → People & devices, then you sign in." : "") + "</li></ol>",
         foot: [{ label: "OK", cls: "btn-primary" }],
         onMount: function (el) {
           if (!carry) return;
@@ -63,7 +63,7 @@
             if (note) note.textContent = "(it works once, until " + A.fmtTime(r.until) + ")";
           }).catch(function () {
             // a school hub that doesn't make numbers yet (it needs the newer School Assist): an admin lets the app in
-            if (b) b.parentNode.innerHTML = "Open " + name() + " from the Home Screen. It shows a code once: an admin lets it in under Settings → Devices, then you sign in.";
+            if (b) b.parentNode.innerHTML = "Open " + name() + " from the Home Screen. It shows a code once: an admin lets it in under Settings → People & devices, then you sign in.";
           });
         } });
       return;

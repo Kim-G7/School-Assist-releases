@@ -173,7 +173,7 @@
         syl.createdBy = ["t_moyo", "t_ncube", "t_chikomo"][i];
         put("syllabi", syl);
       });
-      var MATHS = "syl_zimsec_maths_4004", BIO = "syl_cie_biology_0610", PHY = "syl_oxaqa_physics_9203";
+      var MATHS = "syl_cie_maths_0580", BIO = "syl_cie_biology_0610", PHY = "syl_cie_physics_0625"; // Cambridge only (2026-11-10)
 
       /* subject classes. currentTerm = the term the teacher has opened. */
       var classes = [

@@ -17,7 +17,7 @@
   Al.unread = function (tid) { return Al.mine(tid).filter(function (a) { return !a.readAt; }).length; };
   /** Where a notification takes you: a new teacher or admin waiting (staff) to People, where they are approved; a
       teacher's request about their subjects or class to My subjects, where the head agrees or says no. */
-  Al.href = function (a) { return a.kind === "notice" ? "#/t/notices" : a.kind === "join" || a.kind === "device" ? "#/t/settings?s=devices" : a.kind === "feature" ? "#/t/settings?s=licence" : a.kind === "register" || a.kind === "password" || a.kind === "staff" ? "#/t/settings?s=people" : a.kind === "subjects" || a.kind === "enrol" ? "#/t/subjects" : a.attemptId ? "#/t/attempt/" + a.attemptId : a.taskId ? "#/t/task/" + a.taskId : "#/t/home"; };
+  Al.href = function (a) { return a.href && /^#\//.test(a.href) ? a.href : a.kind === "notice" ? "#/t/notices" : a.kind === "join" || a.kind === "device" ? "#/t/settings?s=devices" : a.kind === "feature" ? "#/t/settings?s=licence" : a.kind === "register" || a.kind === "password" || a.kind === "staff" ? "#/t/settings?s=people" : a.kind === "subjects" || a.kind === "enrol" ? "#/t/subjects" : a.attemptId ? "#/t/attempt/" + a.attemptId : a.taskId ? "#/t/task/" + a.taskId : "#/t/home"; };
 
   Al.check = function () {
     var me = M.me();
@@ -28,7 +28,7 @@
     if (A.Cloud && me.isAdmin) {
       S().filter("users", function (u) { return u.role === "student" && u.status === "pending"; }).forEach(function (u) {
         add({ id: "al_reg_" + u.id, kind: "register", title: "New registration: " + u.name + " (" + u.studentNo + ")",
-          body: u.name + (u.level ? ", " + u.level + "," : "") + " registered and is waiting for you. Approve them in Settings → People." });
+          body: u.name + (u.level ? ", " + u.level + "," : "") + " registered and is waiting for you. Approve them in Settings → People & devices." });
       });
     }
     // notices from the school's admins (js/notices.js): each one for me becomes my notification, once
@@ -239,10 +239,10 @@
       });
       if (me.isAdmin) {
         (M.pendingStaff ? M.pendingStaff() : []).forEach(function (u) {
-          out.push({ id: "staff_" + u.id, at: u.registeredAt || u.createdAt, icon: "users", title: "New " + (u.isAdmin ? "admin" : "teacher") + " waiting: " + u.name, body: "Approve or decline them in Settings → People → Teachers.", href: "#/t/settings?s=people&r=teacher" });
+          out.push({ id: "staff_" + u.id, at: u.registeredAt || u.createdAt, icon: "users", title: "New " + (u.isAdmin ? "admin" : "teacher") + " waiting: " + u.name, body: "Approve or decline them in Settings → People & devices → Teachers.", href: "#/t/settings?s=people&r=teacher" });
         });
         (A.pwRequestList ? A.pwRequestList() : []).forEach(function (r) {
-          out.push({ id: "pw_" + r.id + "_" + r.askedAt, at: r.askedAt, icon: "key", tone: "bad", title: (r.name || r.login) + " forgot their password", body: A.Cloud ? "Give them a new one from your home page or Settings → People." : "Give them a new one in Settings → People.",
+          out.push({ id: "pw_" + r.id + "_" + r.askedAt, at: r.askedAt, icon: "key", tone: "bad", title: (r.name || r.login) + " forgot their password", body: A.Cloud ? "Give them a new one from your home page or Settings → People & devices." : "Give them a new one in Settings → People & devices.",
             href: A.Cloud ? "#/t/home" : "#/t/settings?s=people&r=" + (r.role === "teacher" ? "teacher" : "student") });
         });
       }

@@ -262,7 +262,7 @@
     var logo = p.logo ? '<div class="logo"><img src="' + esc(p.logo) + '" alt=""></div>' : '<div class="logo"><img src="assets/icon.svg" alt="" data-school-icon></div>';
     return '<div class="setup-card setup-connect">' + logo + "<h1>" + esc(name || "Your school") + "</h1>" +
       (C.pendingCode ? '<p class="mt">' + (again ? "The school hub doesn't know this " + thisDevice() + " any more (it was reset or replaced), so it has to join again. Show an admin this code:"
-          : "This " + thisDevice() + " is waiting to join the school hub. Show an admin this code:") + '</p><p class="join-code">' + esc(C.pendingCode) + '</p><p class="small muted">The admin lets it in under Settings → Devices. This page carries on by itself.</p><div class="setup-spin" aria-hidden="true"></div>' +
+          : "This " + thisDevice() + " is waiting to join the school hub. Show an admin this code:") + '</p><p class="join-code">' + esc(C.pendingCode) + '</p><p class="small muted">The admin lets it in under Settings → People & devices. This page carries on by itself.</p><div class="setup-spin" aria-hidden="true"></div>' +
           // the Home Screen app of a phone let in already in its browser: the number from there, and no admin asked again
           (A.Install && A.Install.installed() ? '<form data-submit="su-join-carry" class="mt-lg" style="text-align:left"><label class="field"><span>Let in already in this ' + thisDevice() + '\'s browser? Type the 6-digit number it shows under Install the app</span><input class="input" name="n" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123 456" spellcheck="false"></label><button class="btn btn-primary" type="submit">' + I("check") + "Let this app in</button></form>" : "") +
           // a teacher or admin needn't wait: the school's staff code lets this device in at once
@@ -455,7 +455,7 @@
       '<label class="btn mt-sm">' + I("upload") + 'Open the key file<input type="file" accept=".txt,.sakey,text/plain" data-change="su-keyfile-first" hidden></label>' +
       '<details class="mt"' + (Ch.server ? " open" : "") + '><summary class="small"><b>The school has a server of its own</b> <span class="muted">(optional)</span></summary>' +
       '<label class="field mt-sm"><span>The school\'s server</span><input class="input" name="server" value="' + esc(Ch.server || "") + '" placeholder="e.g. https://kopje-school-assist.fly.dev" autocomplete="off" autocapitalize="none" spellcheck="false">' +
-      '<span class="hint">Set up with Golden Technologies in the school\'s own account. The school\'s records are kept there; School Assist keeps only its code and this address. Leave it empty to keep them on School Assist\'s servers.</span></label></details>' +
+      '<span class="hint">Set up with Golden Technologies in the school\'s own account. The school\'s records are kept there; School Assist keeps only its code and this address. Leave it empty if the school hasn\'t one.</span></label></details>' +
       '<div class="setup-actions"><button type="button" class="btn btn-lg" data-act="su-view" data-v="join">' + I("back") + 'Back</button><button class="btn btn-primary btn-lg" type="submit">' + I("check") + "Set up the school</button></div></form></div>";
   }
   A.act["su-view"] = function (el) { Ch.view = el.getAttribute("data-v") === "setup" ? "setup" : "join"; Ch.msg = ""; redraw(); };
@@ -965,7 +965,7 @@
   function codesBox() {
     var c = S().get("settings", "staffcodes");
     if (!c) return "";
-    return '<div class="callout mt">' + I("key") + '<div class="small"><b>Staff codes.</b> Teachers register on the sign-in page with the teacher code <code>' + esc(c.teacher) + "</code>; other admins with <code>" + esc(c.admin) + "</code>. You approve them in Settings → People.</div></div>";
+    return '<div class="callout mt">' + I("key") + '<div class="small"><b>Staff codes.</b> Teachers register on the sign-in page with the teacher code <code>' + esc(c.teacher) + "</code>; other admins with <code>" + esc(c.admin) + "</code>. You approve them in Settings → People & devices.</div></div>";
   }
   /** Settings → Share the app (admins). */
   Id.shareSection = function () {

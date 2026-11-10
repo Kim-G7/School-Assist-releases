@@ -43,6 +43,36 @@
   }
   En.teacherFor = teacherFor;
 
+  /* A subject with no class yet for the student's form and stream (2026-11-10): one is made, taught by whoever the
+     timetable says, on the school's Cambridge syllabus for the subject (or the ready-made one) when there is one, so the
+     student has the subject in their portal at once: Exam mode, Tutor, the library. The admin and the teacher sort out
+     anything else between them. Before, the student waited in no class at all. */
+  var letters = function (s) { return String(s || "").toLowerCase().replace(/[^a-z]/g, ""); };
+  var ALIAS = { english: ["englishfirstlanguage", "englishlanguage"], englishlanguage: ["englishfirstlanguage", "englishlanguage"], accounts: ["accounting"], principlesofaccounts: ["accounting"],
+    literature: ["literatureinenglish"], englishliterature: ["literatureinenglish"], business: ["businessstudies", "business"], businessstudies: ["businessstudies", "business"],
+    informationtechnology: ["ict", "informationtechnology"], ict: ["ict", "informationtechnology"] };
+  /** Cambridge's level for a form: IGCSE for Forms 1 to 4, AS & A Level for the sixth form, none for anything else. */
+  function cambridgeLevel(level) { return /form\s*[56]|lower\s*6|upper\s*6|sixth|a.?level/i.test(level || "") ? "AS & A Level" : /form\s*[1-4]\b/i.test(level || "") ? "IGCSE" : null; }
+  function syllabusFor(level, subject, lib, me) {
+    var want = cambridgeLevel(level), keys = [letters(subject)].concat(ALIAS[letters(subject)] || []);
+    if (!want) return null;
+    var fit = function (s) { return !!s && !s._deleted && s.board === "Cambridge" && s.level === want && keys.indexOf(letters(s.subject)) >= 0; };
+    var have = S().filter("syllabi", fit)[0];
+    if (have) return have;
+    var src = (lib || []).filter(fit)[0];
+    return src && A.addLibrarySyllabus ? A.addLibrarySyllabus(src, me) : null;
+  }
+  function makeClass(level, stream, subject, home, lib, me) {
+    var base = "c_" + slug(home ? home.id.replace(/^cls_/, "") : level + "-" + (stream || "all")) + "_" + slug(subject), id = base;
+    for (var n = 2; S().get("classes", id); n++) id = base + "-" + n;
+    var syl = syllabusFor(level, subject, lib, me);
+    return S().put("classes", { id: id, name: home ? home.name : [level, stream].filter(Boolean).join(" "), level: level, stream: stream || null, subject: subject,
+      teacherId: teacherFor(home, level, stream, subject) || null, syllabusId: syl ? syl.id : null, room: "", studentIds: [], currentTerm: (A.Primary.conf() || {}).term || 1,
+      sequential: false, topicAccess: {}, madeFor: "students", createdBy: me.id });
+  }
+  /** The subjects that have no class yet for this form and stream. */
+  var missing = function (level, stream, subjects) { return subjects.filter(function (t) { return !subjectClass(level, stream, t); }); };
+
   /* ------------------------------------------------------------------ the student's form */
   function subjectBoxes(level, home, stream, ticked) {
     var list = A.Primary.levelAreas(level);
@@ -105,20 +135,26 @@
     var wasHome = u ? M.homeroomOf(u.id) : null, moved = !!u && ((wasHome && wasHome.id) !== (home && home.id) || u.level !== f.level);
     var rec = Object.assign({}, u || { id: A.uid("s"), role: "student", enteredBy: me.id, enteredAt: A.now() }, { name: name, level: f.level, stream: stream || null, sex: f.sex, dob: f.dob, registered: subjects });
     if (A.Parents && A.Parents.available()) rec.parents = A.Parents.readFields(f);
+    var lib = null;
     var finish = function () {
       var saved = S().put("users", rec);
       if (home) A.Primary.placeStudent(saved, home); else A.Primary.followClass(saved);
-      apply(saved, home, u ? (u.registered || M.classesForStudent(u.id).map(function (c) { return c.subject; })) : [], moved, me);
+      apply(saved, home, u ? (u.registered || M.classesForStudent(u.id).map(function (c) { return c.subject; })) : [], moved, me, !u, lib);
       if (A.Sync) A.Sync.maybe();
       UI.toast(u ? "Saved" : name + " is entered: " + rec.studentNo);
       A.render();
     };
     rec.studentNo = typed;
-    if (typed) return finish();
-    return M.claimStudentNo(f.level).then(function (no) { rec.studentNo = no; finish(); });
+    // a subject with no class for this form yet takes its Cambridge syllabus from the ready-made list (once loaded, kept)
+    var ready = missing(f.level, stream, subjects).length && A.loadSyllabusLibrary ? A.loadSyllabusLibrary().then(function (l) { lib = l; }, function () { /* offline: the class, without a syllabus */ }) : Promise.resolve();
+    return ready.then(function () {
+      if (typed) return finish();
+      return M.claimStudentNo(f.level).then(function (no) { rec.studentNo = no; finish(); });
+    });
   }
-  /** Into the subject classes of the subjects ticked, out of the others, and each teacher told of what is new to them. */
-  function apply(u, home, before, moved, me) {
+  /** Into the subject classes of the subjects ticked (made when a form has none yet), out of the others, and each
+      teacher told of what is new to them: the subject teachers, and the class teacher of a student new to their class. */
+  function apply(u, home, before, moved, me, isNew, lib) {
     var ticks = u.registered, level = u.level, stream = u.stream;
     M.classesForStudent(u.id).forEach(function (c) {
       var keep = ticks.some(function (t) { return same(t, c.subject); }) && subjectClass(level, stream, c.subject) === c;
@@ -128,8 +164,7 @@
     });
     var fresh = moved ? ticks : ticks.filter(function (t) { return !before.some(function (b) { return same(b, t); }); });
     ticks.forEach(function (t) {
-      var c = subjectClass(level, stream, t);
-      if (!c) return;
+      var c = subjectClass(level, stream, t) || makeClass(level, stream, t, home, lib, me);
       if ((c.studentIds || []).indexOf(u.id) < 0) S().put("classes", Object.assign({}, c, { studentIds: (c.studentIds || []).concat([u.id]) }));
       if (c.syllabusId) S().put("enrolments", { id: "en_" + u.id + "_" + c.syllabusId, studentId: u.id, syllabusId: c.syllabusId, classId: c.id, status: "approved", requestedAt: A.now(), decidedAt: A.now(), decidedBy: me.id });
     });
@@ -140,6 +175,11 @@
       S().put("alerts", { id: "al_enrol_" + u.id + "_" + slug(t) + "_" + tid, teacherId: tid, kind: "enrol", createdAt: A.now(), title: "New student in your " + t + " subject",
         body: (me.title || "An admin") + " added student " + u.name + " to your " + t + " subject to " + level + (classWord ? " class " + classWord : "") + "." });
     });
+    // the class teacher of a student new to their class
+    if (home && home.teacherId && home.teacherId !== me.id && (isNew || moved)) {
+      S().put("alerts", { id: "al_enrol_" + u.id + "_class_" + home.teacherId, teacherId: home.teacherId, kind: "enrol", href: "#/t/pupils", createdAt: A.now(), title: "New student in your class",
+        body: (me.title || "An admin") + " added student " + u.name + " to your class " + home.name + "." });
+    }
   }
 
   /* ------------------------------------------------------------------ the page */

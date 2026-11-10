@@ -302,7 +302,7 @@
       if (!v || !card || document.getElementById("bk-revoked")) return;
       var div = document.createElement("div");
       div.id = "bk-revoked"; div.className = "callout warn mb";
-      div.innerHTML = I("shield") + '<div class="small grow"><b>This computer was signed out of ' + esc(v.school || "its school") + "</b> by Golden Technologies on " + esc(new Date(v.at).toLocaleDateString()) +
+      div.innerHTML = I("shield") + '<div class="small grow"><b>This computer was signed out of ' + esc(v.school || "its school") + "</b> by Golden Technologies on " + esc(A.fmtDate(v.at)) +
         ". The school's School Assist data was removed from it." + (v.reason ? " (" + esc(v.reason) + ")" : "") + '</div><button class="btn btn-sm" data-act="bk-revoked-ok">OK</button>';
       card.insertBefore(div, card.firstChild);
     });

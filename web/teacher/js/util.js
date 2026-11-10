@@ -111,8 +111,11 @@ window.App = window.App || {};
   A.startOfDay = function (ts) { var d = A.wall(ts); d.setHours(0, 0, 0, 0); return A.fromWall(d); };
   var MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   var WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  A.fmtDate = function (ts) { if (!ts) return "—"; var d = A.wall(ts); return WD[d.getDay()] + " " + d.getDate() + " " + MON[d.getMonth()]; };
-  A.fmtDateLong = function (ts) { if (!ts) return "—"; var d = A.wall(ts); return d.getDate() + " " + MON[d.getMonth()] + " " + d.getFullYear(); };
+  // dates as dd/mm/yyyy everywhere (2026-11-10: "Tue 10 Nov" and "10 Nov 2026" before), on the school's wall clock
+  A.fmtDate = function (ts) { if (!ts) return "—"; var d = A.wall(ts); return A.pad(d.getDate()) + "/" + A.pad(d.getMonth() + 1) + "/" + d.getFullYear(); };
+  A.fmtDateLong = A.fmtDate;
+  /** "2026-11-10" (a date field's value) as 10/11/2026; "" for nothing. */
+  A.fmtISO = function (iso) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ""); return m ? m[3] + "/" + m[2] + "/" + m[1] : ""; };
   A.fmtTime = function (ts) { var d = A.wall(ts); return A.pad(d.getHours()) + ":" + A.pad(d.getMinutes()); };
   A.fmtDateTime = function (ts) { return ts ? A.fmtDate(ts) + ", " + A.fmtTime(ts) : "—"; };
   /** A website that only serves the app's pages (no school hub behind it): GitHub Pages, Vercel, Netlify, Cloudflare

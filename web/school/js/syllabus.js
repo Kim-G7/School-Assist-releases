@@ -58,7 +58,7 @@
     var list = Object.keys(boards).map(function (k) { return boards[k]; }).sort(function (a, b) {
       return (b.used > 0) - (a.used > 0) || b.used - a.used || b.n - a.n || a.name.localeCompare(b.name);
     });
-    var html = '<div class="row spread wrap mb"><p class="muted" style="max-width:640px">Any exam board works: ZIMSEC, Cambridge, Oxford AQA or your own school scheme. Each syllabus holds its topics, notes, worked examples, test questions, mock papers and grade boundaries.</p>' +
+    var html = '<div class="row spread wrap mb"><p class="muted" style="max-width:640px">Cambridge syllabuses (IGCSE and AS &amp; A Level), or your own school scheme. Each syllabus holds its topics, notes, worked examples, test questions, mock papers and grade boundaries.</p>' +
       '<div class="row wrap"><button class="btn" data-act="syl-template">' + I("download") + 'Template</button><label class="btn">' + I("upload") + 'Import file<input type="file" accept=".json,application/json" data-change="syl-import" hidden></label>' +
       (me.isAdmin ? '<button class="btn" data-act="syl-readymade">' + I("layers") + "Ready-made syllabuses</button>" : "") +
       '<button class="btn btn-primary" data-act="syl-new">' + I("plus") + "New syllabus</button></div></div>" + A.subjectScopeBar(me, true);
@@ -93,6 +93,17 @@
       document.head.appendChild(el);
     });
   }
+  A.loadSyllabusLibrary = loadLibrary; // (js/enrol.js: a subject class made for a student takes its Cambridge syllabus)
+  /** A ready-made syllabus into the school's own, each topic with a start on its notes: the record saved. */
+  A.addLibrarySyllabus = function (lib, me) {
+    var src = JSON.parse(JSON.stringify(lib));
+    src.createdBy = me ? me.id : null;
+    src.topics.forEach(function (t) {
+      t.notes = t.notes || ["## In this topic", t.summary || t.title, "## How to revise it", "- Go through your class notes and textbook for this topic.",
+        "- Check **What to study** and tick off each point you can explain.", "- When you feel confident, tap **I've revised this topic** below."].join("\n");
+    });
+    return S().put("syllabi", src);
+  };
   A.act["syl-readymade"] = function () {
     UI.modal({
       title: "Ready-made syllabuses", size: "wide",
@@ -103,13 +114,7 @@
         var me = M.me(), home = A.edition === "home", st = M.structure();
         var byId = {}; (window.SYLLABUS_LIBRARY || []).forEach(function (x) { byId[x.id] = x; });
         picked.forEach(function (id) {
-          var src = JSON.parse(JSON.stringify(byId[id]));
-          src.createdBy = me.id;
-          src.topics.forEach(function (t) {
-            t.notes = t.notes || ["## In this topic", t.summary || t.title, "## How to revise it", "- Go through your class notes and textbook for this topic.",
-              "- Check **What to study** and tick off each point you can explain.", "- When you feel confident, tap **I've revised this topic** below."].join("\n");
-          });
-          S().put("syllabi", src);
+          var src = A.addLibrarySyllabus(byId[id], me);
           // the home edition offers a subject to students through its revision class
           if (home && !S().get("classes", "c_cie_" + src.code)) {
             var lv = /A Level/.test(src.level) ? st.levels[st.levels.length - 1] : st.levels[Math.min(3, st.levels.length - 1)];
@@ -230,7 +235,7 @@
 
   A.syllabusTemplate = function () {
     return {
-      board: "ZIMSEC", level: "O-Level", subject: "Geography", code: "4022",
+      board: "Cambridge", level: "IGCSE", subject: "Geography", code: "0460",
       description: "Replace this with your syllabus. Delete the example topic and add your own.",
       gradeScale: DEFAULT_SCALE,
       topics: [{
@@ -254,9 +259,9 @@
 
   /* ------------------------------------------------------------- new / edit */
   function sylModal(existing) {
-    var s = existing || { board: (CFG.boards || [])[0] || "ZIMSEC", level: "O-Level", subject: "", code: "", description: "" };
-    var boards = (CFG.boards || ["ZIMSEC", "Cambridge", "Oxford AQA"]).slice();
-    var levels = (CFG.educationLevels || ["O-Level", "A-Level", "IGCSE"]).slice();
+    var s = existing || { board: (CFG.boards || [])[0] || "Cambridge", level: "IGCSE", subject: "", code: "", description: "" };
+    var boards = (CFG.boards || ["Cambridge", "School-based"]).slice();
+    var levels = (CFG.educationLevels || ["IGCSE", "AS & A Level"]).slice();
     UI.modal({
       title: existing ? "Edit syllabus details" : "New syllabus",
       body: '<form id="syl-form" class="form-grid">' +

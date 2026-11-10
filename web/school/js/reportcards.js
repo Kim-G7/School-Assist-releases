@@ -461,7 +461,7 @@
       '<button class="btn" data-act="rc-format">' + I("sliders") + "Format</button>" +
       (total ? '<button class="btn btn-primary" data-act="rc-make" data-scope="all">' + I("download") + (canPdf ? "Make every report card" : "Print every report card") + "</button>" : "") + "</div></div>" +
       '<div class="callout mb">' + I("info") + '<div class="small">' + (primary()
-        ? "Each learning area's teacher enters every pupil's <b>end of term</b> mark and a <b>comment</b>, in every class: in the Mark book, under End of term (the subjects each teacher teaches are set in Settings → People)."
+        ? "Each learning area's teacher enters every pupil's <b>end of term</b> mark and a <b>comment</b>, in every class: in the Mark book, under End of term (the subjects each teacher teaches are set in Settings → People & devices)."
         : "Each subject's teacher enters the <b>end of term</b> mark and a <b>comment</b> for every student: in the class's Gradebook, in the End of term and Comment columns.") +
       (canPdf ? " Saved in <b>Documents\\" + esc(R.folderName(t)) + "</b>." : "") + "</div></div>";
     if (!total) html += '<div class="card">' + UI.empty("users", "No students yet", primary() ? "Add the pupils to their classes first." : "Students appear here once they are approved.") + "</div>";

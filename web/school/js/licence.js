@@ -173,7 +173,7 @@
     }
     return (cache[k] = r);
   }
-  function longDate(iso) { return new Date(iso + "T12:00:00").toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }); }
+  function longDate(iso) { return A.fmtISO ? A.fmtISO(iso) : iso; } // dd/mm/yyyy (2026-11-10)
 
   /* ------------------------------------------------------------------ the school's licence */
   var Lic = (A.Licence = { PLANS: PLANS, FEATURES: FEATURES, read: read, Ed: Ed });

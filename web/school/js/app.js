@@ -187,7 +187,7 @@
     }
   }
   function navItems(me) {
-    if (A.Fees && A.Fees.isFinance(me)) return A.Fees.nav();
+    if (A.Fees && A.Fees.isFinance(me)) return A.Fees.nav(me);
     if (A.Primary && me.role !== "student" && !A.Primary.withStudents) return A.Primary.nav(me);
     if (me.role === "student") {
       var newTasks = M.tasksForStudent(me.id).filter(function (t) { return M.taskStatus(t, me.id).key === "new"; }).length;
@@ -299,7 +299,7 @@
 
   function statusChip() {
     var me = M.me();
-    if (me && me.role === "student") return ""; // students' work goes up by itself; the school hub and its status are the staff's
+    if (me && !me.isAdmin) return ""; // (2026-11-10) everyone's work goes up by itself every 2 to 3 seconds: the hub and its status are the admins'
     var s = A.Sync ? A.Sync.status() : { state: "local" }, online = navigator.onLine;
     // what matters is whether new work can be sent and received: a computer on the Wi-Fi whose school hub is off
     // (or School Assist online can't be reached) is "Not connected", not "Online"
@@ -607,7 +607,7 @@
       if (!u) return "";
       var has = M.hasPassword(u.id);
       return '<div class="callout mt">' + I("info") + '<div class="grow"><b>' + (A.edition === "home" ? "Your student account" : "Example student account") + '</b><div class="small mt-sm">Name: <b>' + esc(u.name) + "</b><br>Student ID: <b>" + esc(u.studentNo) + "</b></div>" +
-        '<div class="tiny muted mt-sm">' + (has ? "A password has already been created for this account. Sign in with it. An admin can see or reset it in Settings → People." : "First time: choose Set up your account, enter this name and ID, then create any password.") + "</div>" +
+        '<div class="tiny muted mt-sm">' + (has ? "A password has already been created for this account. Sign in with it. An admin can see or reset it in Settings → People & devices." : "First time: choose Set up your account, enter this name and ID, then create any password.") + "</div>" +
         '<button class="btn btn-sm mt-sm" data-act="login-example">Use this account</button></div></div>';
     },
   };

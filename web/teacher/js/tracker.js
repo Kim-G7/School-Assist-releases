@@ -198,7 +198,7 @@
       title: o ? "Syllabus: " + o.subject : "Add a syllabus", size: "wide",
       body: '<form id="trk-o" class="form-grid">' +
         (subject ? '<div class="field"><span class="label">Subject</span><b>' + esc(subject) + "</b></div>" : '<label class="field"><span>Subject</span><select class="select" name="subject">' + subjects.map(function (a) { return "<option>" + esc(a) + "</option>"; }).join("") + "</select></label>") +
-        '<label class="field"><span>Its name</span><input class="input" name="title" value="' + esc(o ? o.title || "" : "") + '" placeholder="e.g. ZIMSEC O Level Mathematics 4004"></label>' +
+        '<label class="field"><span>Its name</span><input class="input" name="title" value="' + esc(o ? o.title || "" : "") + '" placeholder="e.g. Cambridge IGCSE Mathematics 0580"></label>' +
         '<div class="field full"><span class="label">' + esc(st.levelLabel) + "s it is for</span><div class=\"row wrap\" style=\"gap:4px 14px\">" + st.levels.map(function (l) {
           return '<label class="check"><input type="checkbox" data-lvl="' + esc(l) + '"' + (levels.indexOf(l) >= 0 ? " checked" : "") + "> " + esc(l) + "</label>";
         }).join("") + '</div><span class="hint">None ticked: every one.</span></div>' +

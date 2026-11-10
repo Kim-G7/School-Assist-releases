@@ -160,7 +160,7 @@
     var cols = DAYS.map(function (d, i) { var ts = A.startOfDay(monday + i * A.DAY + 12 * 3600000); return entriesFor(ts); });
     var head = "<tr><th></th>" + DAYS.map(function (d, i) {
       var ts = monday + i * A.DAY + 12 * 3600000, isToday = A.startOfDay(ts) === today && (dated || opts.thisWeek);
-      return '<th class="' + (isToday ? "today" : "") + '">' + (dated ? d.slice(0, 3) + " <span>" + new Date(ts).getDate() + " " + A.MON[new Date(ts).getMonth()] + "</span>" : d) + "</th>";
+      return '<th class="' + (isToday ? "today" : "") + '">' + (dated ? d.slice(0, 3) + " <span>" + A.pad(new Date(ts).getDate()) + "/" + A.pad(new Date(ts).getMonth() + 1) + "</span>" : d) + "</th>";
     }).join("") + "</tr>";
     var body = bells.map(function (p) {
       if (p.isBreak) return '<tr class="tt-break"><th>' + esc(p.label) + "<span>" + p.start + "–" + p.end + '</span></th><td colspan="5">' + esc(p.label) + "</td></tr>";
@@ -216,8 +216,9 @@
 
   route("s/timetable", function (p, q, me) {
     // the School edition: their class's week, as the school sets it (js/primary.js), when it has one
-    var hr = A.Primary && M.homeroomOf(me.id), week = hr ? A.Primary.classWeek(hr) : "";
-    if (week) return { title: "Timetable", html: '<div class="card">' + week + '</div><p class="small muted mt">' + esc(A.Primary.classLabel(hr)) + "'s week, as the school sets it.</p>" };
+    var hr = A.Primary && M.homeroomOf(me.id), week = hr ? A.Primary.classWeek(hr, { fill: true }) : "";
+    if (week) return { title: "Timetable", html: '<div class="card">' + week + '</div><p class="small muted mt">' + esc(A.Primary.classLabel(hr)) + "'s week, as the school sets it.</p>",
+      mount: function () { A.Primary.fillWeek(); } }; // (as tall as the screen: 2026-11-10)
     var v = timeView(q, "#/s/timetable", "");
     return { title: "Timetable", html: v.nav + '<div class="card">' + weekGrid(function (ts) { return TT.forStudent(me, v.keyOf(ts)); }, v.monday, v) + "</div>" +
       '<p class="small muted mt">' + esc(M.studentHome(me)) + " · lessons run Monday to Friday, 08:00 to 16:00. The label under a lesson tells you what your teacher has planned.</p>" };

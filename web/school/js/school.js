@@ -2,8 +2,8 @@
  * device and the school hub instead.
  *   - Students register themselves: name, level and password, then their exam board and subjects.
  *     They get the next student ID (school abbreviation, form, number in the form: KHS-FM1-018) and an admin approves
- *     the account in Settings → People; each subject is then approved by its teacher (Subject requests).
- *   - "Forgot your password?" asks the admin, who sets a new one in Settings → People.
+ *     the account in Settings → People & devices; each subject is then approved by its teacher (Subject requests).
+ *   - "Forgot your password?" asks the admin, who sets a new one in Settings → People & devices.
  *   - AI marking of written answers goes through the school hub (server.cjs), which keeps the
  *     school's Anthropic API key; the key is saved from the hub computer itself.
  * Online (home edition) js/cloud.js does all of this with Supabase; School Assist Teacher has no
@@ -70,7 +70,7 @@
     var u = S().put("users", { id: A.uid("s"), role: "student", name: name, level: level, stream: null, studentNo: studentNo, status: "pending", registeredAt: now, selfRegistered: true });
     M.setPassword(u.id, pw, u.id);
     return M.requestSubjects(u.id, subjectIds).then(function () {
-      M.alertAdmins({ kind: "register", aboutId: u.id, title: "New student: " + name, body: name + " (" + studentNo + ", " + level + ") registered and is waiting for an admin to approve the account in Settings → People." });
+      M.alertAdmins({ kind: "register", aboutId: u.id, title: "New student: " + name, body: name + " (" + studentNo + ", " + level + ") registered and is waiting for an admin to approve the account in Settings → People & devices." });
       if (A.Sync) A.Sync.maybe();
       return { studentNo: studentNo, name: name };
     });
@@ -91,7 +91,7 @@
   School.askAdmin = function (login, name, note) {
     var u = M.studentById ? M.studentById(login) : null;
     S().put("pwrequests", { id: A.uid("pwr"), login: login, studentNo: u ? u.studentNo : login, appId: u ? u.id : null, name: u ? u.name : name, said: name, note: String(note || "").slice(0, 300), askedAt: A.now() });
-    M.alertAdmins({ kind: "password", aboutId: u ? u.id : null, title: (u ? u.name : name || login) + " forgot their password", body: "Give them a new password in Settings → People. Check it really is them first." });
+    M.alertAdmins({ kind: "password", aboutId: u ? u.id : null, title: (u ? u.name : name || login) + " forgot their password", body: "Give them a new password in Settings → People & devices. Check it really is them first." });
     if (A.Sync) A.Sync.maybe();
     return Promise.resolve();
   };
@@ -102,7 +102,7 @@
     var words = ["river", "maple", "sunny", "tiger", "cloud", "green", "lucky", "stone", "happy", "eagle"], r = function (n) { return Math.floor(Math.random() * n); };
     return words[r(words.length)] + "-" + words[r(words.length)] + "-" + (10 + r(90));
   }
-  A.newPassword = newPassword; // Settings → People → Give a new password
+  A.newPassword = newPassword; // Settings → People & devices → Give a new password
   A.act["school-pw-reset"] = function (el) {
     var r = S().get("pwrequests", el.getAttribute("data-id")), u = r && M.user(r.appId);
     if (!u) { UI.toast("There's no student with that ID. Dismiss the request.", "bad"); return; }
@@ -127,7 +127,7 @@
     A.render();
   };
 
-  /** Settings → People → Students: registrations waiting for approval, and forgotten passwords. */
+  /** Settings → People & devices → Students: registrations waiting for approval, and forgotten passwords. */
   School.peopleHtml = function (me) {
     if (!me || !me.isAdmin) return "";
     var html = "", pend = School.pending(), asks = A.pwRequestList();

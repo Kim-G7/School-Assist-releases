@@ -16,21 +16,40 @@
   var F = (A.Fees = {});
   var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   var STATUS = { full: ["good", "Fully paid"], half: ["warn", "Half paid"], none: ["bad", "Not paid"], unset: ["", "No fee set"] };
-  var PAGES = ["fees", "fee", "feesetup", "transport", "candidates", "settings"];
+  var PAGES = ["fees", "fee", "feesetup", "transport", "candidates", "notices", "settings"];
 
   F.available = function () { return A.edition !== "teacher" && A.edition !== "home" && !A.Cloud && !!A.Licence && A.Licence.isOn("fees") && A.Sync.hubHasRules(); };
   /** The bursar's and accountant's accounts: fees and nothing else. */
   F.isFinance = function (u) { return !!u && u.role === "teacher" && /^(bursar|accountant)$/i.test(String(u.title || "").trim()) && F.available(); };
   F.allowed = function (page) { return PAGES.indexOf(page) >= 0; };
-  F.nav = function () {
+  F.nav = function (me) {
     return [
       { href: "#/t/fees", icon: "layers", label: "School fees", key: "fees", match: ["fee"] },
       { href: "#/t/transport", icon: "bus", label: "Transport", key: "transport" },
       { href: "#/t/candidates", icon: "award", label: "Candidates", key: "candidates" },
       { href: "#/t/feesetup", icon: "edit", label: "Fee amounts", key: "feesetup" },
+      A.Notices && me ? A.Notices.nav(me) : null, // the school's notices to them (2026-11-10)
       { href: "#/t/settings", icon: "sliders", label: "Settings", key: "settings" },
-    ];
+    ].filter(Boolean);
   };
+  /** Their notifications on the dashboard (2026-11-10): the school's notices to them and anything else for them, newest
+      first, each opening its page. (A hub computer older than 1.8.3 sends them no notices: what they have shows.) */
+  function notifications(me) {
+    var N = A.Notices, Al = A.Alerts, items = [];
+    if (N) N.forMe(me).filter(function (n) { return N.toMe(n, me); }).slice(0, 5).forEach(function (n) {
+      var t = N.type(n.type), al = S().get("alerts", N.alertId(n, me)), fresh = al ? !al.readAt : n.createdAt > A.now() - 3 * 86400000;
+      items.push({ at: n.createdAt, html: '<a class="list-row" href="#/t/notices"><div class="alert-ico">' + I(t.icon) + '</div><div class="grow"><div class="title">' + esc(t.label + ": " + n.title) + (fresh ? ' <span class="badge brand">New</span>' : "") + "</div>" +
+        '<div class="meta"><span>' + esc(n.at ? A.fmtDateTime(n.at) : A.fmtDate(n.createdAt)) + "</span>" + (n.body ? '<span class="sep"></span><span>' + esc(String(n.body).replace(/\s+/g, " ").slice(0, 90)) + "</span>" : "") + "</div></div>" + I("right") + "</a>" });
+    });
+    if (Al) Al.mine(me.id).filter(function (a) { return a.kind !== "notice" && !a.readAt && !a.dismissedAt; }).slice(0, 5).forEach(function (a) {
+      var href = Al.href(a), page = (href.split("?")[0].split("/")[2] || "");
+      items.push({ at: a.createdAt, html: '<a class="list-row" href="' + esc(F.allowed(page) ? href : "#/t/fees") + '"><div class="alert-ico">' + I("bell") + '</div><div class="grow"><div class="title">' + esc(a.title || "") + ' <span class="badge brand">New</span></div>' +
+        '<div class="meta"><span>' + esc(A.relTime(a.createdAt)) + "</span>" + (a.body ? '<span class="sep"></span><span>' + esc(String(a.body).slice(0, 90)) + "</span>" : "") + "</div></div>" + I("right") + "</a>" });
+    });
+    items.sort(function (a, b) { return (b.at || 0) - (a.at || 0); });
+    return '<div class="section-title"><h2>Notifications</h2><span class="grow"></span>' + (N ? '<a class="btn btn-sm" href="#/t/notices">' + I("bell") + "All notices</a>" : "") + "</div>" +
+      '<div class="card">' + (items.length ? items.slice(0, 5).map(function (x) { return x.html; }).join("") : UI.empty("bell", "Nothing new", "Notices from the school, such as staff meetings and events, show here.")) + "</div>";
+  }
 
   /* ------------------------------------------------------------------ the head's read-only summary (hub-fees.cjs) */
   F.canSummary = function (u) { return !!u && u.role === "teacher" && A.rank(u.title) === 2 && F.available() && !F.isFinance(u); };
@@ -105,7 +124,7 @@
     var due = rows.reduce(function (a, f) { return a + f.due; }, 0), paid = rows.reduce(function (a, f) { return a + f.paid; }, 0), full = rows.reduce(function (a, f) { return a + f.full; }, 0);
     var html = pills(per.t, base) + '<div class="grid g-4">' + UI.stat("layers", money(due), "Expected this term") + UI.stat("checkCircle", money(paid), "Collected", true) + UI.stat("alert", money(Math.max(0, due - paid)), "Still to come") + UI.stat("users", full + " of " + list.length, "Students fully paid") + "</div>";
     if (!due) html += '<div class="callout warn mt">' + I("info") + '<div>No fees set for Term ' + per.t + ' yet. <a class="link" href="#/t/feesetup?t=' + per.t + '">Set the fee amounts</a>.</div></div>';
-    html += '<div class="section-title"><h2>Forms</h2></div><div class="card">' + (rows.length ? rows.map(function (f) {
+    html += notifications(me) + '<div class="section-title"><h2>Forms</h2></div><div class="card">' + (rows.length ? rows.map(function (f) {
       return '<a class="list-row" href="#/t/fees?f=' + encodeURIComponent(f.level) + per.q + '"><div class="grow"><div class="title">' + esc(f.level) + '</div><div class="row wrap mt-sm" style="gap:6px"><span class="badge good">' + f.full + ' fully paid</span><span class="badge warn">' + f.half + ' half paid</span><span class="badge bad">' + f.none + " not paid</span></div>" + UI.bar(f.due ? Math.round(f.paid / f.due * 100) : 0) + "</div>" + I("right") + "</a>";
     }).join("") : UI.empty("users", "No students yet", "Students appear here once the school enters them.")) + "</div>";
     return { title: "School fees", html: html };

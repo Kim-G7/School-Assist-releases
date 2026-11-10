@@ -231,15 +231,17 @@
       var ls = k.timetable.lessons, days = []; ls.forEach(function (l) { if (days.indexOf(l.day) < 0) days.push(l.day); });
       days.sort();
       if (!days.length) return '<div class="card">' + UI.empty("grid", "No timetable yet", "The school hasn't set this class's timetable.") + "</div>";
-      var today = ((A.date().getDay() + 6) % 7) + 1, day = Number(q.d) || (days.indexOf(today) >= 0 ? today : days[0]);
+      // the whole week, day after day (2026-11-10: one day at a time before), however many lessons a day has
+      var today = ((A.date().getDay() + 6) % 7) + 1;
       var mins = function (s) { return Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5)); }, hhmm = function (n) { return ("0" + Math.floor(n / 60)).slice(-2) + ":" + ("0" + (n % 60)).slice(-2); };
-      var rows = ls.filter(function (l) { return l.day === day; }).map(function (l) { return { at: mins(l.start), to: mins(l.start) + l.mins, title: l.subject, who: l.teacher }; });
-      k.timetable.breaks.forEach(function (b) { rows.push({ at: mins(b.start), to: mins(b.start) + Number(b.mins || 0), title: b.label, rest: true }); });
-      rows.sort(function (a, b) { return a.at - b.at; });
-      return '<div class="pill-tabs">' + days.map(function (d) { return '<button class="' + (d === day ? "on" : "") + '" data-act="goto" data-href="' + go("timetable", "&d=" + d) + '">' + DAYS[d - 1].slice(0, 3) + "</button>"; }).join("") + "</div>" +
-        '<h2 class="par-sub">' + DAYS[day - 1] + '</h2><div class="card">' + rows.map(function (x) {
+      return '<p class="small muted mb">The week at school. It is the same every week until the school changes it.</p>' + days.map(function (day) {
+        var rows = ls.filter(function (l) { return l.day === day; }).map(function (l) { return { at: mins(l.start), to: mins(l.start) + l.mins, title: l.subject, who: l.teacher }; });
+        k.timetable.breaks.forEach(function (b) { rows.push({ at: mins(b.start), to: mins(b.start) + Number(b.mins || 0), title: b.label, rest: true }); });
+        rows.sort(function (a, b) { return a.at - b.at; });
+        return '<h2 class="par-sub" id="par-day-' + day + '">' + DAYS[day - 1] + (day === today ? ' <span class="badge brand">Today</span>' : "") + '</h2><div class="card mb">' + rows.map(function (x) {
           return '<div class="tt-row' + (x.rest ? " par-rest" : "") + '"><div class="tt-time"><b>' + hhmm(x.at) + "</b><span>" + hhmm(x.to) + '</span></div><div class="grow"><b>' + esc(x.title) + "</b>" + (x.who ? '<div class="small muted">' + esc(x.who) + "</div>" : "") + "</div></div>";
         }).join("") + "</div>";
+      }).join("");
     },
     fees: function (k, q, go) {
       var f = k.fees, cash = function (n) { return esc(f.currency) + " " + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString("en-US"); };

@@ -464,6 +464,56 @@
     });
   };
 
+  /* Typing boxes (2026-11-10): no suggestions from what was typed on this browser before (on a school's shared computer
+     those are someone else's, and mean nothing here), and dates written dd/mm/yyyy whatever language the browser is in
+     (a date box shows the browser's own order: mm/dd/yyyy on an American one). The date box stays in its form, hidden,
+     holding yyyy-mm-dd as before; a text box beside it shows the date and takes it typed as dd/mm/yyyy, and its button
+     opens the browser's calendar. Every box added to the page later is done the same way. */
+  var TYPED = 'input:not([type]),input[type="text"],input[type="search"],input[type="email"],input[type="tel"],input[type="number"],input[type="url"],textarea';
+  var both = function (root, sel) { var out = root.matches && root.matches(sel) ? [root] : []; return out.concat(Array.prototype.slice.call(root.querySelectorAll(sel))); };
+  UI.tidyInputs = function (root) {
+    if (!root || !root.querySelectorAll) return;
+    both(root, TYPED).forEach(function (el) { if (!el.hasAttribute("autocomplete")) el.setAttribute("autocomplete", "off"); });
+    both(root, 'input[type="date"]').forEach(dmy);
+  };
+  UI.isoToDmy = function (v) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || ""); return m ? m[3] + "/" + m[2] + "/" + m[1] : ""; };
+  /** "10/11/2026" (or 10-11-2026, 10.11.2026, 10112026) as "2026-11-10"; null when it isn't a real date. */
+  UI.dmyToIso = function (t) {
+    var s = String(t || "").trim(), m = /^(\d{1,2})[\/.\- ](\d{1,2})[\/.\- ](\d{4})$/.exec(s) || /^(\d{2})(\d{2})(\d{4})$/.exec(s);
+    if (!m) return null;
+    var d = +m[1], mo = +m[2], y = +m[3], dt = new Date(Date.UTC(y, mo - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d ? y + "-" + A.pad(mo) + "-" + A.pad(d) : null;
+  };
+  function dmy(el) {
+    if (el.getAttribute("data-dmy") || !el.parentNode) return;
+    el.setAttribute("data-dmy", "1");
+    var wrap = document.createElement("span"), txt = document.createElement("input"), btn = document.createElement("button");
+    wrap.className = "dmy" + (/\bsm\b/.test(el.className) ? " sm" : "");
+    if (el.style.width) wrap.style.width = el.style.width;
+    txt.type = "text"; txt.className = el.className; txt.placeholder = "dd/mm/yyyy"; txt.maxLength = 10; txt.value = UI.isoToDmy(el.value);
+    txt.setAttribute("inputmode", "numeric"); txt.setAttribute("autocomplete", "off"); txt.setAttribute("spellcheck", "false");
+    if (el.getAttribute("aria-label")) txt.setAttribute("aria-label", el.getAttribute("aria-label"));
+    txt.disabled = el.disabled; txt.readOnly = el.readOnly;
+    btn.type = "button"; btn.className = "dmy-pick"; btn.tabIndex = -1; btn.setAttribute("aria-label", "Pick a date from the calendar"); btn.innerHTML = I("calendar");
+    el.parentNode.insertBefore(wrap, el); wrap.appendChild(txt); wrap.appendChild(btn); wrap.appendChild(el);
+    el.tabIndex = -1; el.setAttribute("aria-hidden", "true"); el.setAttribute("autocomplete", "off");
+    var tell = function () { el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); };
+    txt.addEventListener("input", function (e) {
+      // the slashes go in as the day and the month are typed
+      if (e.inputType && e.inputType.indexOf("insert") === 0 && /^(\d{2}|\d{1,2}\/\d{2})$/.test(txt.value)) txt.value += "/";
+      var iso = UI.dmyToIso(txt.value);
+      if (iso && iso !== el.value) { el.value = iso; tell(); }
+      else if (!txt.value.trim() && el.value) { el.value = ""; tell(); }
+      txt.classList.toggle("bad", txt.value.length >= 8 && !iso);
+    });
+    txt.addEventListener("blur", function () { if (txt.value.trim() && !UI.dmyToIso(txt.value)) { txt.value = UI.isoToDmy(el.value); txt.classList.remove("bad"); } });
+    el.addEventListener("change", function () { if (UI.dmyToIso(txt.value) !== el.value) txt.value = UI.isoToDmy(el.value); }); // (picked on the calendar)
+    btn.addEventListener("click", function () { if (txt.disabled || txt.readOnly) return; try { el.showPicker(); } catch (x) { txt.focus(); } });
+  }
+  if (window.MutationObserver) new MutationObserver(function (muts) {
+    muts.forEach(function (m) { m.addedNodes.forEach(function (n) { if (n.nodeType === 1) UI.tidyInputs(n); }); });
+  }).observe(document.documentElement, { childList: true, subtree: true });
+
   UI.hydrate = function (root) {
     (root || document).querySelectorAll(".js-line").forEach(drawLine);
     UI.strips(root);

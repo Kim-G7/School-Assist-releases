@@ -218,7 +218,7 @@
     var fail = function (m) { A.loginMessage(m); };
     // a device that doesn't keep the codes (1.6: a new or student device) asks the school hub
     if (!M.staffCodes() && A.Sync && A.Sync.hubMode()) return A.Sync.checkStaffCode(f.code).then(function (role) { register(f, role, fail); }, function (e) { fail(e.message); });
-    if (!M.staffCodes()) return fail("This school hasn't made its staff codes yet. Ask an admin to open Settings → People → Teachers.");
+    if (!M.staffCodes()) return fail("This school hasn't made its staff codes yet. Ask an admin to open Settings → People & devices → Teachers.");
     register(f, M.codeRole(f.code), fail);
   };
   function register(f, role, fail) {
@@ -235,7 +235,7 @@
       A.Primary ? { areas: f.areas || [], classIds: f.classIds || [], areasNew: (f.areasNew || []).length ? f.areasNew : null, areasNewAt: (f.areasNew || []).length ? A.now() : null, homeAsk: f.homeAsk || null, homeAskAt: f.homeAsk ? A.now() : null } : {}));
     M.setPin(u.id, f.pin, u.id);
     typed = {};
-    M.alertAdmins({ kind: "staff", aboutId: u.id, title: "New " + role + ": " + u.name, body: u.name + " registered as " + (role === "admin" ? "an admin" : "a teacher") + (u.subjects ? " (" + u.subjects + ")" : "") + " and is waiting for an admin to approve them in Settings → People." +
+    M.alertAdmins({ kind: "staff", aboutId: u.id, title: "New " + role + ": " + u.name, body: u.name + " registered as " + (role === "admin" ? "an admin" : "a teacher") + (u.subjects ? " (" + u.subjects + ")" : "") + " and is waiting for an admin to approve them in Settings → People & devices." +
       ((u.areasNew || []).length ? " They also teach " + u.areasNew.join(", ") + ", which isn't on the school's list: add it on the Today page." : "") });
     A.loginDone("staffasked", u);
   }
@@ -264,7 +264,7 @@
     };
     if (yes) go(); else UI.confirm("Decline " + u.name + "'s registration?", { danger: true, ok: "Decline" }).then(function (ok) { if (ok) go(); });
   };
-  /** Settings → People → Teachers (admins): the codes and anyone waiting. */
+  /** Settings → People & devices → Teachers (admins): the codes and anyone waiting. */
   A.staffAdminHtml = function (me) {
     if (!me || !me.isAdmin) return "";
     var pend = M.pendingStaff();

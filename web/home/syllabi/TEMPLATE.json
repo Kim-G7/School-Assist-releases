@@ -1,8 +1,8 @@
 {
-  "board": "ZIMSEC",
-  "level": "O-Level",
+  "board": "Cambridge",
+  "level": "IGCSE",
   "subject": "Geography",
-  "code": "4022",
+  "code": "0460",
   "description": "Replace this with your syllabus. Delete the example topic and add your own.",
   "gradeScale": [
     {

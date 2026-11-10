@@ -11,10 +11,11 @@
   "use strict";
   var KEY = "sca-sync";
   var timer = null, running = null, filesBusy = null, lastError = "", state = "local";
-  // how often to sync: every 1–5 seconds while the app is on screen, so notices, marks and registers reach everyone
-  // at once (a little random, so a school's devices don't all ask at the same moment; an answer with nothing new is
-  // small, and the hub writes nothing for it), every minute while it is hidden, and straight away on coming back
-  var EVERY = 1000, SPREAD = 4000, HIDDEN = 60000;
+  // how often to sync: every 2 to 3 seconds while the app is on screen (2026-11-10; 1 to 5 before), so notices, marks
+  // and registers reach everyone at once and nobody syncs by hand (a little random, so a school's devices don't all ask
+  // at the same moment; an answer with nothing new is small, and the hub writes nothing for it), every minute while it
+  // is hidden, and straight away on coming back
+  var EVERY = 2000, SPREAD = 1000, HIDDEN = 60000;
 
   function cfg() {
     if (A.Store && A.Store.vacation) return { url: "", vacation: true }; // vacation mode: this device only, never the hub
@@ -35,7 +36,7 @@
   var localToken = null, localAsked = 0;
   function meta() { return (A.Store.state && A.Store.state.meta) || {}; }
   function err(code, msg) { var e = new Error(msg || code); e.code = code; return e; }
-  // the desktop app knows the computer's name ("LAB-PC-07"): it leads the label admins see under Settings → Devices
+  // the desktop app knows the computer's name ("LAB-PC-07"): it leads the label admins see under Settings → People & devices
   var computer = null;
   if (window.desktop && window.desktop.info) window.desktop.info().then(function (i) { computer = (i && i.computer) || null; }).catch(function () {});
   function deviceLabel() {
@@ -136,9 +137,9 @@
       if (localToken || meta().hubKey || meta().oldHub) return;
       // waiting for an admin, and the hub was asked moments ago (the join page asks every 10 to 30 seconds): don't ask again
       var m = meta();
-      if (!staffCode && m.joinCode && A.now() - (m.joinAskedAt || 0) < 25000) throw err("pending", "This device is waiting to join the school hub. Show an admin this code: " + m.joinCode + " (Settings → Devices).");
+      if (!staffCode && m.joinCode && A.now() - (m.joinAskedAt || 0) < 25000) throw err("pending", "This device is waiting to join the school hub. Show an admin this code: " + m.joinCode + " (Settings → People & devices).");
       return join(c, staffCode).then(function (r) {
-        if (r.pending) throw err("pending", "This device is waiting to join the school hub. Show an admin this code: " + r.code + " (Settings → Devices).");
+        if (r.pending) throw err("pending", "This device is waiting to join the school hub. Show an admin this code: " + r.code + " (Settings → People & devices).");
       });
     });
   }
@@ -159,7 +160,7 @@
       Object.keys(all).forEach(function (id) { var r = all[id]; if ((r.updatedAt || 0) <= sent && !keep(r)) delete all[id]; }); // never a change not yet sent
     };
     if (res.scope === "finance") { // the bursar's and accountant's devices keep only what their pages need
-      var fin = ["settings", "users", "credentials", "classes", "devices", "revocations", "alerts", "feeschedules", "feeaccounts", "feepayments", "transportlist", "candidates"];
+      var fin = ["settings", "users", "credentials", "classes", "devices", "revocations", "alerts", "notices", "feeschedules", "feeaccounts", "feepayments", "transportlist", "candidates"];
       Object.keys(S.state.colls).forEach(function (coll) { if (fin.indexOf(coll) < 0) drop(coll, function () { return false; }); });
       drop("classes", function (c) { return c._deleted || c.homeroom; });
       drop("users", function (u) { return u._deleted || u.role === "student" || devKnown[u.id] || /^(bursar|accountant)$/i.test(u.title || ""); });

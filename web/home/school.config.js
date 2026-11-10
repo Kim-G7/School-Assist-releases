@@ -84,13 +84,10 @@ window.SCHOOL_CONFIG = {
     cloud: { url: "https://fogaebrxusaazguqohph.supabase.co", key: "sb_publishable_PuDfq50X8CibZ-uEvJ1qbA_QbZFQajK" },
   },
 
-  // Exam boards and education levels offered as drop-downs when creating a syllabus: high school only for now.
-  boards: ["ZIMSEC", "Cambridge", "Oxford AQA", "Pearson Edexcel", "AQA", "OCR", "International Baccalaureate", "School-based"],
-  educationLevels: [
-    "Form 1", "Form 2", "O-Level", "A-Level", "AS Level",
-    "Cambridge Lower Secondary", "IGCSE", "AS & A Level", "International GCSE", "GCSE",
-    "IB Middle Years", "IB Diploma",
-  ],
+  // Exam boards and education levels offered as drop-downs when creating a syllabus: Cambridge only for now
+  // (2026-11-10; ZIMSEC, Oxford AQA and the others came off), and a school's own scheme.
+  boards: ["Cambridge", "School-based"],
+  educationLevels: ["IGCSE", "AS & A Level", "Cambridge Lower Secondary"],
 
   lessonTypes: ["Theory", "Discussion", "Practical", "Mock test"],
 

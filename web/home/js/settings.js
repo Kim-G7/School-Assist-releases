@@ -14,8 +14,9 @@
     if (me.role === "teacher" && A.edition !== "teacher") sections.push(["subjects", A.Primary ? "My syllabuses" : "My subjects", "layers"]); // (School edition: My subjects is a page of its own, js/tracker.js)
     if (A.Primary && admin) sections.push(["primary", "Learning areas & terms", "book"]);
     // (not for students: the school decides where its records are, and a student can't point the app anywhere else)
-    if (me.role !== "student" && (A.edition !== "teacher" || admin)) sections.push(["sync", "Offline & sync", "refresh"]); // School Assist Teacher: admins only
-    if (admin) sections.push(["people", "People", "users"], ["devices", "Devices", "phone"]);
+    // admins only (2026-11-10): everyone else's work goes up by itself every few seconds, with nothing to set or press
+    if (admin) sections.push(["sync", "Offline & sync", "refresh"]);
+    if (admin) sections.push(["people", "People & devices", "users"]); // (one section since 2026-11-10: the devices to let in first)
     if (admin && A.Parents && A.Parents.available()) sections.push(["parents", "Parents", "users"]); // Premium
     if (me.role === "teacher" && A.edition !== "teacher") sections.push(["integrity", "Exam integrity", "shield"]);
     if (admin && A.edition !== "teacher" && A.AI && (!A.Licence || A.Licence.has("ai-marking"))) sections.push(["ai", "AI marking", "bulb"]); // Premium (hidden on Standard); online, or through the school hub
@@ -25,7 +26,7 @@
     if (A.Updates) sections.push(["updates", "App updates", "download"]);
     sections.push(["account", me.role === "student" || A.Cloud || A.staffPassword(me) ? "My password" : "My PIN", "lock"]);
     if (A.Fees && A.Fees.isFinance(me)) sections = sections.filter(function (s) { return ["appearance", "updates", "account"].indexOf(s[0]) >= 0; }); // the bursar's and accountant's view
-    var want = q.s === "backup" ? "data" : q.s; // (Online backup had a tab of its own before 1.6.2)
+    var want = q.s === "backup" ? "data" : q.s === "devices" ? "people" : q.s; // (Online backup had a tab of its own before 1.6.2; Devices before 2026-11-10)
     var sec = sections.some(function (s) { return s[0] === want; }) ? want : sections[0][0];
     var base = me.role === "student" ? "#/s/settings" : "#/t/settings";
     var tabs = UI.tabs(sections.map(function (s) { return { href: base + "?s=" + s[0], label: s[1], icon: s[2], on: s[0] === sec }; }));
@@ -199,8 +200,8 @@
       ? '<p class="mt-sm" style="max-width:680px"><b>On the school\'s own server</b>, <code>' + esc(own) + "</code>. School Assist keeps only the school's code and this address: Golden Technologies holds none of the school's records.</p>" +
         (keptUntil ? '<p class="small mt-sm" style="max-width:680px">The school moved here from School Assist\'s servers. In case anything went wrong, School Assist keeps its copy until <b>' + esc(A.fmtDate(keptUntil)) + "</b>, then erases it by itself.</p>" +
           '<button class="btn btn-sm btn-danger mt-sm" data-act="move-erase">' + I("trash") + "Erase School Assist's copy now</button>" : "")
-      : '<p class="mt-sm" style="max-width:680px"><b>On School Assist\'s servers</b> (schoolassistapp.com), run by Golden Technologies: each school\'s records apart from the others\', encrypted with a key of their own.</p>' +
-        '<p class="small muted mt-sm" style="max-width:680px">To keep them at school instead, on a computer of the school\'s own, install School Assist on that computer and bring the school there with a move code. Phones keep this address and reach that computer through School Assist, which then keeps none of the school\'s records. ' +
+      : '<p class="mt-sm" style="max-width:680px"><b>On the school computer selected during setup, or on the school\'s own server.</b></p>' +
+        '<p class="small muted mt-sm" style="max-width:680px">To choose or change that computer, install School Assist on it and bring the school there with a move code. Phones keep this address and reach that computer through School Assist, which then keeps none of the school\'s records. ' +
         'Or, on a server in the school\'s own account: Golden Technologies sets one up with the school\'s IT person (its address and link key are printed then), and the records move there.</p>' +
         (A.Sync.hubMode() ? '<div id="move-slot" class="mt"></div>' : "")) + "</div>";
   }
@@ -293,7 +294,7 @@
     var name = A.Theme.get().name;
     UI.modal({
       title: "Move to the school's own server", size: "lg",
-      body: '<p style="max-width:640px">Everything ' + esc(name) + ' has on School Assist\'s servers moves to a server in the school\'s own account: every record, every uploaded file, and every registered device.</p>' +
+      body: '<p style="max-width:640px">Everything ' + esc(name) + ' has here moves to a server in the school\'s own account: every record, every uploaded file, and every registered device.</p>' +
         '<ul class="small mt-sm" style="max-width:640px;padding-left:18px">' +
         "<li>Nobody joins again or signs in again: each device takes the school's new address by itself, with the key it has.</li>" +
         "<li>While the last changes copy (usually under a minute), changes wait on each device and go across by themselves. Nothing typed is lost.</li>" +
@@ -376,7 +377,7 @@
       '<dl class="kv mt"><dt>Phones join at</dt><dd><code style="user-select:all">' + esc(s.join) + "</code></dd>" +
       "<dt>Requests passed on</dt><dd>" + (s.served || 0) + " since School Assist started on this computer</dd>" +
       (s.lastError && !s.connected ? '<dt>Problem</dt><dd class="small">' + esc(s.lastError) + "</dd>" : "") + "</dl>" +
-      '<p class="small muted mt-sm" style="max-width:680px">' + "School Assist passes each request to this computer and keeps none of the school's records. While this computer is off, devices keep their work and send it when it is back. Share the link or QR code from Settings → Devices.</p>" +
+      '<p class="small muted mt-sm" style="max-width:680px">' + "School Assist passes each request to this computer and keeps none of the school's records. While this computer is off, devices keep their work and send it when it is back. Share the link or QR code from Settings → People & devices.</p>" +
       (kept ? '<p class="small mt-sm" style="max-width:680px">The school moved here from schoolassistapp.com. In case anything went wrong, School Assist keeps its old copy until <b>' + esc(A.fmtDate(kept)) + "</b>, then erases it by itself.</p>" +
         (s.canChange ? '<button class="btn btn-sm btn-danger mt-sm" data-act="relay-erase">' + I("trash") + "Erase School Assist's copy now</button>" : "") : "") +
       (s.canChange ? '<div class="row wrap mt"><button class="btn btn-ghost" data-act="relay-off">' + I("x") + "Turn off</button></div>" : "");
@@ -441,7 +442,7 @@
       (waiting ? "<dt>Files</dt><dd>" + waiting + " still to copy</dd>" : "") +
       (kept ? "<dt>Here only</dt><dd>" + kept + " file" + (kept === 1 ? "" : "s") + " too big for the online hub</dd>" : "") +
       (s.lastError ? '<dt>Problem</dt><dd class="small">' + esc(s.lastError) + "</dd>" : "") + "</dl>" +
-      '<p class="small mt" style="max-width:680px">Away from school, phones and laptops open <b>' + esc(s.url) + "</b> and join with a staff code, or ask an admin to let them in under Settings → Devices (here too).</p>" +
+      '<p class="small mt" style="max-width:680px">Away from school, phones and laptops open <b>' + esc(s.url) + "</b> and join with a staff code, or ask an admin to let them in under Settings → People & devices (here too).</p>" +
       '<div class="row wrap mt"><button class="btn btn-primary" data-act="link-now">' + I("refresh") + "Copy now</button>" +
       (s.canConnect ? '<button class="btn btn-ghost" data-act="link-off">' + I("x") + "Disconnect</button>" : "") + "</div>";
   }
@@ -614,7 +615,14 @@
   /* ---------------------------------------------------------------- people
      Admins see each student's class, password (to restore a lost or stolen
      account) and how many devices are signed in. */
+  /* People & devices (2026-11-10; two sections before, with the same overview): the devices waiting to be let in first,
+     the invite, the people, then the devices in detail, staff's and students' apart. */
   SECTIONS.people = function (me, q) {
+    var d = devicesParts(me), p = peopleList(me, q), ph = typeof p === "string" ? { html: p } : p;
+    return { html: d.top + '<div class="section-title" id="people-list"><h2>People</h2></div>' + ph.html + '<div class="section-title" id="device-list"><h2>Devices</h2></div>' + d.rest,
+      mount: function (root) { d.mount(root); if (ph.mount) ph.mount(root); } };
+  };
+  var peopleList = function (me, q) {
     // School Assist Teacher: pupils are looked after in My class, so People is the teachers
     var role = A.edition === "teacher" ? "teacher" : q.r || "student", find = (q.q || "").toLowerCase();
     var users = S().filter("users", function (u) { return u.role === role && (!find || (u.name + " " + (u.studentNo || "") + " " + (u.staffNo || "")).toLowerCase().indexOf(find) >= 0); })
@@ -811,28 +819,32 @@
   };
 
   /* --------------------------------------------------------------- devices */
-  SECTIONS.devices = function (me, q) {
+  /** People & devices' two device parts: `top` (the devices waiting to join, then the invite) and `rest` (each device). */
+  function devicesParts(me) {
     var all = S().all("devices").sort(function (a, b) { return (b.lastSeenAt || 0) - (a.lastSeenAt || 0); });
-    var signedIn = all.filter(function (d) { return d.signedIn; });
+    var signedIn = all.filter(function (d) { return d.signedIn; }), students = A.edition !== "teacher";
     var phones = signedIn.filter(function (d) { return d.type === "Phone"; });
     var owners = {};
     phones.forEach(function (d) { owners[d.userId] = 1; });
-    var html = '<div class="grid g-4">' + UI.stat("laptop", signedIn.length, "Devices signed in") + UI.stat("phone", phones.length, "Phones", true, Object.keys(owners).length + " people use a phone") +
+    var rest = '<div class="grid g-4">' + UI.stat("laptop", signedIn.length, "Devices signed in") + UI.stat("phone", phones.length, "Phones", true, Object.keys(owners).length + " people use a phone") +
       UI.stat("tablet", signedIn.filter(function (d) { return d.type === "Tablet"; }).length, "Tablets") + UI.stat("users", Object.keys(signedIn.reduce(function (m, d) { m[d.userId] = 1; return m; }, {})).length, "Accounts in use") + "</div>" +
       // each kind of device a group of its own, its list shown when tapped
-      devGroup("in", "laptop", "Signed in", signedIn) + devGroup("phones", "phone", "Phones", phones) +
-      (A.edition === "teacher" ? "" : devGroup("students", "users", "Students' devices", all.filter(function (d) { return d.role === "student"; }))) +
-      devGroup("out", "logout", "Signed out", all.filter(function (d) { return !d.signedIn; })) +
+      devGroup("staff", "shield", "Staff devices", signedIn.filter(function (d) { return d.role !== "student"; }), null, "Teachers, admins and office staff signed in now. Sign one out here if it is lost or someone left it signed in.") +
+      (students ? devGroup("students", "users", "Students' devices", signedIn.filter(function (d) { return d.role === "student"; }), null, "Students signed in now. A shared computer shows each student who used it.") : "") +
+      devGroup("phones", "phone", "Phones", phones, null, "Phones signed in now, staff's and students'.") +
+      devGroup("out", "logout", "Signed out", all.filter(function (d) { return !d.signedIn; }), null, "Devices someone signed out of, or an admin signed out.") +
       '<p class="tiny muted mt">A device is recorded each time someone signs in. The network address shows once the device has synced with the school server. Rows marked "sample" are demo data.</p>';
     var hub = A.Sync && A.Sync.hubMode();
-    if (hub) html = '<div class="card card-pad mb" id="hub-devices">' + hubDevicesHead() + '<p class="small mt">' + I("refresh") + " Asking the school hub…</p></div>" + html;
-    html = (inviteCard() || '<div id="invite-slot"></div>') + html; // the app for every school: the invite first
-    return { html: html, mount: function () { mountInvite(); if (hub) mountHubDevices(); } };
-  };
+    // the school hub's own lists: who is waiting to join (first of all), and every device registered with it (js below)
+    var top = (hub ? '<div class="card card-pad mb" id="hub-joins">' + hubDevicesHead() + '<p class="small mt">' + I("refresh") + " Asking the school hub…</p></div>" : "") +
+      (inviteCard() || '<div id="invite-slot"></div>'); // the app for every school: the invite next
+    if (hub) rest = '<div id="hub-devices"></div>' + rest;
+    return { top: top, rest: rest, mount: function () { mountInvite(); if (hub) mountHubDevices(); } };
+  }
   /* A group of devices, folded: its name and how many, the list when tapped (open ones stay open on a redraw). */
   var openGroups = {};
-  function devGroup(key, icon, title, list, rows) {
-    return '<details class="card dev-group mt" data-group="' + key + '"' + (openGroups[key] ? " open" : "") + '><summary><span class="row grow" style="gap:10px">' + I(icon) + "<b>" + esc(title) + '</b></span><span class="badge">' + list.length + '</span><span class="dev-chev">' + I("down") + "</span></summary>" +
+  function devGroup(key, icon, title, list, rows, note) {
+    return '<details class="card dev-group mt" data-group="' + key + '"' + (openGroups[key] ? " open" : "") + '><summary><span class="row grow" style="gap:10px">' + I(icon) + "<span><b>" + esc(title) + "</b>" + (note ? '<span class="dev-note">' + esc(note) + "</span>" : "") + '</span></span><span class="badge">' + list.length + '</span><span class="dev-chev">' + I("down") + "</span></summary>" +
       '<div class="dev-list">' + (list.length ? (rows || deviceRow)(list) : '<p class="small muted card-pad">None</p>') + "</div></details>";
   }
   document.addEventListener("toggle", function (e) { var g = e.target && e.target.getAttribute && e.target.getAttribute("data-group"); if (g) openGroups[g] = e.target.open; }, true);
@@ -893,23 +905,30 @@
   };
   /* The hub's own list (1.6): only a registered device reaches the school's data. */
   function hubDevicesHead() {
-    return "<h3>Registered with the school hub</h3>" +
-      '<p class="muted small mt-sm">Only devices on this list can reach the school\'s data. A device joins with the school file, a staff code, or a code shown on its screen that an admin lets in here. The computer that runs the hub is always allowed.</p>';
+    return "<h3>" + I("phone") + " Devices to let in</h3>" +
+      '<p class="muted small mt-sm">Only devices the school hub has let in can reach the school\'s data. A device joins with the school file, a staff code, or a code shown on its screen that an admin lets in here. The computer that runs the hub is always allowed. Every device let in is under <b>Devices</b>, further down.</p>';
   }
   var devTimer = null, devShown = "";
   function mountHubDevices() {
     clearTimeout(devTimer);
     Promise.all([A.Sync.hubPost("/api/joins"), A.Sync.hubPost("/api/devices")]).then(function (r) {
-      var box = document.getElementById("hub-devices");
+      var box = document.getElementById("hub-joins"), reg = document.getElementById("hub-devices");
       if (!box) return;
       // while the page is open the list keeps itself up to date: a device that asks to join shows within 10 seconds
-      devTimer = setTimeout(function () { if (document.getElementById("hub-devices")) mountHubDevices(); }, 10000);
+      devTimer = setTimeout(function () { if (document.getElementById("hub-joins")) mountHubDevices(); }, 10000);
       var joins = r[0].joins || [], devs = (r[1].devices || []).sort(function (a, b) { return (b.seenAt || 0) - (a.seenAt || 0); });
       A.joinsWaiting = joins.length;
       var now = JSON.stringify([joins, devs]);
       if (now === devShown && box.querySelector(".label")) return; // nothing new: the buttons stay put under a finger
       devShown = now;
       var thisId = A.Devices ? A.Devices.id() : null;
+      if (reg) reg.innerHTML = devGroup("registered", "shield", "Registered with the school hub", devs, function (list) { return list.map(function (d) {
+          var who = (d.users || []).map(function (id) { var u = M.user(id); return u ? u.name : null; }).filter(Boolean);
+          return '<div class="list-row"><div class="grow"><div class="title">' + esc(d.label || d.deviceId) + (d.deviceId === thisId ? ' <span class="badge brand">This device</span>' : "") + "</div>" +
+            '<div class="tiny muted">Joined ' + A.relTime(d.at) + " (" + esc(d.how || "") + ") · last seen " + A.relTime(d.seenAt) + (d.ip ? " · " + esc(d.ip) : "") + "</div>" +
+            (who.length ? '<div class="tiny">' + esc(who.slice(0, 6).join(", ")) + (who.length > 6 ? " and " + (who.length - 6) + " more" : "") + "</div>" : "") + "</div>" +
+            (d.deviceId === thisId ? "" : '<button class="btn btn-sm btn-danger" data-act="hub-remove" data-id="' + esc(d.deviceId) + '" data-label="' + esc(d.label || "this device") + '">' + I("trash") + "Remove</button>") + "</div>";
+        }).join(""); }, "Every device let in to reach the school's data. Remove one and it can't reach it any more.");
       box.innerHTML = hubDevicesHead() +
         '<div class="label mt">Waiting to join</div>' + (joins.length ? joins.map(function (j) {
           return '<div class="list-row"><div class="grow"><div class="title"><span class="join-code sm">' + esc(j.code) + "</span> " + esc(j.label || "A device") + (j.online ? ' <span class="badge">' + I("globe") + "Online hub</span>" : "") + "</div>" +
@@ -917,16 +936,9 @@
             // side by side, together, on a phone too
             '<div class="row join-btns"><button class="btn btn-sm btn-primary" data-act="hub-join" data-code="' + esc(j.code) + '" data-ok="1">' + I("check") + "Let it in</button>" +
             '<button class="btn btn-sm" data-act="hub-join" data-code="' + esc(j.code) + '">' + I("x") + "Decline</button></div></div>";
-        }).join("") : '<p class="small muted">No devices waiting.</p>') +
-        devGroup("registered", "shield", "Devices", devs, function (list) { return list.map(function (d) {
-          var who = (d.users || []).map(function (id) { var u = M.user(id); return u ? u.name : null; }).filter(Boolean);
-          return '<div class="list-row"><div class="grow"><div class="title">' + esc(d.label || d.deviceId) + (d.deviceId === thisId ? ' <span class="badge brand">This device</span>' : "") + "</div>" +
-            '<div class="tiny muted">Joined ' + A.relTime(d.at) + " (" + esc(d.how || "") + ") · last seen " + A.relTime(d.seenAt) + (d.ip ? " · " + esc(d.ip) : "") + "</div>" +
-            (who.length ? '<div class="tiny">' + esc(who.slice(0, 6).join(", ")) + (who.length > 6 ? " and " + (who.length - 6) + " more" : "") + "</div>" : "") + "</div>" +
-            (d.deviceId === thisId ? "" : '<button class="btn btn-sm btn-danger" data-act="hub-remove" data-id="' + esc(d.deviceId) + '" data-label="' + esc(d.label || "this device") + '">' + I("trash") + "Remove</button>") + "</div>";
-        }).join(""); });
+        }).join("") : '<p class="small muted">No devices waiting.</p>');
     }, function (e) {
-      var box = document.getElementById("hub-devices");
+      var box = document.getElementById("hub-joins");
       if (box) box.innerHTML = hubDevicesHead() + '<div class="callout warn mt">' + I("wifiOff") + "<div>" + esc(e.message || String(e)) + "</div></div>";
     });
   }
@@ -943,8 +955,8 @@
         joins.forEach(function (j) {
           if (seenJoins[j.code]) return;
           seenJoins[j.code] = 1;
-          if (A.Alerts && !document.getElementById("hub-devices")) A.Alerts.popup({ id: "join_" + j.code, kind: "join", title: "A device wants to join: " + j.code,
-            body: (j.label || "A device") + ". Check the code on its screen, then let it in under Settings → Devices." });
+          if (A.Alerts && !document.getElementById("hub-joins")) A.Alerts.popup({ id: "join_" + j.code, kind: "join", title: "A device wants to join: " + j.code,
+            body: (j.label || "A device") + ". Check the code on its screen, then let it in under Settings → People & devices." });
         });
       }, function () { /* the hub is away for now */ });
     }

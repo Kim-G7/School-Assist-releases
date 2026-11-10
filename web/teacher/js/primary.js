@@ -91,7 +91,7 @@
     return out;
   };
   /** The learning areas (subjects) a teacher records end-of-term marks for: the ones they teach (user.areas, chosen when
-      they register or by the head in Settings → People); the head and other admins, every one. */
+      they register or by the head in Settings → People & devices); the head and other admins, every one. */
   P.myAreas = function (me) {
     var all = P.conf().areas;
     if (!me) return [];
@@ -100,7 +100,7 @@
   };
   // the school's leaders, by their role: everyone above the teachers in the school's hierarchy (A.rank: directors, the
   // RA, the principal, the deputy, the senior master and senior lady, heads of department)
-  /** A director, head or principal is taken not to teach until a subject is ticked for them in Settings → People, or they
+  /** A director, head or principal is taken not to teach until a subject is ticked for them in Settings → People & devices, or they
       are a class teacher: their menu then leaves out the teaching pages, and the classes are in View other classes. */
   P.notTeaching = function (u) {
     var r = u ? A.rank(u.title) : -1;
@@ -184,6 +184,10 @@
     return list.filter(function (c) { return c.id === want; })[0] || list.filter(function (c) { return c.teacherId === me.id; })[0] || list[0] || null;
   };
   P.pupils = function (c) { return c ? M.studentsOf(c) : []; };
+  /** A pupil's parent or guardian, and the phone: as typed on their page, or the parents entered with the student
+      (Enter students, js/enrol.js, keeps them in user.parents). */
+  P.guardianOf = function (u) { return u.guardian || (u.parents || []).map(function (p) { return [p.first, p.last].filter(Boolean).join(" "); }).filter(Boolean).join(", "); };
+  P.phoneOf = function (u) { return u.phone || (u.parents || []).map(function (p) { return p.phone; }).filter(Boolean).join(", "); };
   function age(dob) {
     if (!dob) return null;
     var b = new Date(dob + "T12:00:00"), n = A.date(), a = n.getFullYear() - b.getFullYear();
@@ -411,7 +415,7 @@
     if ((c.studentIds || []).indexOf(u.id) < 0) S().patch("classes", c.id, { studentIds: (c.studentIds || []).concat([u.id]) });
     if (u.level !== c.level || (u.stream || null) !== (c.stream || null)) S().patch("users", u.id, { level: c.level, stream: c.stream || null });
   };
-  /** A student whose form or stream an admin changed (Settings → People): into the school's class of that form and
+  /** A student whose form or stream an admin changed (Settings → People & devices): into the school's class of that form and
       stream, or out of their old one when the school has none. */
   P.followClass = function (u) {
     var key = function (s) { return String(s || "").trim().toLowerCase(); };
@@ -684,7 +688,7 @@
     return { title: "Today", html: html };
   }, { role: "teacher" });
   /* ---- Subjects and classes. Only an admin changes the subjects a teacher teaches and the classes they teach, and makes
-     someone a class teacher (as in Settings → People). A teacher asks (user.areasAsked, classIdsAsked; areasNew: a subject
+     someone a class teacher (as in Settings → People & devices). A teacher asks (user.areasAsked, classIdsAsked; areasNew: a subject
      the school doesn't have yet; homeAsk: the class they would be the class teacher of) and an admin agrees or says no, in
      My subjects (js/tracker.js). The hub keeps teachers' own devices from changing these themselves (hub-access.cjs). */
   function staffTeachers() {
@@ -834,8 +838,9 @@
       kids.map(function (u, i) {
         var att = M.attendanceRate(u.id, c.id);
         return '<tr class="click" data-href="#/t/pupil/' + u.id + '" tabindex="0"><td class="num tnum">' + (i + 1) + '</td><td><div class="row">' + A.avatar(u, "sm") + "<b>" + esc(u.name) + "</b>" + (u.health ? ' <span class="badge warn" data-tip="' + esc(u.health) + '">' + I("alert") + "Health</span>" : "") + "</div></td>" +
-          "<td>" + esc(sexName(u.sex)) + '</td><td class="num tnum">' + (age(u.dob) == null ? "—" : age(u.dob)) + "</td><td>" + esc(u.guardian || "") + '</td><td class="tnum">' + esc(u.phone || "") + "</td>" +
-          '<td class="num">' + UI.pctCell(att, att == null ? "" : att >= 90 ? "good" : att >= 80 ? "warn" : "bad") + "</td></tr>";
+          "<td>" + esc(sexName(u.sex)) + '</td><td class="num tnum">' + (age(u.dob) == null ? "—" : age(u.dob)) + "</td><td>" + esc(P.guardianOf(u)) + '</td><td class="tnum">' + esc(P.phoneOf(u)) + "</td>" +
+          // no register with them in it yet (a student new to the class): 0%, from their first day
+          '<td class="num">' + UI.pctCell(att == null ? 0 : att, att == null ? "" : att >= 90 ? "good" : att >= 80 ? "warn" : "bad") + "</td></tr>";
       }).join("") + "</tbody></table></div>";
     return { title: "My class", html: html, mount: function () { if (q.add) A.act["pupils-add"](); } };
   }, { role: "teacher" });
@@ -890,8 +895,8 @@
     var head = ["No.", "Name", "Sex", "Date of birth", "Age", "Guardian", "Phone", "Address", "Health"].concat(conf.areas.map(function (a) { return a + " %"; }), ["Average %", "Attendance %"]);
     var rows = P.pupils(c).map(function (u, i) {
       var s = sc.by[u.id] || { area: {} };
-      return [i + 1, u.name, sexName(u.sex), u.dob || "", age(u.dob) == null ? "" : age(u.dob), u.guardian || "", u.phone || "", u.address || "", u.health || ""]
-        .concat(conf.areas.map(function (a) { return s.area[a] == null ? "" : s.area[a]; }), [s.avg == null ? "" : s.avg, M.attendanceRate(u.id, c.id) == null ? "" : M.attendanceRate(u.id, c.id)]);
+      return [i + 1, u.name, sexName(u.sex), u.dob ? A.fmtDate(Date.parse(u.dob + "T12:00:00")) : "", age(u.dob) == null ? "" : age(u.dob), P.guardianOf(u), P.phoneOf(u), u.address || "", u.health || ""]
+        .concat(conf.areas.map(function (a) { return s.area[a] == null ? "" : s.area[a]; }), [s.avg == null ? "" : s.avg, M.attendanceRate(u.id, c.id) == null ? 0 : M.attendanceRate(u.id, c.id)]);
     });
     var csv = [head].concat(rows).map(function (r) { return r.map(function (x) { x = String(x); return /[",\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }).join(","); }).join("\r\n");
     A.download(c.name.replace(/\s+/g, "-") + "-term-" + conf.term + "-" + conf.year + ".csv", "﻿" + csv, "text/csv");
@@ -900,7 +905,7 @@
   /* ---- one pupil */
   A.route("t/pupil/:id", function (p, q, me) {
     var u = M.user(p.id);
-    if (!u || !u.pupil) return { redirect: "#/t/pupils" };
+    if (!u || (!u.pupil && u.role !== "student")) return { redirect: "#/t/pupils" }; // (School Assist: the students of the class too)
     // only a pupil of a class this teacher has (the head: every class), even when the address is typed (a browser)
     var theirs = P.classes(me).filter(function (x) { return (x.studentIds || []).indexOf(u.id) >= 0; }), sel = P.cls(me);
     if (!theirs.length) return { redirect: "#/t/pupils" };
@@ -911,7 +916,7 @@
       [esc(sexName(u.sex)), age(u.dob) != null ? age(u.dob) + " years (born " + esc(A.fmtDateLong(Date.parse(u.dob + "T12:00:00"))) + ")" : "", c ? esc(c.name) : ""].filter(Boolean).join(" · ") + "</p>" +
       (u.health ? '<div class="callout warn mt-sm">' + I("alert") + "<div><b>Health:</b> " + esc(u.health) + "</div></div>" : "") + "</div>" +
       '<button class="btn" data-act="pupil-edit" data-id="' + u.id + '">' + I("edit") + "Edit details</button></div>" +
-      '<dl class="kv mt"><dt>Guardian</dt><dd>' + esc(u.guardian || "—") + "</dd><dt>Phone</dt><dd>" + esc(u.phone || "—") + "</dd><dt>Address</dt><dd>" + esc(u.address || "—") + "</dd>" +
+      '<dl class="kv mt"><dt>Guardian</dt><dd>' + esc(P.guardianOf(u) ||"—") + "</dd><dt>Phone</dt><dd>" + esc(P.phoneOf(u) ||"—") + "</dd><dt>Address</dt><dd>" + esc(u.address || "—") + "</dd>" +
       (u.birthNo ? "<dt>Birth entry no.</dt><dd>" + esc(u.birthNo) + "</dd>" : "") + "</dl></div>";
     html += '<div class="grid g-main"><div class="card"><div class="card-head">' + I("edit") + "<h3>Term " + conf.term + " marks</h3>" + (sc && sc.avg != null ? '<span class="sub">average ' + sc.avg + "%</span>" : "") + "</div>" +
       (sc && Object.keys(sc.area).length ? conf.areas.filter(function (a) { return sc.area[a] != null; }).map(function (a) {
@@ -1567,8 +1572,25 @@
     return '<table class="tt tt-days"><colgroup><col class="tt-daycol">' + new Array(w(dayEnd - day0) + 1).join("<col>") + "</colgroup><thead>" + head + "</thead><tbody>" + body + "</tbody></table>";
   }
   function ttGrid(entries, o) {
-    return '<div class="table-wrap' + (o.edit ? "" : " tt-wide") + '">' + ttTable(entries, o) + "</div>" + (o.edit ? "" : ttList(entries, o));
+    return '<div class="table-wrap' + (o.edit ? "" : " tt-wide") + (o.fill ? " tt-fill" : "") + '">' + ttTable(entries, o) + "</div>" + (o.edit ? "" : ttList(entries, o));
   }
+  /** A week that fills the screen (a student's Timetable, 2026-11-10): its rows as tall as the window allows, down to
+      near the bottom, and each lesson's words as much bigger as its box is. On a phone the list shows instead. */
+  P.fillWeek = function () {
+    document.querySelectorAll(".tt-fill").forEach(function (wrap) {
+      var table = wrap.querySelector(".tt-days");
+      if (!table || !wrap.offsetParent) return;
+      var head = table.tHead ? table.tHead.offsetHeight : 44, rows = table.tBodies[0] ? table.tBodies[0].rows.length : 5;
+      var room = window.innerHeight - wrap.getBoundingClientRect().top - head - 72; // (the card's edge and the line under it)
+      var row = Math.max(52, Math.min(190, Math.floor(room / Math.max(1, rows))));
+      table.style.setProperty("--tt-row", row + "px");
+      var max = String(Math.max(13, Math.min(28, Math.round(row * 0.22))));
+      wrap.querySelectorAll(".tt-box[data-fit]").forEach(function (b) { b.setAttribute("data-fit", max); });
+      table.style.fontSize = Math.max(13, Math.min(18, Math.round(row * 0.16))) + "px"; // the days and times keep pace
+      UI.fitText(wrap);
+    });
+  };
+  window.addEventListener("resize", A.debounce(function () { if (document.querySelector(".tt-fill")) P.fillWeek(); }, 160));
   /** The same lessons as a list, day by day: what a phone shows instead of the wide grid. */
   function ttList(entries, o) {
     var today = A.date().getDay(), sd = P.schoolDay();
@@ -1584,9 +1606,9 @@
     }).join("") + "</div>";
   }
   /** A class's week as it is now, to look at (a School edition student's Timetable, js/timetable.js); "" with no lessons. */
-  P.classWeek = function (c) {
+  P.classWeek = function (c, o) {
     var entries = c ? slotsOf(c.id, ttKeyNow()).map(function (s) { return { s: s, c: c }; }) : [];
-    return entries.length ? ttGrid(entries, { now: true }) : "";
+    return entries.length ? ttGrid(entries, { now: true, fill: !!(o && o.fill) }) : "";
   };
   A.route("t/timetable", function (p, q, me) {
     var mode = ttMode(), all = homerooms();
