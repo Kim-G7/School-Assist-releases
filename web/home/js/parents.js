@@ -157,7 +157,9 @@
     if (at >= 0) h.slice(at + 1).split("&").forEach(function (kv) { var i = kv.indexOf("="); if (i > 0) q[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1)); });
     return { tab: parts[0] === "p" && TABS[parts[1]] ? parts[1] : "progress", q: q };
   }
-  var TABS = { progress: ["chart", "Progress"], attendance: ["calendar", "Attendance"], subjects: ["layers", "Subjects"], marks: ["edit", "Mark book"], timetable: ["grid", "Timetable"] };
+  var TABS = { progress: ["chart", "Progress"], attendance: ["calendar", "Attendance"], subjects: ["layers", "Subjects"], marks: ["edit", "Mark book"], timetable: ["grid", "Timetable"], fees: ["wallet", "Fees"] };
+  var FEE_STATUS = { full: ["good", "Fully paid"], half: ["warn", "Part paid"], none: ["bad", "Not paid"], unset: ["", "No fee set yet"] };
+  var monthName = function (m) { var t = Date.parse(m + "-15T12:00:00Z"); return isNaN(t) ? "" : new Date(t).toLocaleString("en-GB", { month: "long", timeZone: "UTC" }); };
   var tone = function (p) { return p == null ? "" : p >= 60 ? "good" : p < 50 ? "bad" : ""; };
   var pctBadge = function (p) { return p == null ? '<span class="muted small">No marks yet</span>' : '<span class="badge ' + tone(p) + ' tnum">' + p + "%</span>"; };
   var dateText = function (d) { var t = Date.parse(d + "T12:00:00Z"); return isNaN(t) ? "" : A.fmtDate(t); };
@@ -166,9 +168,10 @@
     var head = '<header class="par-head"><div class="logo par-badge">' + badge(b) + '</div><div class="grow"><b>' + esc(b.name) + "</b>" + (b.motto ? "<span>" + esc(b.motto) + "</span>" : "") + "</div>" +
       '<button class="btn btn-icon par-menu" data-act="par-menu" aria-label="Your schools and settings">' + I("sliders") + "</button></header>";
     if (!kid) return '<div class="par-app">' + head + '<main class="par-main">' + note() + '<div class="card">' + UI.empty("users", "No child to show", "The school no longer lists your child. Ask the school office.") + "</div></main></div>";
+    if (r.tab === "fees" && !kid.fees) r.tab = "progress"; // (a school with no fee records, or a hub from before this page)
     var c = kid.student.id, go = function (tab, more) { return "#/p/" + tab + "?c=" + encodeURIComponent(c) + (more || ""); };
     var who = kids.length > 1 ? '<div class="pill-tabs">' + kids.map(function (k) { return '<button class="' + (k === kid ? "on" : "") + '" data-act="goto" data-href="#/p/' + r.tab + "?c=" + encodeURIComponent(k.student.id) + '">' + esc(k.student.name.split(" ")[0]) + "</button>"; }).join("") + "</div>" : "";
-    var tabs = '<nav class="par-tabs" aria-label="Your child">' + Object.keys(TABS).map(function (t) { return '<a href="' + go(t) + '" class="' + (t === r.tab ? "on" : "") + '">' + I(TABS[t][0]) + "<span>" + TABS[t][1] + "</span></a>"; }).join("") + "</nav>";
+    var tabs = '<nav class="par-tabs" aria-label="Your child">' + Object.keys(TABS).filter(function (t) { return t !== "fees" || kid.fees; }).map(function (t) { return '<a href="' + go(t) + '" class="' + (t === r.tab ? "on" : "") + '">' + I(TABS[t][0]) + "<span>" + TABS[t][1] + "</span></a>"; }).join("") + "</nav>";
     var title = '<div class="par-child"><h1 class="par-title">' + esc(kid.student.name) + '</h1><p class="muted small">' + esc([kid.student.studentNo, kid.student.className, "Term " + kid.term + " " + kid.year].filter(Boolean).join(" · ")) + "</p></div>";
     return '<div class="par-app">' + head + '<main class="par-main">' + note() + who + title + PAGES[r.tab](kid, r.q, go) + '<p class="tiny muted mt-lg">As the school had it ' + esc(A.relTime(sc.at)) + ".</p></main>" + tabs + "</div>";
   }
@@ -237,6 +240,31 @@
         '<h2 class="par-sub">' + DAYS[day - 1] + '</h2><div class="card">' + rows.map(function (x) {
           return '<div class="tt-row' + (x.rest ? " par-rest" : "") + '"><div class="tt-time"><b>' + hhmm(x.at) + "</b><span>" + hhmm(x.to) + '</span></div><div class="grow"><b>' + esc(x.title) + "</b>" + (x.who ? '<div class="small muted">' + esc(x.who) + "</div>" : "") + "</div></div>";
         }).join("") + "</div>";
+    },
+    fees: function (k, q, go) {
+      var f = k.fees, cash = function (n) { return esc(f.currency) + " " + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString("en-US"); };
+      var x = f.terms.filter(function (y) { return y.term === Number(q.t); })[0] || f.terms.filter(function (y) { return y.term === k.term; })[0] || f.terms[0], tone = FEE_STATUS[x.status];
+      var open = f.terms.filter(function (y) { return y.due > 0 || y.paid > 0 || y.term === k.term; });
+      var when = function (d) { return d ? "<span>" + esc(dateText(d)) + "</span>" : ""; };
+      var slip = function (p) { return when(p.date) + (p.method ? '<span class="sep"></span><span>' + esc(p.method) + "</span>" : "") + (p.ref ? '<span class="sep"></span><span>' + esc(p.ref) + "</span>" : ""); };
+      var html = (open.length > 1 ? '<div class="pill-tabs">' + open.map(function (y) { return '<button class="' + (y === x ? "on" : "") + '" data-act="goto" data-href="' + go("fees", "&t=" + y.term) + '">Term ' + y.term + "</button>"; }).join("") + "</div>" : "") +
+        '<div class="row spread mb"><h2 class="par-sub" style="margin:0">School fees, Term ' + x.term + '</h2><span class="badge ' + tone[0] + '">' + tone[1] + "</span></div>" +
+        '<div class="grid g-3">' + UI.stat("layers", cash(x.due), "Fee for the term") + UI.stat("checkCircle", cash(x.paid), "Paid", true) + UI.stat("alert", cash(x.balance), "Still to pay") + "</div>" + (x.due > 0 ? UI.bar(Math.min(100, Math.round(x.paid / x.due * 100))) : "");
+      if (x.stages.length) html += section("Payment plan", x.stages.length + " stages", x.stages.map(function (s) {
+        return '<div class="list-row"><div class="grow"><div class="title">Stage ' + s.n + '</div><div class="meta">' + (s.by ? "<span>By " + esc(dateText(s.by)) + "</span>" : "") + '</div></div><span class="tnum small">' + cash(s.got) + " of " + cash(s.amount) + '</span><span class="badge ' + (s.done ? "good" : s.late ? "bad" : "") + '">' + (s.done ? "Paid" : s.late ? "Late" : "To pay") + "</span></div>";
+      }).join(""));
+      html += section("Payments", "Term " + x.term, x.payments.length ? x.payments.map(function (p) {
+        return '<div class="list-row"><div class="grow"><div class="title tnum">' + cash(p.amount) + '</div><div class="meta">' + slip(p) + "</div></div></div>";
+      }).join("") : UI.empty("wallet", "No payments this term"));
+      var b = f.transport;
+      if (b) {
+        var paidNow = b.months.filter(function (m) { return m.month === b.month; }).length > 0, n = b.months.length;
+        var bus = (b.on && !paidNow ? '<div class="list-row"><div class="grow"><div class="title">' + esc(monthName(b.month)) + '</div><div class="meta">' + (b.monthly ? "<span>" + cash(b.monthly) + " a month</span>" : "") + '</div></div><span class="badge warn">Not paid yet</span></div>' : "") + b.months.map(function (m) {
+          return '<div class="list-row"><div class="grow"><div class="title">' + esc(monthName(m.month)) + '</div><div class="meta">' + slip(m) + '</div></div><span class="tnum small">' + cash(m.amount) + '</span><span class="badge good">Paid</span></div>';
+        }).join("");
+        html += section("Bus fare", [b.route, n + " month" + (n === 1 ? "" : "s") + " paid this year"].filter(Boolean).join(" · "), bus || UI.empty("bus", "No bus fare paid this year"));
+      }
+      return html;
     },
   };
 

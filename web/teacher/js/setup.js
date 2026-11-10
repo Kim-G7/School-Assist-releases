@@ -139,11 +139,28 @@
     if (!Id.applies() || !A.Store.state) return "ready";
     var m = meta();
     if (m.setupStep && Id.id()) return me && me.isAdmin ? "wizard" : "ready";
-    if (Id.id() || Id.isDemo()) return "ready";
+    if (Id.id()) return Id.joinAgain() ? "connect" : "ready";
+    if (Id.isDemo()) return "ready";
     // the app for every school: choose first; then joining (connect) or setting it up (wizard)
     if (A.multiHost && !m.pack) return m.multi && m.multi.sid ? (m.multi.setup ? "wizard" : "connect") : "choose";
     if (m.pack || servedByHub()) return "connect";
     return "wizard";
+  };
+  /** A device of a school whose hub no longer knows it (the hub was reset or replaced, or a presentation copy was
+      reloaded) and has asked to be let in again: the join page, with its code and the staff-code box, even with someone
+      signed in. Until 2026-11-10 it stayed on its pages with "Waiting to join", where nothing reached the hub: an admin
+      there couldn't even let devices in, and with every device forgotten nobody could. */
+  Id.joinAgain = function () {
+    var s = A.Sync;
+    return !!(s && s.hubMode && s.hubMode() && !s.joinState().key && s.joinState().code);
+  };
+  /** The sync found this device waiting to join again: the join page, at a quiet moment (not under someone's typing). */
+  var joinLater = null;
+  Id.showJoin = function () {
+    clearTimeout(joinLater); joinLater = null;
+    if (Id.stage(M.me()) !== "connect" || document.querySelector(".setup-connect")) return;
+    if (A.quietMoment && !A.quietMoment()) { joinLater = setTimeout(Id.showJoin, 5000); return; }
+    A.render();
   };
   Id.page = function (stage) {
     document.title = (stage === "connect" && ((meta().pack && meta().pack.name) || C.name)) || "School Assist";
@@ -241,10 +258,11 @@
   Id.hubOk = function () { lost.n = 0; };
 
   function connectHtml() {
-    var p = meta().pack || {}, name = p.name || C.name;
+    var p = meta().pack || {}, again = !!Id.id(), name = p.name || C.name || (again && (Id.record() || {}).name);
     var logo = p.logo ? '<div class="logo"><img src="' + esc(p.logo) + '" alt=""></div>' : '<div class="logo"><img src="assets/icon.svg" alt="" data-school-icon></div>';
     return '<div class="setup-card setup-connect">' + logo + "<h1>" + esc(name || "Your school") + "</h1>" +
-      (C.pendingCode ? '<p class="mt">This ' + thisDevice() + ' is waiting to join the school hub. Show an admin this code:</p><p class="join-code">' + esc(C.pendingCode) + '</p><p class="small muted">The admin lets it in under Settings → Devices. This page carries on by itself.</p><div class="setup-spin" aria-hidden="true"></div>' +
+      (C.pendingCode ? '<p class="mt">' + (again ? "The school hub doesn't know this " + thisDevice() + " any more (it was reset or replaced), so it has to join again. Show an admin this code:"
+          : "This " + thisDevice() + " is waiting to join the school hub. Show an admin this code:") + '</p><p class="join-code">' + esc(C.pendingCode) + '</p><p class="small muted">The admin lets it in under Settings → Devices. This page carries on by itself.</p><div class="setup-spin" aria-hidden="true"></div>' +
           // the Home Screen app of a phone let in already in its browser: the number from there, and no admin asked again
           (A.Install && A.Install.installed() ? '<form data-submit="su-join-carry" class="mt-lg" style="text-align:left"><label class="field"><span>Let in already in this ' + thisDevice() + '\'s browser? Type the 6-digit number it shows under Install the app</span><input class="input" name="n" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123 456" spellcheck="false"></label><button class="btn btn-primary" type="submit">' + I("check") + "Let this app in</button></form>" : "") +
           // a teacher or admin needn't wait: the school's staff code lets this device in at once
@@ -254,7 +272,7 @@
         (meta().pack ? '<form data-submit="su-connect-at" class="mt-lg" style="text-align:left"><label class="field"><span>Or type the hub\'s address</span><input class="input" name="url" placeholder="e.g. 192.168.1.20:8080" autocomplete="off" spellcheck="false">' +
           '<span class="hint">It is on the hub computer, in Settings → Offline &amp; sync.</span></label><button class="btn" type="submit">' + I("wifi") + "Connect</button></form>" : "")
         : '<p class="muted mt">' + (C.searching ? "Looking for the school hub on the network…" : "Connecting to the school hub…") + '</p><div class="setup-spin" aria-hidden="true"></div>') +
-      (A.multiHost && meta().multi ? '<p class="small mt"><button class="link" data-act="su-other-school">Not your school? Choose another</button></p>' : "") +
+      (A.multiHost && meta().multi && !again ? '<p class="small mt"><button class="link" data-act="su-other-school">Not your school? Choose another</button></p>' : "") +
       (A.Install ? A.Install.html("join") : "") +
       '<p class="tiny muted mt-lg">This copy of School Assist is set up for ' + esc(name || "your school") + (location.protocol === "https:" ? ". It joins the school's online hub over the internet; then teachers and students sign in." // the cloud hub; a school's own hub is http on the Wi-Fi
         : ". It joins the school hub over the school Wi-Fi; then teachers and students sign in.") + "</p></div>";
@@ -263,9 +281,13 @@
   Id.connect = function () {
     if (C.busy) return;
     clearTimeout(C.timer); C.timer = null; C.busy = true; C.error = "";
-    var m = meta(), urls = m.pack ? (m.pack.urls || []) : [A.multiHost && m.multi ? schoolHub() : location.origin];
+    // joining again (Id.joinAgain): the hub this device syncs with, which asked it to; else the school file's, or this page's
+    var m = meta(), again = Id.id() ? A.Sync.config().url : "";
+    var urls = again ? [again].concat(((m.pack && m.pack.urls) || []).filter(function (u) { return u !== again; }))
+      : m.pack ? (m.pack.urls || []) : [A.multiHost && m.multi ? schoolHub() : location.origin];
     var tryOne = function (i) {
-      if (i >= urls.length) return Promise.reject(new Error(m.pack ? "The school hub isn't answering. Connect this computer to the school Wi-Fi (the hub computer must be on), then try again." : "nohub"));
+      if (i >= urls.length) return Promise.reject(new Error(m.pack ? "The school hub isn't answering. Connect this computer to the school Wi-Fi (the hub computer must be on), then try again."
+        : again ? "Can't reach the school hub just now. Check this device's connection, then try again." : "nohub"));
       return ping(urls[i]).then(function (j) {
         if (!j.school) throw new Error("The school isn't set up on the hub computer yet.");
         if (m.pack && j.school.id !== m.pack.schoolId) throw new Error("The hub at " + urls[i] + " belongs to " + j.school.name + ", not " + m.pack.name + ".");

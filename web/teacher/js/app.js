@@ -53,10 +53,45 @@
         '<div class="row wrap" style="justify-content:center"><button class="btn" onclick="history.back()">Go back</button><button class="btn btn-primary" onclick="location.reload()">Reload</button></div>') + "</div>";
     }
   };
+  /* Signing out by itself (2026-11-09): a computer left signed in doesn't stay that person's overnight. Once it is past
+     SIGN_OUT_FROM at the school, a device nobody has used for IDLE_MS goes back to the sign-in page, before it shows
+     anything: on waking, on opening, and with the next touch. A timed paper, a video playing and a teacher's vacation
+     mode (their own device, in the holidays) don't count as idle; home study has no such rule. */
+  var IDLE_KEY = "sca-last-active", SIGN_OUT_FROM = 17, IDLE_MS = 30 * 60000, READING_MS = 2 * 3600000, activeAt = 0;
+  var Idle = (A.Idle = {
+    last: function () { var t = 0; try { t = Number(localStorage.getItem(IDLE_KEY)) || 0; } catch (e) { /* private mode */ } return Math.max(t, activeAt); },
+    touch: function () { activeAt = A.now(); try { localStorage.setItem(IDLE_KEY, String(activeAt)); } catch (e) { /* private mode */ } },
+    due: function () {
+      var me = M.me();
+      if (!me || A.edition === "home" || A.Cloud || A.Store.vacation) return false;
+      var now = A.now(), last = Idle.last();
+      if (!last || last > now + 60000) { Idle.touch(); return false; } // (the first time on this device, or its date was put right)
+      var sat = me.role === "student" && A.Store.filter("receipts", function (r) { return r.studentId === me.id && r.startedAt && !r.doneAt && now < r.endsAt; }).length > 0;
+      var playing = [].some.call(document.querySelectorAll("video, audio"), function (m) { return !m.paused && !m.ended; });
+      if (sat || playing) return false;
+      var focus = document.activeElement, limit = focus && focus.tagName === "IFRAME" ? READING_MS : IDLE_MS; // (a PDF: its page doesn't tell this one about the mouse)
+      var w = A.wall(last), pastFive = (w.getHours() - SIGN_OUT_FROM) * 3600000 + w.getMinutes() * 60000 + w.getSeconds() * 1000 + w.getMilliseconds();
+      return now >= last - pastFive && now - last >= limit;
+    },
+    signOut: function () {
+      A.loginNotice = "You were signed out because this device wasn't used for a while after school hours. Sign in to carry on.";
+      document.querySelectorAll(".modal-back").forEach(function (x) { x.remove(); });
+      A.act.signout();
+    },
+    check: function () { if (Idle.due()) Idle.signOut(); },
+  });
+  ["pointerdown", "keydown", "wheel", "touchstart", "mousemove", "scroll"].forEach(function (ev) {
+    document.addEventListener(ev, function () { if (A.now() - activeAt < 15000) return; if (Idle.due()) Idle.signOut(); else Idle.touch(); }, { passive: true, capture: true });
+  });
+  ["focus", "pageshow"].forEach(function (ev) { window.addEventListener(ev, function () { Idle.check(); }); });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) Idle.check(); });
+  setInterval(function () { Idle.check(); }, 30000);
+
   function draw() {
     var app = document.getElementById("app");
     if (!A.Store.state) return;
     if (A.cleanup) { var fn = A.cleanup; A.cleanup = null; try { fn(); } catch (e) { console.error(e); } }
+    if (Idle.due()) { Idle.signOut(); return; }
     var me = M.me(), h = parseHash();
     if (me && A.Devices && A.Devices.isRevoked(me)) {
       A.loginNotice = "An administrator signed this device out of " + me.name + "'s account.";

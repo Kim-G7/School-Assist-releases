@@ -1,4 +1,4 @@
-/* Vacation mode (School Assist Teacher: with Premium, and with Standard paid for a year; js/licence.js). In the
+/* Vacation mode (every package; js/licence.js). In the
  * holidays a teacher keeps working (a holiday class, its register, marks, schemes) in a space of their own on their
  * own device. The space is a second copy of the app's records under its own name in the device's storage
  * (js/store.js picks it at start-up). It holds the school's settings and the teacher's own account (and, if they
@@ -15,7 +15,7 @@
 
   V.on = function () { return !!(A.Store && A.Store.vacation); };
   V.built = function () { return !!A.Primary; }; // School Assist Teacher, and the School edition's staff since 2026-10-28
-  /** May this teacher start it? Their school's plan has it, and the admin turned it on. */
+  /** May this teacher start it? Their school's licence is in force. */
   V.allowed = function () { return V.built() && !!A.Licence && A.Licence.isOn("vacation"); };
 
   V.nav = function (me) {
@@ -85,13 +85,8 @@
       return { title: "Vacation mode", html: html };
     }
     if (!A.Licence.has("vacation")) {
-      html += '<div class="card card-pad" style="max-width:760px"><h3>' + I("lock") + " Not on your school's plan</h3>" +
-        '<p class="mt-sm">Vacation mode comes with Premium, and with the yearly Standard package. To add it, contact Golden Technologies.</p></div>';
-      return { title: "Vacation mode", html: html };
-    }
-    if (!V.allowed()) {
-      html += '<div class="card card-pad" style="max-width:760px"><h3>' + I("info") + " Not turned on yet</h3>" +
-        '<p class="mt-sm">' + (me.isAdmin ? 'Your plan includes it. Turn it on for your teachers in <a href="#/t/settings?s=licence">Settings → Plan &amp; licence</a>.' : "Your school's plan includes it. Ask an admin to turn it on in Settings → Plan & licence.") + "</p></div>";
+      html += '<div class="card card-pad" style="max-width:760px"><h3>' + I("lock") + " The school's licence isn't active</h3>" +
+        '<p class="mt-sm">Vacation mode comes with every School Assist package. Ask an admin to check Settings → Plan &amp; licence.</p></div>';
       return { title: "Vacation mode", html: html };
     }
     var c = A.Primary && A.Primary.cls(me);

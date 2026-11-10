@@ -189,7 +189,7 @@
       var r = S.state.colls.attendance[id];
       if (!r || r._deleted || (r.updatedAt || 0) > sent || !r.marks) return;
       var only = {}; Object.keys(r.marks).forEach(function (s) { if (known[s]) only[s] = r.marks[s]; });
-      if (Object.keys(only).length !== Object.keys(r.marks).length) S.state.colls.attendance[id] = Object.assign({}, r, { marks: only });
+      if (Object.keys(only).length !== Object.keys(r.marks).length) S.state.colls.attendance[id] = Object.assign({}, r, { marks: only, marksAt: undefined });
     });
     drop("users", function (u) { return u._deleted || u.role !== "student" || known[u.id] || mates[u.id] || devKnown[u.id]; });
     Object.keys(S.state.colls.users || {}).forEach(function (id) {
@@ -211,7 +211,7 @@
         if (r.status === 410 && !again && follow(j)) return hubAuth(path, o, true);
         // the school's records are on its hub computer, which is off just now (1.8, hub-relay.cjs): as with no internet
         if (r.status === 503 && j.hubOffline) throw err("offline", j.error);
-        if (r.status === 401 && j.join) { m.hubKey = null; m.oldHub = null; throw err("rejoin", "This device has to join the school hub again. Try once more."); }
+        if (r.status === 401 && j.join) { m.hubKey = null; m.oldHub = null; m.serverSince = 0; throw err("rejoin", "This device has to join the school hub again. Try once more."); }
         if (!r.ok) throw err(j.locked ? "locked" : j.needCode ? "needCode" : j.wrong ? "wrong" : j.hasPassword ? "hasPassword" : j.pending ? "pending" : j.declined ? "declined" : j.blocked ? "blocked" : "refused", j.error || "The school hub replied " + r.status + ".");
         if (j.user) S.merge("users", j.user);
         if (j.credential) S.merge("credentials", j.credential);
@@ -341,8 +341,9 @@
           var gotAt = Date.now();
           return r.json().catch(function () { return {}; }).then(function (j) {
             if (r.ok && j.now) A.Clock.learn(j.now, sentAt, gotAt); // the school's time, not this device's
-            // its key no longer works (the hub was replaced, or it joined again elsewhere): join again next time
-            if (r.status === 401 && j.join) { meta.hubKey = null; meta.oldHub = null; throw err("rejoin", j.error || "This device has to join the school hub again."); }
+            // its key no longer works (the hub was replaced or reset, or it joined again elsewhere): join again next time,
+            // and then take everything from the start, since the hub's records may not be the ones this device knew
+            if (r.status === 401 && j.join) { meta.hubKey = null; meta.oldHub = null; meta.serverSince = 0; throw err("rejoin", j.error || "This device has to join the school hub again."); }
             if (r.status === 403 && j.blocked) { meta.hubKey = null; meta.blocked = true; throw err("blocked", j.error); }
             if (r.status === 410 && follow(j)) throw err("moved", j.error); // the school moved: sync again, there
             if (r.status === 503 && j.moving) throw err("moving", j.error); // moving now: this device's changes wait here
@@ -394,7 +395,7 @@
         }
         // the hub didn't answer at all (not an error reply): maybe its address changed (js/setup.js looks for it)
         if (!c.cloud && e && e.name === "TypeError" && A.SchoolId && A.SchoolId.lostHub) A.SchoolId.lostHub(c.url);
-        if (e && e.code === "pending") { state = "pending"; lastError = e.message; }
+        if (e && e.code === "pending") { state = "pending"; lastError = e.message; if (A.SchoolId && A.SchoolId.showJoin) A.SchoolId.showJoin(); } // (a device the hub forgot: the join page)
         else if (e && e.code === "hubOffline") { state = "local"; lastError = e.message; }
         else if (quiet) { state = "local"; } else { state = "error"; lastError = e.message || String(e); }
         A.refreshStatus();

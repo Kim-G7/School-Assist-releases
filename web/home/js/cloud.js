@@ -175,6 +175,7 @@
       foot: [{ label: "Done", cls: "btn-primary" }],
     });
   }
+  A.act = A.act || {}; // (this file loads before js/app.js)
   A.act["cloud-approve"] = function (el) {
     var id = el.getAttribute("data-id"), yes = el.getAttribute("data-yes") === "1", u = A.M.user(id) || { name: "this student" };
     el.disabled = true;

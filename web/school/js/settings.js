@@ -744,8 +744,6 @@
             if (!typed) return M.claimStudentNo(f.level).then(function (no) { rec.studentNo = no; save(rec.name + "'s student ID is " + no); });
             rec.studentNo = typed;
           } else {
-            var full = isNew && A.Licence && A.Licence.teacherLimit && A.Licence.teacherLimit();
-            if (full) { UI.toast(full, "bad"); return false; }
             if (!A.Cloud && (isNew || pin) && A.staffPassword()) { var bad = A.staffPasswordProblem(pin); if (bad) { UI.toast(bad, "bad"); return false; } rec.pw = true; }
             else if (!A.Cloud && (isNew || pin) && !/^\d{4}$/.test(pin)) { UI.toast(isNew ? "Give them a 4-digit PIN" : "The new PIN must be 4 digits", "bad"); return false; }
             if (A.Primary) {

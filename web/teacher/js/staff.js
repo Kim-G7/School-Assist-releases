@@ -244,8 +244,6 @@
   A.act["staff-decide"] = function (el) {
     var id = el.getAttribute("data-id"), yes = el.getAttribute("data-yes") === "1", u = M.user(id), me = M.me();
     if (!u || !me || !me.isAdmin) return;
-    var full = yes && A.Licence && A.Licence.teacherLimit && A.Licence.teacherLimit();
-    if (full) { UI.toast(full, "bad"); return; }
     var go = function () {
       if (A.Cloud) {
         return A.Cloud.admin("staff-decide", { appId: id, approve: yes }).then(function () { return A.Sync.syncNow().catch(function () {}); })

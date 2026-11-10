@@ -7,11 +7,10 @@
  *    (js/licence-key.js). Changing a single letter of a key, or writing one by hand, makes it invalid.
  *    The check runs in plain JavaScript, so it works offline and on any device, including tablets that
  *    open the app from the hub over http:// (where the browser's own crypto is switched off).
- *  - Plans: Standard is School Assist as it is; Premium adds the Premium features below. Each is paid a term
- *    or a year (12 months, holidays included): the key and each renewal say which (period). The app shows no
- *    prices: Golden Technologies gives schools its price list on paper. Premium features stay off until the
- *    school's admin turns them on.
- *  - School Assist Teacher: vacation mode (js/vacation.js) also comes with Standard paid a year (yearly: true).
+ *  - Plans: School Assist is Standard or Premium (AI marking, Parents and School fees); School Assist Teacher is one
+ *    package, with any number of teachers. Every school pays by the year (2026-11-09; keys from before may say a term).
+ *    The app shows no prices: Golden Technologies gives schools its price list on paper.
+ *  - Vacation mode (js/vacation.js) comes with every package (all: true).
  *  - When an update brings a new feature, the admins hear about it in their notifications: on Premium as
  *    something they can turn on, on Standard as news of what Premium offers.
  *  - A school keeps ONE key. Each payment extends it with a renewal (scripts/licence.cjs renew): a short signed
@@ -35,14 +34,14 @@
   var PLANS = { standard: { name: "Standard" }, premium: { name: "Premium" } };
   var TEACHER = A.edition === "teacher";
   /** Premium features. `built: false` ones are on the way; an update that builds one flips it to true.
-   *  yearly: Standard paid a year has it too. school: School Assist only (not listed in School Assist Teacher).
+   *  all: every package has it. school: School Assist only (not listed in School Assist Teacher).
    *  always: comes with the plan, with no switch to turn it on. */
   var FEATURES = [
     { id: "ai-marking", name: "AI marking", built: true, school: true, about: "Written answers in practice papers are marked against the marking scheme, with a line of feedback for the student." },
     { id: "consultation", name: "Consultation mode", built: false },
-    { id: "vacation", name: "Vacation mode", built: A.edition !== "home", yearly: TEACHER, // (the School edition too since 2026-10-28)
+    { id: "vacation", name: "Vacation mode", built: A.edition !== "home", all: true, always: true,
       about: "Teachers keep working in the holidays (lessons, marks, plans) in a space of their own on their device, kept apart from the school's records so nothing is doubled." },
-    { id: "parent-monitor", name: "Parents", built: true, school: true, always: true, about: "Parents follow their own child from their phone: attendance, subjects and teachers, marks, progress and the timetable." },
+    { id: "parent-monitor", name: "Parents", built: true, school: true, always: true, about: "Parents follow their own child from their phone: attendance, subjects and teachers, marks, progress, the timetable, and school fees and bus fare." },
     { id: "fees", name: "School fees", built: true, school: true, always: true, about: "The bursar and accountant get their own view: fees by form and student, payment plans, transport and candidate registration." },
   ];
 
@@ -183,9 +182,6 @@
     var r = read(key);
     return r.ok || !r.data || !/^This key is for /.test(r.error || "") ? r : { ok: true, data: r.data, key: String(key || "").replace(/\s+/g, "") };
   };
-  /** School Assist Teacher: how many teachers Standard covers (Premium: any number). */
-  Lic.STANDARD_TEACHERS = 20;
-
   /** Keys are for the school editions; Home needs none. */
   Lic.applies = function () { return A.edition !== "home"; };
 
@@ -201,8 +197,6 @@
   Lic.withRenewal = withRenewal;
   /** A term or a year: keys and renewals made from 1.6.2 on say so; an older one is a year when it runs past 200 days. */
   function periodOf(from, until) { var a = Date.parse(from), b = Date.parse(until); return a && b && b - a > 200 * DAY ? "year" : "term"; }
-  /** "year" or "term": how the plan in force was paid. */
-  Lic.period = function () { var st = Lic.status(), d = st.data || {}; return d.period || periodOf(d.from, d.until); };
   /** state: home | trial (no key) | invalid | active | grace (paid date passed, 30 days' grace) | expired */
   Lic.status = function () {
     if (!Lic.applies()) return { state: "home" };
@@ -226,14 +220,7 @@
    *  (a typo, or a feature this copy doesn't know) is never unlocked, so a slip in an update can't open Premium to a Standard school. */
   Lic.has = function (id) {
     var f = FEATURES.filter(function (x) { return x.id === id; })[0], plan = Lic.plan();
-    return !!f && (plan === "premium" || (!!f.yearly && plan === "standard" && Lic.period() === "year"));
-  };
-  /** School Assist Teacher on Standard: room for one more teacher? null, or why not. Every staff account counts
-   *  (admins too); waiting registrations only once approved. */
-  Lic.teacherLimit = function () {
-    if (!TEACHER || Lic.plan() !== "standard") return null;
-    var n = S().filter("users", function (u) { return u.role === "teacher" && u.status !== "pending" && u.status !== "declined"; }).length;
-    return n < Lic.STANDARD_TEACHERS ? null : "The Standard plan covers " + Lic.STANDARD_TEACHERS + " teachers, and the school has " + n + ". To add more, contact Golden Technologies about Premium.";
+    return !!f && (plan === "premium" || (!!f.all && plan === "standard"));
   };
   /** Is the feature in use: on the plan, and turned on by the admin. */
   Lic.isOn = function (id) {

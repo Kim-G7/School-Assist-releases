@@ -168,6 +168,8 @@
       if (!rec.id) rec.id = A.uid(coll.slice(0, 3));
       if (!rec.createdAt) rec.createdAt = A.now();
       rec.updatedAt = A.now();
+      var was = Store.state.colls[coll][rec.id];
+      if (was && !was._deleted && was !== rec && A.Sheets.isSheet(coll)) A.Sheets.stamp(was, rec); // (only the marks that changed are this save's)
       Store.state.colls[coll][rec.id] = rec;
       if (!(opts && opts.silent)) Store.changed(coll);
       return rec;
@@ -186,8 +188,10 @@
     merge: function (coll, rec) {
       if (!Store.state.colls[coll] || !rec || !rec.id) return false;
       var cur = Store.state.colls[coll][rec.id];
-      if (cur && (cur.updatedAt || 0) >= (rec.updatedAt || 0)) return false;
-      Store.state.colls[coll][rec.id] = rec;
+      if (cur && (cur.updatedAt || 0) > A.now() + A.Sheets.FUTURE) cur = null; // stamped while this device's date was wrong: it doesn't beat the hub's
+      var keep = A.Sheets.pick(coll, cur, rec);
+      if (!keep) return false;
+      Store.state.colls[coll][rec.id] = keep;
       return true;
     },
     /** The hub's copy of a record, taken as it is (a change the hub refused, js/sync.js); null: the hub has none. */
