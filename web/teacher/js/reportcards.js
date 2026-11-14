@@ -27,7 +27,8 @@
     ["subject", "Subject name"], ["total", "Subject mark: the end of term total (e.g. 100)"], ["mark", "Mark: the student's end of term mark (e.g. 72)"],
     ["avgmark", "Class average (marks)"], ["percent", "Mark (%)"], ["average", "Class average (%)"], ["raw", "Mark as entered (34 / 50)"],
     ["grade", "Grade"], ["comment", "Teacher's comment"], ["teacher", "Subject teacher"], ["position", "Position in the class"],
-    ["termwork", "Term work average (%)"], ["outof", "Subject mark: out of 100 (the marks as %)"], ["blank", "Blank (written by hand)"],
+    ["termwork", "Term work average (%)"], ["outof", "Subject mark: out of 100 (the marks as %)"],
+    ["classmark", "Class mark: the student's end of term mark out of 100 (72 / 100)"], ["blank", "Blank (written by hand)"],
   ];
   // the School edition's columns before 1.6.2: "Subject Mark" showed the student's own mark, as "Mark" did
   var OLD_DEFAULT = "subject:Subject|raw:Subject Mark|average:Class Average|percent:Mark|grade:Grade|comment:Comment";
@@ -48,6 +49,8 @@
         { label: form ? "Subject" : "Learning area", source: "subject", on: true },
         // (2026-10-26) the end-of-term marks only: most teachers enter those for every student, not exercises and homework
         { label: "Subject Mark", source: "outof", on: true },
+        // (2026-11-14) the student's own mark out of that 100, beside it: the marks side by side, then the percentages
+        { label: "Class Mark", source: "classmark", on: true },
         { label: "Class Average", source: "average", on: true },
         { label: "End of term", source: "percent", on: true },
         { label: "Achievement", source: "grade", on: true },
@@ -58,6 +61,7 @@
         { label: "Subject Mark", source: "total", on: true },
         { label: "Class Average", source: "avgmark", on: true },
         { label: "Mark", source: "mark", on: true },
+        { label: "Class Mark", source: "classmark", on: true },
         { label: "Grade", source: "grade", on: true },
         { label: "Comment", source: "comment", on: true },
       ],
@@ -65,7 +69,7 @@
       grades: (form ? R.SCALES.zimsec : p ? R.SCALES.primary : R.SCALES.template).grades.map(function (g) { return { grade: g[0], min: g[1] }; }),
       comments: ["Excellent", "Very good", "Good", "Satisfactory", "Fair", "Poor effort", "Needs to work harder", "Has improved"],
       show: { studentNo: !p, term: true, average: true, position: p, teacherComment: p },
-      headLabel: p ? "Head's signature" : "Head Comment",
+      headLabel: p ? "Head's Signature" : "Head Comment",
       outOf: 100,
     };
   }
@@ -75,13 +79,22 @@
     var cols = o.columns && o.columns.length ? o.columns : d.columns;
     // a format saved with the old columns: the new ones (a school that changed them keeps its own, but a "Subject
     // Mark" column showing the student's mark now shows the end of term total)
-    if (o.columns && o.columns.map(function (x) { return x.source + ":" + x.label; }).join("|") === OLD_DEFAULT && !primary()) cols = d.columns.map(function (x, i) { return Object.assign({}, x, { on: o.columns[i].on !== false }); });
+    if (o.columns && o.columns.map(function (x) { return x.source + ":" + x.label; }).join("|") === OLD_DEFAULT && !primary()) cols = d.columns.filter(function (x) { return x.source !== "classmark"; }).map(function (x, i) { return Object.assign({}, x, { on: !o.columns[i] || o.columns[i].on !== false }); });
     else cols = cols.map(function (x) { return x.source === "raw" && /^subject mark$/i.test(String(x.label || "").trim()) ? Object.assign({}, x, { source: "total" }) : x; });
+    // (2026-11-14) a format saved before the Class Mark column: it comes in after the last of the marks columns, so the
+    // marks stand side by side and the percentages after them (once: a school that then takes it out keeps it out,
+    // classMark is saved with the format)
+    if (o.columns && o.columns.length && !o.classMark && !cols.some(function (x) { return x.source === "classmark"; })) {
+      var at = cols.map(function (x) { return x.source; }).reduce(function (a, s, i) { return /^(outof|total|mark|raw)$/.test(s) ? i + 1 : a; }, -1);
+      if (at < 0) at = Math.min(1, cols.length);
+      cols = cols.slice(0, at).concat([{ label: "Class Mark", source: "classmark", on: true }], cols.slice(at));
+    }
     return {
       title: o.title || d.title, colours: o.colours || d.colours,
       columns: cols, rows: o.rows || d.rows,
       grades: (o.grades && o.grades.length ? o.grades : d.grades).slice().sort(function (a, b) { return b.min - a.min; }),
       comments: o.comments && o.comments.length ? o.comments : d.comments,
+      contact: Object.assign({ address: "", phone: "", email: "", website: "" }, o.contact || {}),
       show: Object.assign({}, d.show, o.show || {}), headLabel: o.headLabel && !(primary() && o.headLabel === "Head Comment") ? o.headLabel : d.headLabel, outOf: Number(o.outOf) || d.outOf,
     };
   };
@@ -303,6 +316,7 @@
       raw: rec && rec.mark != null ? rec.mark + (Number(rec.outOf) !== 100 ? " / " + rec.outOf : "") : "", percent: p, average: cm.average,
       grade: R.grade(final), final: final, comment: (rec && rec.comment) || "", teacher: teacher ? teacher.name : "", position: p == null ? "" : cm.position(p) + " / " + cm.count,
       outof: rec || cm.count ? 100 : "", // what the % columns beside it are out of
+      classmark: p == null ? "" : p + " / 100", // the student's own mark, out of that 100
       termwork: termwork == null ? null : termwork };
   }
   /** The average of a student's marked tasks in a class (the Gradebook). */
@@ -312,57 +326,137 @@
   }
 
   /* ------------------------------------------------------------------ the A4 page */
-  var COLOURS = { template: { band: "#dfeaf6", ink: "#1b5e98", label: "#1f6fb5", th: "#6a9cc3", line: "#2b7bc8", scale: "#6a9cc3" } };
+  /* (2026-11-14) Ocean navy, soft beige and soft azure: a crest and the school on the left, the title on the right,
+     the student's details in boxes, the marks, then the grading scale, attendance and overall average side by side,
+     the comment, the two signatures and a line of the school's contact details. Every part of the page has a height
+     of its own and the table gets what is left, so it can never run under the boxes below it (before, the table and
+     the foot were each placed on the page, and with many subjects or a long comment the last rows went under the
+     foot). The PDF maker runs no scripts (electron/main.cjs), so the sizes are worked out here. */
+  var COLOURS = { template: { navy: "#1E3A5F", deep: "#152B47", azure: "#DCEAF6", azureLine: "#9DC3E2", azureInk: "#2F6E9E", beige: "#F5EEE2", beigeLine: "#E4D6C0" } };
   function colours(f) {
     if (f.colours !== "school") return COLOURS.template;
-    var b = A.Theme.get(), p = b.primary || "#1D4E89";
-    return { band: tint(p, 0.86), ink: p, label: p, th: tint(p, 0.25), line: p, scale: tint(p, 0.2) };
+    var p = A.Theme.get().primary || "#1D4E89";
+    return { navy: p, deep: shade(p, 0.25), azure: tint(p, 0.86), azureLine: tint(p, 0.55), azureInk: p, beige: COLOURS.template.beige, beigeLine: COLOURS.template.beigeLine };
   }
   function tint(hex, amt) {
     var m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if (!m) return hex;
     var n = parseInt(m[1], 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255, mix = function (c) { return Math.round(c + (255 - c) * amt); };
     return "#" + [mix(r), mix(g), mix(b)].map(function (x) { return x.toString(16).padStart(2, "0"); }).join("");
   }
+  function shade(hex, amt) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if (!m) return hex;
+    var n = parseInt(m[1], 16), mix = function (c) { return Math.round(c * (1 - amt)); };
+    return "#" + [mix(n >> 16), mix((n >> 8) & 255), mix(n & 255)].map(function (x) { return x.toString(16).padStart(2, "0"); }).join("");
+  }
+  // the heights of the page's parts, in mm (A4 is 297 high)
+  var H = { padTop: 9, padBottom: 7, head: 30, gap: 3.5, pill: 7, field: 11, fieldGap: 2, th: 10, boxes: 27, comment: 21, sign: 22, foot: 7, footGap: 3 };
+  var SERIF = "Georgia,'Times New Roman',serif";
   R.CSS = "@page{size:A4;margin:0}" +
     ".rc{-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
-    ".rc{box-sizing:border-box;width:210mm;height:297mm;position:relative;overflow:hidden;background:#fff;color:#1f2933;font-family:'Segoe UI','Open Sans',Arial,sans-serif;page-break-after:always;break-after:page}" +
+    ".rc{box-sizing:border-box;width:210mm;height:297mm;position:relative;overflow:hidden;background:#fff;color:#22303f;font-family:'Segoe UI','Open Sans',Arial,sans-serif;page-break-after:always;break-after:page}" +
     ".rc *{box-sizing:border-box}" +
-    ".rc-head{position:absolute;left:0;right:0;top:12mm;height:37mm;background:var(--band);display:flex;align-items:center;gap:9mm;padding:0 16mm}" +
-    ".rc-logo{width:36mm;height:28mm;display:flex;align-items:center;justify-content:center;flex:none}.rc-logo img,.rc-logo svg{max-width:100%;max-height:100%;object-fit:contain}" +
-    ".rc-title{font-size:27pt;line-height:1;font-weight:800;color:var(--ink);letter-spacing:.4pt;margin:0}.rc-school{font-size:13pt;color:var(--ink);margin-top:3mm}" +
-    ".rc-who{position:absolute;left:16mm;right:16mm;top:56mm;display:grid;grid-template-columns:1fr 1fr;column-gap:10mm;row-gap:2.6mm;font-size:11pt}" +
-    ".rc-who div{display:flex;align-items:baseline;gap:2.5mm}.rc-who b{color:var(--label);min-width:21mm;font-weight:700}" +
-    ".rc-who span{flex:1;border-bottom:.6pt solid #8a8f98;padding:0 1.5mm .6mm;min-height:5.2mm}" +
-    ".rc-who .wide{grid-column:1/-1}" +
-    ".rc-table{position:absolute;left:16mm;right:16mm;top:var(--top);border-collapse:collapse;width:178mm;table-layout:fixed}" +
-    ".rc-table th{background:var(--th);color:#fff;font-weight:700;font-size:var(--thfs);padding:2.6mm 2mm;border:.75pt solid var(--th);text-align:center}" +
-    ".rc-table td{border:.75pt solid var(--line);font-size:var(--fs);padding:0 2mm;height:var(--rh);text-align:center;vertical-align:middle;overflow:hidden}" +
-    ".rc-table td.l{text-align:center}.rc-table td.c{font-size:calc(var(--fs) - 1pt);text-align:left}.rc-table tr.x td{color:#5b6573}" +
-    ".rc-foot{position:absolute;left:0;right:0;bottom:12mm;background:var(--band);padding:5mm 16mm 6mm}" +
-    ".rc-scale{color:var(--scale);font-weight:700;font-size:10.5pt}.rc-scale b{margin-right:4mm}" +
-    ".rc-avg{color:var(--label);font-size:10.5pt;margin-top:1.5mm}" +
-    ".rc-box{background:#fff;margin-top:4mm;padding:3mm 4.5mm;min-height:var(--bh)}.rc-box b{color:var(--label);font-size:11pt}.rc-box p{margin:1.5mm 0 0;font-size:10.5pt;white-space:pre-wrap}" +
-    ".rc-sign img{display:block;max-height:15mm;max-width:70mm;margin-top:1.5mm}.rc-sign .rc-line{display:block;width:70mm;height:11mm;border-bottom:.6pt solid #8a8f98}";
+    ".rc-art{position:absolute;left:0;top:0;width:210mm;height:297mm;z-index:0}" +
+    ".rc-in{position:relative;z-index:1;height:297mm;padding:" + H.padTop + "mm 14mm " + H.padBottom + "mm;display:flex;flex-direction:column;gap:" + H.gap + "mm}" +
+    // the head: the crest and the school on the left, the title on the right (clear of the corner's curves)
+    ".rc-head{flex:none;height:" + H.head + "mm;display:flex;align-items:center;gap:4.5mm;padding-right:18mm}" +
+    ".rc-logo{width:26mm;height:26mm;display:flex;align-items:center;justify-content:center;flex:none}.rc-logo img,.rc-logo svg{max-width:100%;max-height:100%;object-fit:contain}" +
+    ".rc-bar{width:.8pt;height:20mm;background:var(--azureLine);flex:none}" +
+    ".rc-school{flex:1;min-width:0}.rc-school b{display:block;font-family:" + SERIF + ";font-size:var(--sfs);line-height:1.12;color:var(--navy);font-weight:700;overflow:hidden;max-height:2.3em}" +
+    ".rc-school span{display:block;margin-top:1.6mm;font-size:7.5pt;letter-spacing:.22em;text-transform:uppercase;color:#5b6878;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}" +
+    ".rc-title{flex:none;max-width:80mm;text-align:right}.rc-kicker{font-size:9.5pt;letter-spacing:.24em;text-transform:uppercase;color:var(--azureInk);font-weight:700}" +
+    ".rc-title h1{margin:1mm 0 0;font-family:" + SERIF + ";font-size:var(--tfs);line-height:1.02;color:var(--navy);font-weight:700;letter-spacing:.3pt}" +
+    ".rc-title i{display:block;height:.9pt;margin:2.2mm 0 0 auto;width:62mm;background:linear-gradient(90deg,var(--beigeLine),var(--azureLine))}" +
+    // a heading in a pill, and a line after it
+    ".rc-pill{display:flex;align-items:center;gap:3mm;height:" + H.pill + "mm}.rc-pill b{background:var(--navy);color:#fff;font-family:" + SERIF + ";font-size:10.5pt;border-radius:3.5mm;padding:1.2mm 5mm;white-space:nowrap}" +
+    ".rc-pill i{flex:1;height:.8pt;background:linear-gradient(90deg,var(--azureLine),var(--beigeLine))}" +
+    ".rc-info{flex:none;display:flex;flex-direction:column;gap:" + H.fieldGap + "mm}" +
+    ".rc-fields{display:grid;grid-template-columns:var(--fcols);column-gap:4mm;row-gap:" + H.fieldGap + "mm}" +
+    ".rc-f{height:" + H.field + "mm;display:flex;flex-direction:column;min-width:0}.rc-f b{font-size:8pt;color:var(--navy);height:3.4mm;line-height:3.4mm;font-weight:700}" +
+    ".rc-f span{margin-top:.8mm;height:6.8mm;line-height:6.4mm;border:.6pt solid var(--azureLine);border-radius:1.6mm;padding:0 2.5mm;font-size:10pt;color:#1b2836;background:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}" +
+    // the marks: the rest of the page; every row the same height, a long comment cut to its lines
+    ".rc-marks{flex:1 1 auto;min-height:0;overflow:hidden}" +
+    ".rc-table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;border:.7pt solid var(--navy);border-radius:2.2mm;overflow:hidden;background:#fff}" +
+    ".rc-table th{background:var(--navy);color:#fff;font-family:" + SERIF + ";font-weight:700;font-size:var(--thfs);height:" + H.th + "mm;padding:0 1.4mm;text-align:center;vertical-align:middle;border-left:.6pt solid var(--azureLine);line-height:1.12}" +
+    ".rc-table th:first-child{border-left:0;text-align:left;padding-left:3mm}" +
+    ".rc-table td{font-size:var(--fs);height:var(--rh);padding:0 1.4mm;text-align:center;vertical-align:middle;border-left:.5pt solid #cfdbe7;border-top:.5pt solid #cfdbe7;color:#1b2836}" +
+    ".rc-table td:first-child{border-left:0;text-align:left;padding-left:3mm;font-weight:600;color:var(--deep)}" +
+    ".rc-table tbody tr:nth-child(even) td{background:var(--zebra)}.rc-table tr.x td{color:#5b6573}" +
+    ".rc-table td div{max-height:calc(var(--rh) - .6mm);overflow:hidden;line-height:1.14;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:var(--lines);overflow-wrap:anywhere}" +
+    ".rc-table td small.rc-code{font-weight:500;font-size:.74em;color:#6b7a8c;letter-spacing:.02em;white-space:nowrap}" +
+    ".rc-table td.c{text-align:left;font-size:calc(var(--fs) - 1pt)}.rc-table td.c div{-webkit-line-clamp:var(--clines)}" +
+    // the grading scale, attendance and the overall average
+    ".rc-row{flex:none;display:flex;gap:4mm}" +
+    ".rc-box{border:.7pt solid var(--azureLine);border-radius:2.4mm;overflow:hidden;background:#fff;display:flex;flex-direction:column;min-width:0}" +
+    ".rc-box>b{flex:none;height:6.5mm;line-height:6.5mm;background:var(--navy);color:#fff;font-family:" + SERIF + ";font-size:10pt;padding:0 3.5mm;border-bottom:.9pt solid var(--azureLine);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}" +
+    ".rc-box>div{flex:1;min-height:0;padding:2mm 3.5mm;background:var(--beige);overflow:hidden}" +
+    ".rc-boxes{height:" + H.boxes + "mm}.rc-boxes .rc-scale{flex:1.55}.rc-boxes .rc-att,.rc-boxes .rc-sum{flex:1}" +
+    ".rc-grades{display:grid;grid-template-columns:repeat(var(--gcols),1fr);column-gap:3mm;row-gap:.9mm;font-size:8.6pt}" +
+    ".rc-grades span{white-space:nowrap;overflow:hidden}.rc-grades span:before{content:'';display:inline-block;width:1.6mm;height:1.6mm;border-radius:50%;background:var(--azureInk);margin-right:1.6mm;vertical-align:.25mm}" +
+    ".rc-grades em{font-style:normal;font-weight:700;color:var(--navy);margin-right:1.2mm}" +
+    ".rc-att p{margin:0 0 1.2mm;display:flex;gap:2mm;font-size:9pt;white-space:nowrap}.rc-att p em{font-style:normal;color:var(--navy);font-weight:600;flex:none}" +
+    ".rc-att p span{flex:1;border-bottom:.6pt solid #a9b3bf;text-align:center;font-weight:700;color:#1b2836;min-width:8mm}" +
+    ".rc-sum>div{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:.6mm}" +
+    ".rc-sum strong{font-family:" + SERIF + ";font-size:21pt;line-height:1;color:var(--navy)}.rc-sum small{font-size:8pt;color:#5b6878;letter-spacing:.08em;text-transform:uppercase}.rc-sum span{font-size:9pt;color:var(--deep);font-weight:600}" +
+    // the comment and the signatures
+    ".rc-comment{flex:none;height:" + H.comment + "mm}.rc-comment p{margin:0;font-size:9.5pt;line-height:1.3;white-space:pre-wrap;font-style:italic;color:#2b3a4a;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}" +
+    ".rc-signs{flex:none;height:" + H.sign + "mm;padding-left:16mm}.rc-signs .rc-box{flex:1}.rc-signs .rc-box>b{text-align:center}" +
+    ".rc-signs .rc-box>div{background:#fff;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding:1.2mm 6mm 1.6mm}" +
+    ".rc-signs img{display:block;max-height:9mm;max-width:60mm;object-fit:contain}.rc-signs i{display:block;width:100%;border-bottom:.6pt solid #8a96a3;margin-bottom:1mm}" +
+    ".rc-signs span{font-size:8.5pt;color:#3b4a5a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}" +
+    // the school's contact details (or its name and motto) on a line at the foot, clear of the corner's curves
+    ".rc-foot{flex:none;height:" + H.foot + "mm;margin-top:" + (H.footGap - H.gap) + "mm;margin-left:40mm;border-top:.8pt solid var(--azureLine);display:flex;align-items:center;justify-content:flex-end;gap:4.5mm;font-size:8pt;color:#33475b;white-space:nowrap;overflow:hidden}" +
+    ".rc-foot span{display:flex;align-items:center;gap:1.3mm;overflow:hidden;text-overflow:ellipsis}.rc-foot svg{width:3.2mm;height:3.2mm;flex:none;fill:none;stroke:var(--azureInk);stroke-width:2}" +
+    ".rc-foot span+span{border-left:.6pt solid var(--beigeLine);padding-left:4.5mm}";
+
+  // the curves in two corners: ocean navy, soft azure and soft beige
+  function art(c) {
+    var p = function (d, fill) { return '<path d="' + d + '" fill="' + fill + '"/>'; };
+    return '<svg class="rc-art" viewBox="0 0 210 297" preserveAspectRatio="none" aria-hidden="true">' +
+      p("M141,0 C180,11 200,35 210,72 L210,0 Z", c.beige) + p("M141,0 C180,11 200,35 210,72", "none").replace("/>", ' stroke="' + c.beigeLine + '" stroke-width=".5"/>') +
+      p("M150,0 C184,9 202,30 210,62 L210,0 Z", c.azure) + p("M162,0 C188,6 204,24 210,50 L210,0 Z", c.navy) +
+      p("M0,225 C10,262 34,286 71,297 L0,297 Z", c.beige) + p("M0,235 C8,266 28,287 60,297 L0,297 Z", c.azure) + p("M0,247 C6,271 22,288 48,297 L0,297 Z", c.navy) + "</svg>";
+  }
+  var ICONS = {
+    address: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+    phone: '<path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2z"/>',
+    email: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+    website: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  };
+  /** The school's head (a user titled Principal or Head), for the name under the head's signature. */
+  function headName() {
+    var h = S().find("users", function (x) { return !x.pupil && x.role !== "student" && x.status !== "declined" && A.rank(x.title) === 2; });
+    return h ? h.name : "";
+  }
+  /** Days present, absent and late in the term, from the class's registers (School Assist Teacher), or null. */
+  function attendance(rep) {
+    var c = rep.home && rep.home.cls;
+    if (!c || !A.Primary || !A.Primary.termAttendance) return null;
+    var a = A.Primary.termAttendance(c, rep.u.id, rep.t.term, rep.t.year);
+    return a && a.days ? a : null;
+  }
 
   /** One A4 report card (a <section>), for the preview, printing and PDFs. */
   R.page = function (rep, f) {
     f = f || R.format();
-    var b = A.Theme.get(), c = colours(f), u = rep.u, t = rep.t;
+    var b = A.Theme.get(), c = colours(f), u = rep.u, t = rep.t, prim = primary();
     var cols = f.columns.filter(function (x) { return x.on !== false; });
-    var who = [["Student", u.name], [primary() ? M.structure().levelLabel || "Grade" : "Form", rep.home.level || "—"], ["Class", rep.home.name]], more = [];
-    if (f.show.studentNo && u.studentNo) more.push(["Student ID", u.studentNo]);
-    if (f.show.term) more.push(["Term", "Term " + t.term + " " + t.year]);
-    // the position in the class, by the overall average: right under the Class (the second of two a line)
-    if (f.show.position && rep.position) more.splice(Math.min(1, more.length), 0, ["Position", rep.position]);
-    who = who.concat(more);
-    var boxes = (f.show.teacherComment ? 1 : 0) + 1, n = Math.max(rep.rows.length, 1);
-    var top = 56 + (1 + Math.ceil((who.length - 1) / 2)) * 8 + 6; // under the student's details: the name on its own line, then two a line
-    var footH = 22 + boxes * 26, avail = 297 - 12 - footH - top - 14;
-    var rh = Math.max(5.5, Math.min(11.5, avail / (n + 1))), fs = rh < 7 ? 8.5 : rh < 9 ? 9.5 : 11;
+    var fields = [["Name", u.name], [prim ? M.structure().levelLabel || "Grade" : "Form", rep.home.level || "—"], ["Class", rep.home.name]];
+    if (f.show.term) fields.push(["Term", "Term " + t.term + " · " + t.year]);
+    if (f.show.studentNo && u.studentNo) fields.push(["Student ID", u.studentNo]);
+    // one line of four (the name wider), or lines of three with the student's ID
+    var perRow = fields.length <= 4 ? fields.length : 3, infoRows = Math.ceil(fields.length / perRow);
+    // the comment box: the class teacher's comment (School Assist Teacher), or the head's (the School edition's own cards)
+    var comment = prim ? (f.show.teacherComment ? { label: "Class Teacher's Comment", text: rep.teacher } : null) : { label: f.headLabel, text: rep.head };
+    var info = H.pill + H.fieldGap + infoRows * H.field + (infoRows - 1) * H.fieldGap;
+    var fixed = H.padTop + H.head + info + H.boxes + (comment ? H.comment : 0) + H.sign + H.foot + H.padBottom + H.footGap - H.gap + H.gap * (comment ? 6 : 5);
+    var n = Math.max(rep.rows.length, 1), avail = 297 - fixed - 0.5;
+    var rh = Math.max(4.2, Math.min(12, (avail - H.th) / n));
+    var fs = rh >= 9 ? 10.5 : rh >= 7.5 ? 9.5 : rh >= 6 ? 8.5 : rh >= 5 ? 7.8 : 7;
+    var lines = Math.max(1, Math.floor((rh - 0.6) / (fs * 0.3528 * 1.14))), clines = Math.max(1, Math.floor((rh - 0.6) / ((fs - 1) * 0.3528 * 1.14)));
     // each column wide enough for its heading's longest word (e.g. "Achievement")
     var widths = cols.map(function (x) {
       var word = Math.max.apply(null, String(x.label || "").split(" ").map(function (w) { return w.length; }).concat([1]));
-      return Math.max(x.source === "subject" ? 2.4 : x.source === "comment" ? 2.2 : x.source === "teacher" ? 1.8 : x.source === "termwork" ? 1.6 : 1, word * 0.13);
+      return Math.max(x.source === "subject" ? 2.6 : x.source === "comment" ? 2.4 : x.source === "teacher" ? 1.9 : x.source === "termwork" ? 1.6 : x.source === "classmark" || x.source === "raw" ? 1.25 : 1, word * 0.16);
     });
     var tw = widths.reduce(function (a, x) { return a + x; }, 0);
     var cell = function (r, x) {
@@ -372,21 +466,40 @@
       if (x.source === "percent" || x.source === "average" || x.source === "termwork") v = v == null ? "" : v + "%";
       return v == null ? "" : String(v);
     };
-    return '<section class="rc" style="--band:' + c.band + ";--ink:" + c.ink + ";--label:" + c.label + ";--th:" + c.th + ";--line:" + c.line + ";--scale:" + c.scale + ";--top:" + top + "mm;--rh:" + rh.toFixed(1) + "mm;--fs:" + fs + "pt;--thfs:" + (cols.length > 6 ? 9.5 : 10.5) + "pt;--bh:" + (boxes > 1 ? 20 : 30) + 'mm">' +
-      '<header class="rc-head"><div class="rc-logo">' + (b.logo ? '<img src="' + esc(b.logo) + '" alt="">' : A.Theme.crestSVG(b)) + '</div><div><h1 class="rc-title">' + esc(f.title) + '</h1><div class="rc-school">' + esc(b.name) + "</div></div></header>" +
-      '<div class="rc-who">' + who.map(function (w, i) { return '<div class="' + (i === 0 ? "wide" : "") + '"><b>' + esc(w[0]) + "</b>:<span>" + esc(w[1]) + "</span></div>"; }).join("") + "</div>" +
-      '<table class="rc-table"><colgroup>' + widths.map(function (w) { return '<col style="width:' + (w / tw * 100).toFixed(2) + '%">'; }).join("") + "</colgroup>" +
+    // the grading scale: "A 75–100%", "B 65–74%", …
+    var g = f.grades, scale = g.map(function (x, i) { return "<span><em>" + esc(x.grade) + "</em>" + x.min + "–" + (i ? g[i - 1].min - 1 : 100) + "%</span>"; }).join("");
+    var att = attendance(rep), line = function (v) { return "<span>" + (v == null ? "" : v) + "</span>"; };
+    var sum = (f.show.average && rep.average != null) || (f.show.position && rep.position);
+    var teacher = rep.home && rep.home.cls ? M.user(rep.home.cls.teacherId) : null, sig = R.headSignature();
+    var contact = ["address", "phone", "email", "website"].filter(function (k) { return f.contact && f.contact[k]; });
+    var vars = "--navy:" + c.navy + ";--deep:" + c.deep + ";--azure:" + c.azure + ";--azureLine:" + c.azureLine + ";--azureInk:" + c.azureInk + ";--beige:" + c.beige + ";--beigeLine:" + c.beigeLine + ";--zebra:" + tint(c.azure, 0.55) +
+      ";--rh:" + rh.toFixed(2) + "mm;--fs:" + fs + "pt;--lines:" + lines + ";--clines:" + clines + ";--thfs:" + (cols.length > 7 ? 8.6 : cols.length > 6 ? 9.2 : 10) + "pt" +
+      ";--tfs:" + (f.title.length <= 12 ? 25 : f.title.length <= 18 ? 20 : 16) + "pt;--sfs:" + (b.name.length <= 26 ? 15 : b.name.length <= 40 ? 13 : 11.5) + "pt;--gcols:" + (g.length > 6 ? 3 : 2) + ";--fcols:" + (perRow === 4 ? "1.6fr 1fr 1fr 1fr" : perRow === 3 ? "1.7fr 1fr 1fr" : "repeat(" + perRow + ",1fr)");
+    return '<section class="rc" style="' + vars + '">' + art(c) + '<div class="rc-in">' +
+      '<header class="rc-head"><div class="rc-logo">' + (b.logo ? '<img src="' + esc(b.logo) + '" alt="">' : A.Theme.crestSVG(b)) + '</div><i class="rc-bar"></i>' +
+      '<div class="rc-school"><b>' + esc(b.name) + "</b>" + (b.motto ? "<span>" + esc(b.motto) + "</span>" : "") + "</div>" +
+      '<div class="rc-title"><div class="rc-kicker">Term ' + t.term + " · " + esc(t.year) + "</div><h1>" + esc(f.title) + "</h1><i></i></div></header>" +
+      '<div class="rc-info"><div class="rc-pill"><b>Student Information</b><i></i></div><div class="rc-fields">' +
+      fields.map(function (x) { return '<div class="rc-f"><b>' + esc(x[0]) + "</b><span>" + esc(x[1]) + "</span></div>"; }).join("") + "</div></div>" +
+      '<div class="rc-marks"><table class="rc-table"><colgroup>' + widths.map(function (w) { return '<col style="width:' + (w / tw * 100).toFixed(2) + '%">'; }).join("") + "</colgroup>" +
       "<thead><tr>" + cols.map(function (x) { return "<th>" + esc(x.label) + "</th>"; }).join("") + "</tr></thead><tbody>" +
       (rep.rows.length ? rep.rows.map(function (r) {
-        return '<tr class="' + (r.extra ? "x" : "") + '">' + cols.map(function (x) { return '<td class="' + (x.source === "comment" ? "c" : "") + '">' + esc(cell(r, x)) + "</td>"; }).join("") + "</tr>";
-      }).join("") : '<tr><td colspan="' + cols.length + '">No subjects</td></tr>') + "</tbody></table>" +
-      '<footer class="rc-foot"><div class="rc-scale"><b>GRADING SCALE :</b>' + esc(R.scaleText(f)) + "</div>" +
-      (f.show.average && rep.average != null ? '<div class="rc-avg">Overall average: <b>' + rep.average + "%</b></div>" : "") +
-      (f.show.teacherComment ? '<div class="rc-box"><b>Class Teacher\'s Comment :</b><p>' + esc(rep.teacher) + "</p></div>" : "") +
-      (primary() ? '<div class="rc-box rc-sign"><b>' + esc(f.headLabel) + " :</b>" + (R.headSignature() ? '<img src="' + esc(R.headSignature()) + '" alt="">' : '<span class="rc-line"></span>') + "</div>"
-        : '<div class="rc-box"><b>' + esc(f.headLabel) + " :</b><p>" + esc(rep.head) + "</p></div>") + "</footer></section>";
+        var code = !r.extra && A.Subjects ? A.Subjects.code(r.subject, rep.home.level || u.level) : "";
+        return '<tr class="' + (r.extra ? "x" : "") + '">' + cols.map(function (x) {
+          return '<td class="' + (x.source === "comment" ? "c" : "") + '"><div>' + esc(cell(r, x)) + (x.source === "subject" && code ? ' <small class="rc-code">' + esc(code) + "</small>" : "") + "</div></td>";
+        }).join("") + "</tr>";
+      }).join("") : '<tr><td colspan="' + cols.length + '"><div>No subjects</div></td></tr>') + "</tbody></table></div>" +
+      '<div class="rc-row rc-boxes"><div class="rc-box rc-scale"><b>Grading Scale</b><div><div class="rc-grades">' + scale + "</div></div></div>" +
+      '<div class="rc-box rc-att"><b>Attendance</b><div><p><em>Days present:</em>' + line(att && att.present) + "</p><p><em>Days absent:</em>" + line(att && att.absent) + "</p><p><em>Late:</em>" + line(att && att.late) + "</p></div></div>" +
+      (sum ? '<div class="rc-box rc-sum"><b>Overall</b><div>' + (f.show.average && rep.average != null ? "<strong>" + rep.average + "%</strong><small>Overall average" + (R.grade(rep.average, f) ? " · " + esc(R.grade(rep.average, f)) : "") + "</small>" : "") +
+        (f.show.position && rep.position ? "<span>Position " + esc(rep.position) + "</span>" : "") + "</div></div>" : "") + "</div>" +
+      (comment ? '<div class="rc-box rc-comment"><b>' + esc(comment.label) + "</b><div><p>" + esc(comment.text || "") + "</p></div></div>" : "") +
+      '<div class="rc-row rc-signs"><div class="rc-box"><b>Class Teacher\'s Signature</b><div><i></i><span>' + esc(teacher ? teacher.name : "Class teacher") + "</span></div></div>" +
+      '<div class="rc-box"><b>' + esc(prim ? f.headLabel : "Head's Signature") + "</b><div>" + (sig ? '<img src="' + esc(sig) + '" alt="">' : "") + "<i></i><span>" + esc(headName() || "Head") + "</span></div></div></div>" +
+      '<footer class="rc-foot">' + (contact.length
+        ? contact.map(function (k) { return '<span><svg viewBox="0 0 24 24">' + ICONS[k] + "</svg>" + esc(f.contact[k]) + "</span>"; }).join("")
+        : "<span>" + esc(b.name) + (b.motto ? " · " + esc(b.motto) : "") + "</span>") + "</footer></div></section>";
   };
-  /** The head's signature for the cards (Settings → Subjects and terms), a data URL, or "". */
   R.headSignature = function () { return primary() ? (S().get("settings", "primary") || {}).headSig || "" : ""; };
   /** A whole HTML document for the PDF maker (desktop app) or the print window. */
   R.doc = function (pages) {
@@ -619,7 +732,7 @@
       title: "Report card format", sub: "How every report card looks", size: "wide",
       body: '<form id="rc-fmt" class="form-grid">' +
         '<label class="field"><span>Title</span><input class="input" name="title" value="' + esc(f.title) + '"></label>' +
-        '<label class="field"><span>Colours</span><select class="select" name="colours"><option value="template"' + (f.colours !== "school" ? " selected" : "") + '>Report card blue</option><option value="school"' + (f.colours === "school" ? " selected" : "") + ">The school's colours</option></select></label>" +
+        '<label class="field"><span>Colours</span><select class="select" name="colours"><option value="template"' + (f.colours !== "school" ? " selected" : "") + '>Ocean navy, beige and azure</option><option value="school"' + (f.colours === "school" ? " selected" : "") + ">The school's colours</option></select></label>" +
         '<div class="field full"><span class="label">Columns</span><div id="rc-cols" class="stack" style="gap:6px">' + f.columns.map(colRow).join("") + '</div><button type="button" class="btn btn-sm mt-sm" id="rc-addcol">' + I("plus") + "Add a column</button></div>" +
         '<label class="field full"><span>Extra rows <span class="muted">(one per line, under the subjects: e.g. Conduct, Attendance)</span></span><textarea class="input" name="rows" rows="2">' + esc(f.rows.map(function (r) { return r.label; }).join("\n")) + "</textarea></label>" +
         '<div class="field full"><span class="label">Grading scale</span><div class="row wrap" style="gap:6px;margin-bottom:6px">' + Object.keys(R.SCALES).map(function (k) { return '<button type="button" class="btn btn-sm btn-ghost" data-scale="' + k + '">' + esc(R.SCALES[k].name) + "</button>"; }).join("") + "</div>" +
@@ -627,6 +740,10 @@
         '<label class="field full"><span>Comments teachers pick from <span class="muted">(one per line; they can also type their own)</span></span><textarea class="input" name="comments" rows="4">' + esc(f.comments.join("\n")) + "</textarea></label>" +
         '<label class="field"><span>' + (primary() ? "Signature box heading" : "Comment box heading") + '</span><input class="input" name="headLabel" value="' + esc(f.headLabel) + '"></label>' +
         '<label class="field"><span>New end-of-term marks are out of</span><input class="input" name="outOf" inputmode="numeric" value="' + f.outOf + '"></label>' +
+        '<div class="field full"><span class="label">The school&#39;s details at the foot <span class="muted">(each one optional; empty, the school&#39;s name and motto)</span></span><div class="form-grid" style="gap:8px">' +
+        [["address", "Address", "e.g. 12 Josiah Tongogara Ave, Harare"], ["phone", "Phone", "e.g. +263 24 270 0000"], ["email", "Email", "e.g. office@school.ac.zw"], ["website", "Website", "e.g. www.school.ac.zw"]].map(function (x) {
+          return '<label class="field"><span>' + x[1] + '</span><input class="input" name="contact_' + x[0] + '" maxlength="80" value="' + esc(f.contact[x[0]] || "") + '" placeholder="' + esc(x[2]) + '"></label>';
+        }).join("") + "</div></div>" +
         '<div class="field full"><span class="label">Also show</span><div class="row wrap" style="gap:14px">' +
         [["studentNo", "Student ID"], ["term", "Term and year"], ["average", "Overall average"], ["position", "Position in the class"], ["teacherComment", "Class teacher's comment box"]].map(function (s) {
           return '<label class="check"><input type="checkbox" name="show_' + s[0] + '"' + (f.show[s[0]] ? " checked" : "") + "> " + s[1] + "</label>";
@@ -647,7 +764,8 @@
         S().put("settings", { id: "reportcard", title: d.title.trim() || "REPORT CARD", colours: d.colours, columns: cols,
           rows: d.rows.split("\n").map(function (x) { return x.trim(); }).filter(Boolean).map(function (x) { return { label: x }; }),
           grades: grades, comments: d.comments.split("\n").map(function (x) { return x.trim(); }).filter(Boolean),
-          headLabel: d.headLabel.trim() || defaults().headLabel, outOf: Math.max(1, Math.min(1000, Number(d.outOf) || 100)), show: show });
+          headLabel: d.headLabel.trim() || defaults().headLabel, outOf: Math.max(1, Math.min(1000, Number(d.outOf) || 100)), show: show, classMark: true,
+          contact: { address: (d.contact_address || "").trim(), phone: (d.contact_phone || "").trim(), email: (d.contact_email || "").trim(), website: (d.contact_website || "").trim() } });
         UI.toast("Report card format saved");
         A.render();
       } }],

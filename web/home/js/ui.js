@@ -141,9 +141,19 @@
     if (y + h > window.innerHeight - 8) y = e.clientY - h - 14;
     tip.style.left = x + "px"; tip.style.top = y + "px";
   }
-  // a tip shown by a tap (phones send a mouseover with it) or by focus goes after 2 seconds; with a mouse it stays while pointed at
-  var tipTimer = null, lastTouch = 0;
-  var tipBriefly = function () { clearTimeout(tipTimer); tipTimer = setTimeout(function () { if (tip) tip.classList.remove("on"); }, 2000); };
+  // a tip shown by a tap (phones send a mouseover with it) or by focus goes after 2 seconds; with a mouse it goes when the
+  // pointer leaves what it's about, leaves the window, the page scrolls or changes under it, or after 5 seconds at rest
+  // (2026-11-14: before, a tip stayed on whenever no other mouseover came, e.g. Parents' "Students with no parent's details")
+  var tipTimer = null, lastTouch = 0, tipFor = null;
+  var hideTip = function () { clearTimeout(tipTimer); tipFor = null; if (tip) tip.classList.remove("on"); };
+  var tipBriefly = function (ms) { clearTimeout(tipTimer); tipTimer = setTimeout(hideTip, ms || 2000); };
+  document.addEventListener("mouseout", function (e) {
+    if (!tipFor) return;
+    var to = e.relatedTarget;
+    if (!to || !tipFor.contains(to)) hideTip();
+  }, true);
+  window.addEventListener("blur", function () { hideTip(); });
+  window.addEventListener("scroll", function () { if (tipFor) hideTip(); }, true);
   document.addEventListener("touchstart", function () { lastTouch = A.now(); }, { passive: true, capture: true });
   // a click (Back, a register mark…): its tip goes 2 seconds later, even if the pointer rests there (the page under it
   // may be new, so no "pointer left" ever comes)
@@ -152,30 +162,39 @@
     var t = e.target.closest && e.target.closest("[data-tip]");
     tip = tip || document.getElementById("tip");
     if (!tip) return;
-    if (!t) { tip.classList.remove("on"); return; }
+    if (!t) { hideTip(); return; }
+    if (t === tipFor) return;
+    tipFor = t;
     tip.innerHTML = t.getAttribute("data-tip");
     tip.classList.add("on");
     placeTip(e);
-    if (A.now() - lastTouch < 1000) tipBriefly(); else clearTimeout(tipTimer);
+    tipBriefly(A.now() - lastTouch < 1000 ? 2000 : 5000);
   });
-  document.addEventListener("mousemove", function (e) { if (tip && tip.classList.contains("on")) placeTip(e); });
+  document.addEventListener("mousemove", function (e) {
+    if (!tip || !tip.classList.contains("on")) return;
+    if (tipFor && !document.contains(tipFor)) return hideTip(); // (the page was drawn again under the pointer)
+    placeTip(e);
+  });
   document.addEventListener("focusin", function (e) {
     var t = e.target.closest && e.target.closest("[data-tip]");
     tip = tip || document.getElementById("tip");
     if (!t || !tip) return;
     var r = t.getBoundingClientRect();
-    tip.innerHTML = t.getAttribute("data-tip"); tip.classList.add("on");
+    tipFor = t; tip.innerHTML = t.getAttribute("data-tip"); tip.classList.add("on");
     tip.style.left = r.left + "px"; tip.style.top = r.bottom + 8 + "px";
     tipBriefly();
   });
-  document.addEventListener("focusout", function () { if (tip) tip.classList.remove("on"); });
+  document.addEventListener("focusout", function () { hideTip(); });
 
   /* --------------------------------------------------------- small blocks */
   UI.empty = function (icon, title, text, action) {
     return '<div class="empty"><div class="ico">' + I(icon || "inbox") + "</div><b>" + esc(title) + "</b>" + (text ? "<p>" + esc(text) + "</p>" : "") + (action ? '<div class="mt">' + action + "</div>" : "") + "</div>";
   };
+  /** A number on a card; tip: a hover tip, or { note } a line under the label (always there, nothing to hover). */
   UI.stat = function (icon, value, label, accent, tip) {
-    return '<div class="card stat"' + (tip ? ' data-tip="' + esc(tip) + '"' : "") + '><div class="ico ' + (accent ? "accent" : "") + '">' + I(icon) + '</div><div><div class="val tnum">' + value + '</div><div class="lbl">' + esc(label) + "</div></div></div>";
+    var note = tip && typeof tip === "object" ? tip.note : "";
+    return '<div class="card stat"' + (tip && !note ? ' data-tip="' + esc(tip) + '"' : "") + '><div class="ico ' + (accent ? "accent" : "") + '">' + I(icon) + '</div><div><div class="val tnum">' + value + '</div><div class="lbl">' + esc(label) + "</div>" +
+      (note ? '<div class="tiny muted mt-sm">' + esc(note) + "</div>" : "") + "</div></div>";
   };
   UI.tabs = function (items) {
     return '<div class="tabs-wrap"><button type="button" class="tabs-arrow back" data-tabs-scroll="-1" aria-label="Scroll the tabs back" tabindex="-1">' + I("left") + "</button>" +

@@ -2,6 +2,8 @@
 (function (A) {
   "use strict";
   var esc = A.esc, I = A.icon, M = A.M, UI = A.UI, S = function () { return A.Store; };
+  // a subject's name with its code, small beside it (js/catalogue.js, 2026-11-14)
+  var subj = function (name, level, code) { return A.Subjects ? A.Subjects.label(name, level, code) : esc(name); };
 
   function subjectOf(task) { var c = M.cls(task.classId); return c ? c.subject : ""; }
   function teacherOf(cls) { var t = cls && M.user(cls.teacherId); return t ? t.name : ""; }
@@ -72,7 +74,7 @@
     }
     html += '<div class="card"><div class="card-head"><h3>My subjects</h3></div>' + (syllabi.length ? syllabi.map(function (syl) {
       var pr = M.syllabusProgress(me.id, syl);
-      return '<div class="list-row">' + UI.ring(pr.pct, { size: 64, stroke: 7, label: syl.subject }) + '<div class="grow"><div class="title">' + esc(syl.subject) + '</div><div class="meta">' + pr.done + "/" + pr.total + " topics · ~" + A.fmtMinutes(pr.minsLeft * 60) + ' left</div><div class="row mt-sm"><a class="btn btn-sm" href="#/s/study/' + syl.id + '">' + I("book") + 'Study</a><a class="btn btn-sm" href="#/s/test/' + syl.id + '">' + I("clock") + "Test</a></div></div></div>";
+      return '<div class="list-row">' + UI.ring(pr.pct, { size: 64, stroke: 7, label: syl.subject }) + '<div class="grow"><div class="title">' + subj(syl.subject, (M.me() || {}).level, syl.code || null) + '</div><div class="meta">' + pr.done + "/" + pr.total + " topics · ~" + A.fmtMinutes(pr.minsLeft * 60) + ' left</div><div class="row mt-sm"><a class="btn btn-sm" href="#/s/study/' + syl.id + '">' + I("book") + 'Study</a><a class="btn btn-sm" href="#/s/test/' + syl.id + '">' + I("clock") + "Test</a></div></div></div>";
     }).join("") : UI.empty("book", "No subjects yet", "Your teacher will add you to a class.")) + "</div>";
 
     html += '<div class="card"><div class="card-head"><h3>Notifications</h3><span class="grow"></span><a class="btn btn-sm btn-ghost" href="#/s/notifications">All ' + I("right") + "</a></div>" +
@@ -129,7 +131,7 @@
     // one subject: its tasks in full
     if (c) {
       var list = here.filter(test[f] || test.all);
-      var head = '<div class="card subject-panel mb"><div class="card-head"><div class="subject-dot"></div><div class="grow"><h3>' + esc(c.subject) + '</h3><div class="sub">' + esc(teacherOf(c)) + " · " + esc(c.name) + "</div></div></div></div>";
+      var head = '<div class="card subject-panel mb"><div class="card-head"><div class="subject-dot"></div><div class="grow"><h3>' + subj(c.subject, c.level) + '</h3><div class="sub">' + esc(teacherOf(c)) + " · " + esc(c.name) + "</div></div></div></div>";
       return { title: c.subject, crumbs: [{ label: "My tasks", href: "#/s/tasks" + (f !== "all" ? "?f=" + f : "") }, { label: c.subject }],
         html: head + pills + '<div class="card">' + (list.length ? list.map(taskRow.bind(null, me)).join("") : UI.empty("tasks", f === "all" ? "No tasks in " + c.subject + " yet" : "Nothing here")) + "</div>" };
     }
@@ -141,7 +143,7 @@
       var next = mine.filter(function (t) { var k = M.taskStatus(t, me.id).key; return (k === "new" || k === "received") && t.dueAt >= now; }).sort(function (a, b) { return a.dueAt - b.dueAt; })[0];
       var badges = (n("new") ? '<span class="badge accent">' + n("new") + " new</span>" : "") + (late ? '<span class="badge bad">' + late + " overdue</span>" : "") + (todo > 0 ? '<span class="badge">' + todo + " to do</span>" : "") +
         (n("submitted") ? '<span class="badge">' + n("submitted") + " handed in</span>" : "") + (n("graded") ? '<span class="badge good">' + n("graded") + " marked</span>" : "");
-      return '<a class="list-row" href="#/s/tasks?c=' + x.id + (f !== "all" ? "&f=" + f : "") + '"><div class="subject-dot" style="height:30px"></div><div class="grow"><div class="title">' + esc(x.subject) + "</div>" +
+      return '<a class="list-row" href="#/s/tasks?c=' + x.id + (f !== "all" ? "&f=" + f : "") + '"><div class="subject-dot" style="height:30px"></div><div class="grow"><div class="title">' + subj(x.subject, x.level) + "</div>" +
         '<div class="meta"><span>' + esc(teacherOf(x)) + "</span>" + (next ? '<span class="sep"></span><span>Next due ' + esc(A.fmtDate(next.dueAt)) + "</span>" : "") + (mine.length ? "" : '<span class="sep"></span><span>No tasks yet</span>') + "</div>" +
         (badges ? '<div class="row wrap mt-sm" style="gap:6px">' + badges + "</div>" : "") + "</div>" + I("right") + "</a>";
     }).join("");

@@ -1243,6 +1243,16 @@ details.mat-group:not([open]) > summary { border-bottom: 0; }
 .rm-bar > b { display: inline-flex; align-items: center; gap: 6px; }
 .table th.rm-col, .table td.rm-col { background: color-mix(in srgb, var(--brand) 6%, transparent); }
 .rm-comment { min-width: 150px; }
+/* Schoolly (js/schoolly.js): its mark, its answers and what it read from a document */
+.schoolly-mark { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 8px; background: linear-gradient(135deg, var(--brand), color-mix(in srgb, var(--brand) 55%, #7fb3d9)); color: #fff; font-weight: 800; font-size: 14px; font-family: Georgia, "Times New Roman", serif; line-height: 1; flex: none; }
+.schoolly-ans { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-top: 10px; background: var(--surface); }
+.schoolly-ans ol { margin: 6px 0 10px; padding-left: 20px; display: grid; gap: 3px; font-size: 14px; }
+.schoolly-read { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: var(--surface-2); }
+.schoolly-read details { border-top: 1px solid var(--border); padding-top: 6px; }
+.schoolly-read summary { cursor: pointer; }
+.schoolly-sec { margin: 8px 0 4px; padding-left: 10px; border-left: 3px solid var(--border); max-height: 260px; overflow-y: auto; }
+/* a subject's code beside its name (js/catalogue.js): there to notice, not to distract */
+.subj-code { font-size: .74em; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: .02em; white-space: nowrap; }
 .rc-preview { overflow: auto; max-height: 72vh; background: var(--surface-2); padding: 12px; border-radius: 10px; }
 .rc-scale-box { width: calc(210mm * var(--rc-s, .7)); height: calc(297mm * var(--rc-s, .7)); margin: 0 auto; }
 .rc-scale-box .rc { transform: scale(var(--rc-s, .7)); transform-origin: top left; box-shadow: 0 2px 14px rgba(0, 0, 0, .18); }

@@ -15,6 +15,7 @@
     if (A.Primary && admin) sections.push(["primary", "Learning areas & terms", "book"]);
     // (not for students: the school decides where its records are, and a student can't point the app anywhere else)
     // admins only (2026-11-10): everyone else's work goes up by itself every few seconds, with nothing to set or press
+    if (A.Subjects && A.Primary && A.edition !== "home" && A.Subjects.mayEdit(me)) sections.push(["subjectcodes", "Subjects & codes", "book"]); // admins and heads of department (2026-11-14)
     if (admin) sections.push(["sync", "Offline & sync", "refresh"]);
     if (admin) sections.push(["people", "People & devices", "users"]); // (one section since 2026-11-10: the devices to let in first)
     if (admin && A.Parents && A.Parents.available()) sections.push(["parents", "Parents", "users"]); // Premium
@@ -37,6 +38,7 @@
   var SECTIONS = {};
   SECTIONS.updates = function () { return A.Updates.section(); };
   SECTIONS.subjects = function (me) { return A.mySubjectsSection(me); };
+  SECTIONS.subjectcodes = function (me) { return A.Subjects.section(me); };
   SECTIONS.primary = function (me) { return A.Primary.settingsSection(me); };
   SECTIONS.licence = function (me) { return A.Licence.section(me); };
   SECTIONS.share = function () { return A.SchoolId.shareSection(); };

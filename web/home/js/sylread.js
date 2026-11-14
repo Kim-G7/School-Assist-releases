@@ -85,7 +85,18 @@
         if (mm && !VERB.test(mm[2]) && !END.test(c.text) && !START.test(c.text) && !names[mm[1]]) names[mm[1]] = mm[2].trim();
       }); }); });
       topics.forEach(function (t) { if (/^Topic \d+$/.test(t.title) && names[t.n]) t.title = names[t.n]; t.title = t.title.replace(/\s*\(for Papers? [\d, and]+\)$/i, ""); });
-      return { title: title, code: code, pages: [from + 1, to + 1], topics: topics };
+      // (2026-11-14) Schoolly reads the whole document part by part (aims, assessment, grading, content…), and gives the
+      // topics when there are no numbered ones (a syllabus set out in skills, as English Language is)
+      var out = { title: title, code: code, pages: [from + 1, to + 1], topics: topics };
+      if (A.Schoolly) {
+        var all = [];
+        pages.forEach(function (pg) { pg.lines.forEach(function (l) { all.push({ text: l.text, h: l.h, bold: l.bold, page: pg.p.n }); }); });
+        var sr = A.Schoolly.fromLines(all, body);
+        out.sections = sr.sections;
+        var thin = topics.length < 2 || topics.every(function (t) { return !t.outline.some(function (o) { return (o.points || []).length || (o.sup || []).length; }); });
+        if (sr.topics.length && (sr.how === "skills" || thin)) { out.topics = sr.topics; out.by = "schoolly"; }
+      }
+      return out;
     });
   }
 
@@ -295,7 +306,7 @@
     UI.modal({
       title: "Read topics from the syllabus", size: "wide",
       body: '<p class="muted">Choose the official syllabus PDF for <b>' + esc(M.syllabusTitle(syl)) + "</b> (from the exam board's website). The app reads its subject content: the topics, their parts and what to study in each. You check it before anything changes.</p>" +
-        '<label class="file-drop mt">' + I("upload") + '<div class="mt-sm"><b>Choose the syllabus PDF</b></div><input type="file" accept=".pdf,application/pdf" id="sr-file"></label>' +
+        '<label class="file-drop mt">' + I("upload") + '<div class="mt-sm"><b>Choose the syllabus PDF</b></div><input type="file" accept="' + (A.Schoolly ? A.Schoolly.ACCEPT : ".pdf,application/pdf") + '" id="sr-file"></label>' +
         '<div id="sr-out" class="mt"></div>',
       foot: [{ label: "Cancel" }, { label: "Save topics", cls: "btn-primary", icon: "check", onClick: function (box) {
         if (!result) { UI.toast("Choose the syllabus PDF first", "bad"); return false; }
@@ -312,13 +323,14 @@
           var f = this.files[0]; if (!f) return;
           result = null;
           out.innerHTML = '<div class="callout">' + I("refresh") + '<div>Reading the syllabus… <span id="sr-prog"></span></div></div>';
-          read(f, function (n, of) { var p = box.querySelector("#sr-prog"); if (p) p.textContent = "page " + n + " of " + of; }).then(function (r) {
-            if (!r.topics.length) { out.innerHTML = '<div class="callout warn">' + I("alert") + "<div>No topics were found in this PDF. Is it the syllabus (with a Subject content section)?</div></div>"; return; }
+          (A.Schoolly ? A.Schoolly.read : read)(f, function (n, of) { var p = box.querySelector("#sr-prog"); if (p) p.textContent = "page " + n + " of " + of; }).then(function (r) {
+            var parts = A.Schoolly ? A.Schoolly.sectionsHtml(r) : "";
+            if (!r.topics.length) { out.innerHTML = '<div class="callout warn">' + I("alert") + "<div>Schoolly read the document but found no topics or skills in it. Is it the syllabus? Here is what it read:</div></div>" + parts; return; }
             if (r.code && syl.code && r.code !== syl.code) out.innerHTML = '<div class="callout warn mb">' + I("alert") + "<div>This looks like the syllabus for " + esc(r.code) + ", not " + esc(syl.code) + ". Check it's the right file.</div></div>";
             else out.innerHTML = "";
             result = r;
             var pairs = match(syl, r), fresh = pairs.filter(function (p) { return !p.topic; }).length;
-            out.innerHTML += '<div class="small muted mb">Subject content on pages ' + r.pages[0] + "–" + r.pages[1] + ": " + r.topics.length + " topics, " +
+            out.innerHTML += '<div class="small muted mb">' + (r.by === "schoolly" ? "Read by Schoolly, part by part" : r.pages ? "Subject content on pages " + r.pages[0] + "–" + r.pages[1] : "Read from the document") + ": " + r.topics.length + " topics, " +
               r.topics.reduce(function (a, t) { return a + t.outline.length; }, 0) + " parts.</div>" +
               '<div class="card sr-list">' + pairs.map(function (p) {
                 var pts = p.read.outline.reduce(function (a, o) { return a + o.points.length + o.sup.length; }, 0);
@@ -328,8 +340,9 @@
               }).join("") + "</div>" +
               (pairs.level === "part" ? '<p class="small muted mt">The app’s topics are parts of the syllabus’s topics, so they were matched part by part.</p>' : "") +
               (fresh ? '<label class="check mt"><input type="checkbox" id="sr-new"' + (pairs.level === "part" ? "" : " checked") + '><span><b>Add the ' + fresh + " new topic" + (fresh === 1 ? "" : "s") + "</b> the app doesn't have yet</span></label>" : "") +
-              '<p class="tiny muted mt">Topics keep their names, notes and students\' progress; what to study is added to each. Topics in the app that aren\'t in the PDF stay as they are.</p>';
-          }).catch(function (e) { out.innerHTML = '<div class="callout warn">' + I("alert") + "<div>This PDF couldn't be read: " + esc(e.message || e) + "</div></div>"; });
+              '<p class="tiny muted mt">Topics keep their names, notes and students\' progress; what to study is added to each. Topics in the app that aren\'t in the document stay as they are.</p>' +
+              (parts ? '<div class="mt">' + parts + "</div>" : "");
+          }).catch(function (e) { out.innerHTML = '<div class="callout warn">' + I("alert") + "<div>This document couldn't be read: " + esc(e.message || e) + "</div></div>"; });
         });
       },
     });

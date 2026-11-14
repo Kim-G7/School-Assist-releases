@@ -287,7 +287,7 @@
       "</aside>" +
       '<div class="main"><header class="topbar' + (atHome(me, h) ? "" : " has-back") + '">' + (atHome(me, h) ? "" : '<button class="btn btn-ghost top-back" data-act="go-back" aria-label="Back" data-tip="Back">' + I("back") + '<span class="top-back-label">Back</span></button>') + A.Theme.logoHTML("mobile-brand") +
       '<div class="titles">' + (crumbs ? '<div class="crumbs">' + crumbs + "</div>" : "") + '<h1 class="page-title">' + esc(view.title || "") + "</h1></div>" +
-      '<div class="top-actions">' + statusChip() + bell +
+      '<div class="top-actions">' + statusChip() + (A.Schoolly ? A.Schoolly.button(me) : "") + bell +
       // phones: Sign out before light / dark, so the corner (where pop-ups close) isn't Sign out
       '<button class="btn btn-ghost btn-icon mobile-only-signout" data-act="signout" data-tip="Sign out" aria-label="Sign out">' + I("logout") + "</button>" +
       '<button class="btn btn-ghost btn-icon" data-act="toggle-theme" data-tip="Light / dark mode" aria-label="Toggle dark mode">' + I(A.Theme.isDark() ? "sun" : "moon") + "</button>" +

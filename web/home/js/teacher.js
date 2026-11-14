@@ -3,6 +3,8 @@
 (function (A) {
   "use strict";
   var esc = A.esc, I = A.icon, M = A.M, UI = A.UI, S = function () { return A.Store; };
+  // a subject's name with its code, small beside it (js/catalogue.js, 2026-11-14)
+  var subj = function (name, level, code) { return A.Subjects ? A.Subjects.label(name, level, code) : esc(name); };
 
   function uniq(a) { return a.filter(function (x, i) { return a.indexOf(x) === i; }); }
   function classCoverage(c) {
@@ -113,7 +115,7 @@
     var faces = studs.slice(0, 5).map(function (u) { return A.avatar(u, "sm"); }).join("") + (studs.length > 5 ? '<span class="avatar sm more">+' + (studs.length - 5) + "</span>" : "");
     return '<a class="card class-card" href="#/t/class/' + c.id + '"><div class="band"></div><div class="body">' +
       '<div class="row spread"><span class="badge brand">' + esc(syl ? syl.board + " " + syl.level : "No syllabus") + '</span><span class="muted small">' + esc(c.room || "") + "</span></div>" +
-      '<h3 class="mt-sm">' + esc(c.name) + '</h3><div class="subj">' + esc(c.subject) + "</div>" +
+      '<h3 class="mt-sm">' + esc(c.name) + '</h3><div class="subj">' + subj(c.subject, c.level) + "</div>" +
       '<div class="mt"><div class="row spread small"><span class="muted">Syllabus covered (class average)</span><b class="tnum">' + cov + "%</b></div>" + UI.bar(cov) + "</div></div>" +
       '<div class="foot"><div class="faces">' + faces + "</div><span>" + I("users") + studs.length + " students</span><span class=\"grow\"></span>" +
       (reg ? '<span class="badge good">' + I("check") + "Register taken</span>" : '<span class="badge warn">' + I("calendar") + "Register due</span>") + "</div></a>";
@@ -208,7 +210,7 @@
     var tab = p.tab || "students", syl = M.syllabus(c.syllabusId);
     var counts = { students: c.studentIds.length, tasks: M.tasksForClass(c.id).length, library: S().filter("materials", function (m) { return m.classId === c.id; }).length };
     var head = '<div class="card card-pad mb"><div class="row wrap top"><div class="grow"><div class="row wrap"><span class="badge brand">' + esc(syl ? syl.board + " " + syl.level + " " + (syl.code || "") : "No syllabus") + "</span>" + (c.room ? '<span class="badge">' + esc(c.room) + "</span>" : "") + '<span class="badge accent">' + I("unlock") + esc(M.termName(c.currentTerm || 1)) + " open</span>" + (c.sequential ? '<span class="badge">' + I("list") + "Topics in order</span>" : "") + "</div>" +
-      '<h2 class="mt-sm" style="font-size:22px">' + esc(c.name) + " · " + esc(c.subject) + '</h2><p class="muted small">' + c.studentIds.length + " students · class average " + classCoverage(c) + "% of the syllabus completed</p></div>" +
+      '<h2 class="mt-sm" style="font-size:22px">' + esc(c.name) + " · " + subj(c.subject, c.level) + '</h2><p class="muted small">' + c.studentIds.length + " students · class average " + classCoverage(c) + "% of the syllabus completed</p></div>" +
       '<div class="row wrap"><button class="btn" data-act="new-note" data-class="' + c.id + '">' + I("send") + "Notify</button>" +
       '<button class="btn" data-act="edit-class" data-id="' + c.id + '">' + I("edit") + "Edit</button>" +
       '<button class="btn btn-primary" data-act="new-task" data-class="' + c.id + '">' + I("plus") + "New task</button></div></div></div>";

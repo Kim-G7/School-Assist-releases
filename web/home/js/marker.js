@@ -116,15 +116,19 @@
     });
     return out;
   }
-  function matches(point, have) {
+  /** How much of a marking point the answer has: { ok, part (some of it, not enough), words (the point's words it has) }.
+      (2026-11-14) Schoolly's matching too: a spelling slip and common synonyms (js/schoolly.js). */
+  function matchInfo(point, have) {
     var sl = slots(point);
-    if (!sl.length) return false;
-    var mine = Object.keys(have);
+    if (!sl.length) return { ok: false, part: false, words: [] };
+    var mine = Object.keys(have), S = A.Schoolly;
     // the same word, or the same word with another ending (photosynthesise / photosynthesis)
-    var seen = function (a) { return have[a] || (a.length >= 5 && mine.some(function (w) { var n = 0; while (n < a.length && a[n] === w[n]) n++; return n >= Math.max(5, Math.min(a.length, w.length) - 2); })); };
-    var hit = sl.filter(function (alts) { return alts.some(seen); }).length;
-    return sl.length <= 2 ? hit === sl.length : hit / sl.length >= 0.6;
+    var seen = function (a) { return have[a] || (a.length >= 5 && mine.some(function (w) { var n = 0; while (n < a.length && a[n] === w[n]) n++; return n >= Math.max(5, Math.min(a.length, w.length) - 2); })) || (!!S && mine.some(function (w) { return S.same(a, w); })); };
+    var got = [], hit = sl.filter(function (alts) { var w = alts.filter(seen)[0]; if (w) got.push(w); return !!w; }).length;
+    var ok = sl.length <= 2 ? hit === sl.length : hit / sl.length >= 0.6;
+    return { ok: ok, part: !ok && hit > 0 && hit / sl.length >= 0.34, words: got };
   }
+  function matches(point, have) { return matchInfo(point, have).ok; }
   /** The marking points in a scheme row: "vacuole ;" lines, bullets, or "... (1)" items. */
   function points(msAnswer) {
     var t = String(msAnswer || "");
@@ -205,8 +209,17 @@
         return { got: Math.min(max, Math.round(got * max / pts.length)), max: max, how: "keywords" };
       }
       if (!pts.length) return { got: null, max: max, how: "self" };
-      var hit = pts.filter(function (p) { return matches(p, have); }).length;
-      return { got: Math.min(max, hit), max: max, how: "keywords" };
+      // (2026-11-14) Schoolly: a point the answer denies ("does not increase") isn't credited; the note says which
+      // points were found, and a point only partly there is left for the teacher to check
+      var found = [], missed = [], unsure = false, Sch = A.Schoolly;
+      pts.forEach(function (p) {
+        var mi = matchInfo(p, have);
+        if (mi.ok && Sch && mi.words.some(function (w) { return Sch.denied(given, w, p); })) { missed.push(p); unsure = true; return; }
+        if (mi.ok) found.push(p); else { missed.push(p); if (mi.part) unsure = true; }
+      });
+      var res = { got: Math.min(max, found.length), max: max, how: "keywords" };
+      if (Sch) { res.note = Sch.explain(found, missed, unsure && found.length < max); if (unsure && found.length < max) res.check = true; }
+      return res;
     },
   });
 

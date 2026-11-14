@@ -106,24 +106,32 @@
       this device (carry), or an admin's approval. One ask at a time: the join page's check and a sync asking together
       used to cross at the hub, one taking the admin's yes and the other making a new code for the admin (2026-11-04). */
   var joining = null;
-  function join(c, staffCode, carry) {
+  // signin (2026-11-14): { userId or studentNo, secret }, someone signing in on a device the hub has forgotten: their
+  // password lets it back in (hub-access.cjs join), with no code for an admin
+  function join(c, staffCode, carry, signin, quiet) {
     var m = meta();
     if (m.hubKey && !staffCode && !carry) return Promise.resolve({ key: true }); // let in already (by the other ask)
-    if (joining) return joining.then(function (r) { return staffCode || carry ? join(c, staffCode, carry) : r; }, function () { return join(c, staffCode, carry); });
+    if (joining) return joining.then(function (r) { return staffCode || carry || signin ? join(c, staffCode, carry, signin) : r; }, function () { return join(c, staffCode, carry, signin); });
     m.joinAskedAt = A.now();
     joining = packSecret(m).then(function (secret) {
       return fetch(c.url + "/api/join", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId: A.Devices ? A.Devices.id() : m.deviceId, label: deviceLabel(), secret: secret || undefined, staffCode: staffCode || undefined, carry: carry || undefined }) });
+        body: JSON.stringify({ deviceId: A.Devices ? A.Devices.id() : m.deviceId, label: deviceLabel(), secret: secret || undefined, staffCode: staffCode || undefined, carry: carry || undefined, signin: signin || undefined, quiet: quiet || undefined }) });
     })
       .then(function (r) {
         return readJson(r).then(function (j) {
           joining = null;
-          if (r.status === 410 && follow(j)) return join(cfg(), staffCode, carry); // the school moved: ask there (a request waiting moved with it)
-          if (r.status === 200 && j.key) { m.hubKey = j.key; m.joinCode = null; m.blocked = false; m.oldHub = null; return A.Store.flush().then(function () { return { key: true }; }); }
+          if (r.status === 410 && follow(j)) return join(cfg(), staffCode, carry, signin); // the school moved: ask there (a request waiting moved with it)
+          if (r.status === 200 && j.key) { m.hubKey = j.key; m.joinCode = null; m.blocked = false; m.oldHub = null; m.rejoinBySignIn = false; return A.Store.flush().then(function () { return { key: true }; }); }
+          if (signin && r.status === 401 && j.wrong) throw err("wrong", j.error);
+          if (quiet && r.status === 401 && j.signin) throw err("signin", "Sign in again to carry on.");
+          if (signin && r.status === 423) throw err("locked", j.error);
+          if (signin && r.status === 403 && j.blocked) { m.blocked = true; m.rejoinBySignIn = false; throw err("blocked", j.error); }
+          if (signin && r.status === 403 && (j.pending || j.declined)) throw err(j.pending ? "pending" : "declined", j.error);
           // a hub still on 1.5 has no /api/join (it answers 405, or 404): sync as before; once it is updated it
           // answers 401 "join" and this device joins
           if (r.status === 404 || r.status === 405) { m.oldHub = A.now(); return { old: true }; }
-          if (r.status === 202 && j.pending) { m.joinCode = j.code; return { pending: true, code: j.code }; }
+          // (a hub from before 2026-11-14 takes no password here: an admin lets the device in, as before)
+          if (r.status === 202 && j.pending) { m.joinCode = j.code; m.rejoinBySignIn = false; return { pending: true, code: j.code }; }
           // let in a moment ago, by an ask whose answer hasn't arrived here (another window): the code stays as it is
           if (r.status === 409 && j.joined) return { pending: true, code: m.joinCode };
           throw err(j.declined ? "declined" : "refused", j.error || "The school hub replied " + r.status + ".");
@@ -132,13 +140,22 @@
     return joining;
   }
   /** Before anything else: this device's key (or the hub computer's token). Rejects with code "pending" while an admin hasn't let it in. */
-  function ready(c, staffCode) {
+  function ready(c, staffCode, signin) {
     return prepLocal(c).then(function () {
       if (localToken || meta().hubKey || meta().oldHub) return;
       // waiting for an admin, and the hub was asked moments ago (the join page asks every 10 to 30 seconds): don't ask again
       var m = meta();
       if (!staffCode && m.joinCode && A.now() - (m.joinAskedAt || 0) < 25000) throw err("pending", "This device is waiting to join the school hub. Show an admin this code: " + m.joinCode + " (Settings → People & devices).");
-      return join(c, staffCode).then(function (r) {
+      // the hub forgot this device (2026-11-14): it asks quietly (the hub may know it, and lets it straight back in), at
+      // most once a minute; otherwise whoever signs in next lets it in with their password, with no code for an admin
+      if (m.rejoinBySignIn && !staffCode && !signin) {
+        if (A.now() - (m.quietAskedAt || 0) < 60000) throw err("signin", "Sign in again to carry on.");
+        m.quietAskedAt = A.now();
+        return join(c, null, null, null, true).then(function (r) {
+          if (r.pending) throw err("pending", "This device is waiting to join the school hub. Show an admin this code: " + r.code + " (Settings → People & devices).");
+        });
+      }
+      return join(c, staffCode, null, signin).then(function (r) {
         if (r.pending) throw err("pending", "This device is waiting to join the school hub. Show an admin this code: " + r.code + " (Settings → People & devices).");
       });
     });
@@ -205,14 +222,19 @@
   function hubAuth(path, o, again) {
     var c = cfg(), m = meta(), S = A.Store;
     if (!c.url || A.Cloud) return Promise.reject(err("nohub", "No school hub."));
-    return ready(c, o.staffCode).then(function () {
+    var si = path === "/api/signin" && m.rejoinBySignIn && !m.hubKey ? { userId: o.userId || undefined, studentNo: o.studentNo || undefined, secret: o.secret } : null;
+    return ready(c, o.staffCode, si).then(function () {
       return fetch(c.url + path, { method: "POST", headers: headers({ "Content-Type": "application/json" }), body: JSON.stringify(o) });
     }).then(function (r) {
       return readJson(r).then(function (j) {
         if (r.status === 410 && !again && follow(j)) return hubAuth(path, o, true);
         // the school's records are on its hub computer, which is off just now (1.8, hub-relay.cjs): as with no internet
         if (r.status === 503 && j.hubOffline) throw err("offline", j.error);
-        if (r.status === 401 && j.join) { m.hubKey = null; m.oldHub = null; m.serverSince = 0; throw err("rejoin", "This device has to join the school hub again. Try once more."); }
+        if (r.status === 401 && j.join) {
+          m.hubKey = null; m.oldHub = null; m.serverSince = 0; m.rejoinBySignIn = true; m.quietAskedAt = 0;
+          if (!again && path === "/api/signin") return hubAuth(path, o, true); // this person's password lets the device back in
+          throw err("rejoin", "This device has to join the school hub again. Try once more.");
+        }
         if (!r.ok) throw err(j.locked ? "locked" : j.needCode ? "needCode" : j.wrong ? "wrong" : j.hasPassword ? "hasPassword" : j.pending ? "pending" : j.declined ? "declined" : j.blocked ? "blocked" : "refused", j.error || "The school hub replied " + r.status + ".");
         if (j.user) S.merge("users", j.user);
         if (j.credential) S.merge("credentials", j.credential);
@@ -344,7 +366,7 @@
             if (r.ok && j.now) A.Clock.learn(j.now, sentAt, gotAt); // the school's time, not this device's
             // its key no longer works (the hub was replaced or reset, or it joined again elsewhere): join again next time,
             // and then take everything from the start, since the hub's records may not be the ones this device knew
-            if (r.status === 401 && j.join) { meta.hubKey = null; meta.oldHub = null; meta.serverSince = 0; throw err("rejoin", j.error || "This device has to join the school hub again."); }
+            if (r.status === 401 && j.join) { meta.hubKey = null; meta.oldHub = null; meta.serverSince = 0; meta.rejoinBySignIn = true; meta.quietAskedAt = 0; throw err("rejoin", "This device has to join the school hub again."); }
             if (r.status === 403 && j.blocked) { meta.hubKey = null; meta.blocked = true; throw err("blocked", j.error); }
             if (r.status === 410 && follow(j)) throw err("moved", j.error); // the school moved: sync again, there
             if (r.status === 503 && j.moving) throw err("moving", j.error); // moving now: this device's changes wait here
@@ -396,7 +418,9 @@
         }
         // the hub didn't answer at all (not an error reply): maybe its address changed (js/setup.js looks for it)
         if (!c.cloud && e && e.name === "TypeError" && A.SchoolId && A.SchoolId.lostHub) A.SchoolId.lostHub(c.url);
-        if (e && e.code === "pending") { state = "pending"; lastError = e.message; if (A.SchoolId && A.SchoolId.showJoin) A.SchoolId.showJoin(); } // (a device the hub forgot: the join page)
+        if (e && e.code === "pending") { state = "pending"; lastError = e.message; if (A.SchoolId && A.SchoolId.showJoin) A.SchoolId.showJoin(); } // (a device the hub forgot, on an older hub: the join page)
+        else if (e && e.code === "rejoin") { state = "local"; setTimeout(function () { if (A.Sync) A.Sync.syncNow().catch(function () {}); }, 400); } // (asks the hub quietly at once)
+        else if (e && e.code === "signin") { state = "local"; lastError = e.message; if (A.SchoolId && A.SchoolId.signInAgain) A.SchoolId.signInAgain(); } // (the hub forgot it: sign in again)
         else if (e && e.code === "hubOffline") { state = "local"; lastError = e.message; }
         else if (quiet) { state = "local"; } else { state = "error"; lastError = e.message || String(e); }
         A.refreshStatus();

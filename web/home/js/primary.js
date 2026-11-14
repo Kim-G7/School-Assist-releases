@@ -80,6 +80,13 @@
     var conf = P.conf(), l = conf.levelAreas[level];
     return Array.isArray(l) && l.length ? conf.areas.filter(function (a) { return l.indexOf(a) >= 0; }) : conf.areas.slice();
   };
+  /** A subject added to the school's list and to a form's (Settings → Subjects & codes, js/catalogue.js). */
+  P.addArea = function (level, name) {
+    var c = S().get("settings", "primary") || { id: "primary" }, conf = P.conf(), areas = (c.areas && c.areas.length ? c.areas : conf.areas).slice(), la = Object.assign({}, c.levelAreas || {});
+    if (areas.indexOf(name) < 0) areas.push(name);
+    if (level && Array.isArray(la[level]) && la[level].length && la[level].indexOf(name) < 0) la[level] = la[level].concat([name]);
+    S().put("settings", Object.assign({}, c, { id: "primary", areas: areas, levelAreas: la }));
+  };
   /** Does this class's form take this subject? */
   P.offers = function (c, area) { var l = c ? P.conf().levelAreas[c.level] : null; return !Array.isArray(l) || !l.length || l.indexOf(area) >= 0; };
   /** The subjects a teacher teaches that this class's form takes. */
@@ -916,11 +923,18 @@
       [esc(sexName(u.sex)), age(u.dob) != null ? age(u.dob) + " years (born " + esc(A.fmtDateLong(Date.parse(u.dob + "T12:00:00"))) + ")" : "", c ? esc(c.name) : ""].filter(Boolean).join(" · ") + "</p>" +
       (u.health ? '<div class="callout warn mt-sm">' + I("alert") + "<div><b>Health:</b> " + esc(u.health) + "</div></div>" : "") + "</div>" +
       '<button class="btn" data-act="pupil-edit" data-id="' + u.id + '">' + I("edit") + "Edit details</button></div>" +
-      '<dl class="kv mt"><dt>Guardian</dt><dd>' + esc(P.guardianOf(u) ||"—") + "</dd><dt>Phone</dt><dd>" + esc(P.phoneOf(u) ||"—") + "</dd><dt>Address</dt><dd>" + esc(u.address || "—") + "</dd>" +
+      '<dl class="kv mt">' + (u.studentNo ? "<dt>Student ID</dt><dd class=\"tnum\">" + esc(u.studentNo) + "</dd>" : "") + "<dt>Guardian</dt><dd>" + esc(P.guardianOf(u) ||"—") + "</dd><dt>Phone</dt><dd>" + esc(P.phoneOf(u) ||"—") + "</dd><dt>Address</dt><dd>" + esc(u.address || "—") + "</dd>" +
       (u.birthNo ? "<dt>Birth entry no.</dt><dd>" + esc(u.birthNo) + "</dd>" : "") + "</dl></div>";
+    // (2026-11-14) the student's subjects, each by its record and code, with who teaches it to them (by staff ID)
+    var subs = A.Subjects ? A.Subjects.ofStudent(u) : [], home = M.homeroomOf ? M.homeroomOf(u.id) : null;
+    if (subs.length) html += '<div class="card mb"><div class="card-head">' + I("book") + "<h3>Subjects</h3><span class=\"sub\">" + subs.length + (home ? " · " + esc(home.name) : "") + '</span></div><div class="table-wrap"><table class="table"><thead><tr><th>Subject</th><th>Teacher</th></tr></thead><tbody>' +
+      subs.map(function (x) {
+        var tid = A.Enrol && A.Enrol.teacherFor ? A.Enrol.teacherFor(home, u.level, u.stream, x.name) : null, t = tid ? M.user(tid) : null;
+        return "<tr><td>" + A.Subjects.label(x.name, u.level, x.code) + "</td><td>" + (t ? esc(t.name) + (t.staffNo ? ' <span class="subj-code">' + esc(t.staffNo) + "</span>" : "") : '<span class="muted">Not set yet</span>') + "</td></tr>";
+      }).join("") + "</tbody></table></div></div>";
     html += '<div class="grid g-main"><div class="card"><div class="card-head">' + I("edit") + "<h3>Term " + conf.term + " marks</h3>" + (sc && sc.avg != null ? '<span class="sub">average ' + sc.avg + "%</span>" : "") + "</div>" +
       (sc && Object.keys(sc.area).length ? conf.areas.filter(function (a) { return sc.area[a] != null; }).map(function (a) {
-        return '<div class="list-row"><div class="grow"><div class="title">' + esc(a) + '</div><div class="meta">' + esc(P.descriptor(sc.area[a], conf)) + "</div></div>" + UI.scoreBadge(sc.area[a]) + "</div>";
+        return '<div class="list-row"><div class="grow"><div class="title">' + (A.Subjects ? A.Subjects.label(a, u.level) : esc(a)) + '</div><div class="meta">' + esc(P.descriptor(sc.area[a], conf)) + "</div></div>" + UI.scoreBadge(sc.area[a]) + "</div>";
       }).join("") : '<div class="card-body muted small">No marks yet this term.</div>') +
       '<div class="card-foot"><span class="small muted">Present ' + att.present + " of " + att.days + " days this term" + (att.absent ? ", absent " + att.absent : "") + "</span></div></div>";
     html += '<div class="card"><div class="card-head">' + I("list") + '<h3>Notes</h3><span class="grow"></span><button class="btn btn-sm" data-act="pnote-add" data-id="' + u.id + '">' + I("plus") + "Add a note</button></div>" +
@@ -974,6 +988,8 @@
   };
 
   /* ------------------------------------------------------------------ Register */
+  /** A pupil's days in a term from the class's registers (the report cards, js/reportcards.js): { days, present, absent, late }. */
+  P.termAttendance = function (c, pid, term, year) { return termAttendance(c, pid, Number(term), Object.assign({}, P.conf(), { year: String(year || P.conf().year) })); };
   function termAttendance(c, pid, term, conf) {
     var out = { days: 0, present: 0, absent: 0, late: 0 };
     if (!c) return out;

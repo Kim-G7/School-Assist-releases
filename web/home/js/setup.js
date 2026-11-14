@@ -154,6 +154,18 @@
     var s = A.Sync;
     return !!(s && s.hubMode && s.hubMode() && !s.joinState().key && s.joinState().code);
   };
+  /** (2026-11-14) The hub has forgotten this device: whoever is signed in is signed out, at a quiet moment, and signs in
+      again; their password lets the device back in (js/sync.js join, hub-access.cjs), with no code for an admin to let
+      in. Nobody signed in: the sign-in page is already there. Nothing on the device is lost. */
+  var signLater = null;
+  Id.signInAgain = function () {
+    clearTimeout(signLater); signLater = null;
+    if (!M.me()) return;
+    if (A.quietMoment && !A.quietMoment()) { signLater = setTimeout(Id.signInAgain, 5000); return; }
+    A.loginNotice = "Sign in again to carry on: the school hub needs your password once more. Nothing on this device is lost.";
+    document.querySelectorAll(".modal-back").forEach(function (x) { x.remove(); });
+    A.act.signout();
+  };
   /** The sync found this device waiting to join again: the join page, at a quiet moment (not under someone's typing). */
   var joinLater = null;
   Id.showJoin = function () {

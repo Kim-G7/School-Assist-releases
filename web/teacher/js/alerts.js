@@ -72,7 +72,9 @@
   /* ---------------------------------------------------------------- pop-ups */
   /** School Assist Teacher: every pop-up leaves after 10 seconds (it stays in the bell). A pointer resting on it
    *  holds it; when the pointer leaves, it goes 3 seconds later. */
-  var POP_MS = A.edition === "teacher" ? 10000 : 0;
+  // (2026-11-14) every edition: a pop-up goes by itself after 12 seconds (it waits while the pointer is on it), and stays
+  // in the bell's list. Before, School Assist's stayed in the corner until closed, one on top of another.
+  var POP_MS = 12000;
   function autoClose(el, ms) {
     if (!ms) return;
     var t = null, go = function (wait) { clearTimeout(t); t = setTimeout(function () { el.classList.add("going"); setTimeout(function () { el.remove(); }, 300); }, wait); };
@@ -276,7 +278,7 @@
       (ev.href ? '<div class="row mt-sm"><a class="btn btn-sm btn-primary" href="' + ev.href + '" data-news-close>Open</a></div>' : "") + "</div>" +
       '<button type="button" class="btn btn-ghost btn-icon btn-sm" data-news-close aria-label="Close">' + I("x") + "</button>";
     add(root, el);
-    autoClose(el, POP_MS || 15000);
+    autoClose(el, POP_MS);
     if (document.hidden && window.Notification && Notification.permission === "granted") {
       try { new Notification(ev.title, { body: ev.body || "", icon: A.Theme.iconURL(), tag: ev.id }); } catch (e) { /* not supported */ }
     }

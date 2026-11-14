@@ -15,6 +15,8 @@
 (function (A) {
   "use strict";
   var esc = A.esc, I = A.icon, M = A.M, UI = A.UI, S = function () { return A.Store; };
+  // a subject's name with its code, small beside it (js/catalogue.js, 2026-11-14)
+  var subj = function (name, level, code) { return A.Subjects ? A.Subjects.label(name, level, code) : esc(name); };
   var KEY = "sca-parents-v1", BLANK = { name: "School Assist", shortName: "School Assist", motto: "", vision: "", mission: "", aims: "", logo: "", primary: "#1D4E89", secondary: "#E8A317" };
   var DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], STATUS = { P: ["good", "Present"], L: ["warn", "Late"], A: ["bad", "Absent"], E: ["", "Excused"] };
 
@@ -177,7 +179,7 @@
   }
   var note = function () { return V.note ? '<div class="callout warn mb">' + I("wifiOff") + "<div>" + esc(V.note) + "</div></div>" : ""; };
   var section = function (title, sub, body) { return '<div class="card mt"><div class="card-head"><h3>' + esc(title) + "</h3>" + (sub ? '<span class="sub">' + esc(sub) + "</span>" : "") + "</div>" + body + "</div>"; };
-  var subjectRow = function (x) { return '<div class="list-row"><div class="grow"><div class="title">' + esc(x.subject) + "</div></div>" + pctBadge(x.average) + "</div>"; };
+  var subjectRow = function (x) { return '<div class="list-row"><div class="grow"><div class="title">' + subj(x.subject, null) + "</div></div>" + pctBadge(x.average) + "</div>"; };
 
   var PAGES = {
     progress: function (k) {
@@ -189,7 +191,7 @@
       html += section("Strong subjects", "60% or more", p.strong.length ? p.strong.map(subjectRow).join("") : UI.empty("award", "None yet", "Subjects averaging 60% or more show here."));
       html += section("Needs extra effort", "below 50%", p.effort.length ? p.effort.map(subjectRow).join("") : UI.empty("checkCircle", "None", "No subject is averaging below 50%."));
       html += section("Syllabus covered", "by subject", p.syllabus.length ? p.syllabus.map(function (s) {
-        return '<div class="list-row"><div class="grow"><div class="row spread small"><b>' + esc(s.subject) + '</b><span class="tnum">' + s.done + " of " + s.total + " topics · " + s.pct + "%</span></div>" + UI.bar(s.pct) + "</div></div>";
+        return '<div class="list-row"><div class="grow"><div class="row spread small"><b>' + subj(s.subject, null) + '</b><span class="tnum">' + s.done + " of " + s.total + " topics · " + s.pct + "%</span></div>" + UI.bar(s.pct) + "</div></div>";
       }).join("") : UI.empty("layers", "No syllabus tracked yet", "The topics show here as the teachers cover them."));
       if (p.practice.taken) html += '<p class="small muted mt">Practice tests your child took in Exam mode: ' + p.practice.taken + (p.practice.average == null ? "" : ", averaging " + p.practice.average + "%") + ".</p>";
       return html;
@@ -205,7 +207,7 @@
     },
     subjects: function (k) {
       return (k.classTeacher ? '<p class="small mb">Class teacher: <b>' + esc(k.classTeacher) + "</b></p>" : "") + '<div class="card">' + (k.subjects.length ? k.subjects.map(function (x) {
-        return '<div class="list-row"><div class="grow"><div class="title">' + esc(x.subject) + '</div><div class="meta"><span>' + esc(x.teacher || "Teacher not set yet") + "</span></div></div>" + pctBadge(x.average) + "</div>";
+        return '<div class="list-row"><div class="grow"><div class="title">' + subj(x.subject, null) + '</div><div class="meta"><span>' + esc(x.teacher || "Teacher not set yet") + "</span></div></div>" + pctBadge(x.average) + "</div>";
       }).join("") : UI.empty("layers", "No subjects yet")) + "</div>";
     },
     marks: function (k, q, go) {
@@ -382,7 +384,7 @@
       html: '<p class="muted mb">' + use(count(form.parents)) + " in " + esc(form.level) + "; " + form.reached + " of " + plural(form.students, "student") + ' have a parent on it.</p><div class="card">' + form.list.map(function (k) {
         return row("#/t/parents?c=" + encodeURIComponent(k.key), k.label, k.reached + " of " + plural(k.students.length, "student") + " have a parent on it", count(k.parents), k.reached, k.students.length);
       }).join("") + "</div>" };
-    var html = '<div class="grid g-3">' + UI.stat("users", c.parents.length, "Parents using School Assist", true) + UI.stat("checkCircle", c.reached + " of " + c.students.length, "Students with a parent on it") + UI.stat("edit", c.noName, "Students with no parent's details", false, "A parent can't join until the school has their name and phone number on the student") + "</div>";
+    var html = '<div class="grid g-3">' + UI.stat("users", c.parents.length, "Parents using School Assist", true) + UI.stat("checkCircle", c.reached + " of " + c.students.length, "Students with a parent on it") + UI.stat("edit", c.noName, "Students with no parent's details", false, { note: "A parent can't join until the school has their name and phone number on the student." }) + "</div>";
     html += '<div class="row wrap spread mt mb"><h3>By form</h3><a class="btn btn-sm" href="#/t/settings?s=parents">' + I("link") + "The link for parents</a></div>";
     html += '<div class="card">' + (c.forms.length ? c.forms.map(function (f) { return row("#/t/parents?f=" + encodeURIComponent(f.level), f.level, f.reached + " of " + plural(f.students, "student") + " have a parent on it", count(f.parents), f.reached, f.students); }).join("") : UI.empty("users", "No students yet")) + "</div>";
     return { title: "Parents", html: html };

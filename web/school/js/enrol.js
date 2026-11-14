@@ -51,6 +51,7 @@
   var ALIAS = { english: ["englishfirstlanguage", "englishlanguage"], englishlanguage: ["englishfirstlanguage", "englishlanguage"], accounts: ["accounting"], principlesofaccounts: ["accounting"],
     literature: ["literatureinenglish"], englishliterature: ["literatureinenglish"], business: ["businessstudies", "business"], businessstudies: ["businessstudies", "business"],
     informationtechnology: ["ict", "informationtechnology"], ict: ["ict", "informationtechnology"] };
+  En.ALIAS = ALIAS;
   /** Cambridge's level for a form: IGCSE for Forms 1 to 4, AS & A Level for the sixth form, none for anything else. */
   function cambridgeLevel(level) { return /form\s*[56]|lower\s*6|upper\s*6|sixth|a.?level/i.test(level || "") ? "AS & A Level" : /form\s*[1-4]\b/i.test(level || "") ? "IGCSE" : null; }
   function syllabusFor(level, subject, lib, me) {
@@ -78,14 +79,15 @@
     var list = A.Primary.levelAreas(level);
     return list.map(function (a) {
       var t = M.user(teacherFor(home, level, stream, a));
-      return '<label class="check en-subject"><input type="checkbox" name="subj" value="' + esc(a) + '"' + (ticked.indexOf(a) >= 0 ? " checked" : "") + "><span>" + esc(a) + (t ? '<small class="muted">' + esc(t.name) + "</small>" : "") + "</span></label>";
+      return '<label class="check en-subject"><input type="checkbox" name="subj" value="' + esc(a) + '"' + (ticked.indexOf(a) >= 0 ? " checked" : "") + "><span>" + (A.Subjects ? A.Subjects.label(a, level) : esc(a)) + (t ? '<small class="muted">' + esc(t.name) + "</small>" : "") + "</span></label>";
     }).join("");
   }
   function modal(u, preset) {
     var st = M.structure(), isNew = !u, me = M.me();
     var cur = u || Object.assign({ name: "", level: st.levels[0], stream: st.streams[0] }, preset || {});
     var chosenHome = u ? M.homeroomOf(u.id) : null;
-    var ticked = cur.registered ? cur.registered.slice() : u ? M.classesForStudent(u.id).map(function (c) { return c.subject; }) : [];
+    // (2026-11-14) what the school's records say they take (js/catalogue.js), when nobody has ticked them here yet
+    var ticked = u && A.Subjects ? A.Subjects.ofStudent(u).map(function (x) { return x.name; }) : cur.registered ? cur.registered.slice() : [];
     var classField = function (level) {
       var h = homes(level);
       return h.length ? '<select class="select" name="home">' + h.map(function (c) { return '<option value="' + esc(c.id) + '"' + ((chosenHome && chosenHome.id === c.id) || (!chosenHome && same(c.stream, cur.stream)) ? " selected" : "") + ">" + esc(c.name) + "</option>"; }).join("") + "</select>"
@@ -133,7 +135,9 @@
     if (!subjects.length) { UI.toast("Tick the subjects this student takes", "bad"); return false; }
     var home = f.home ? M.cls(f.home) : null, stream = home ? home.stream : f.stream;
     var wasHome = u ? M.homeroomOf(u.id) : null, moved = !!u && ((wasHome && wasHome.id) !== (home && home.id) || u.level !== f.level);
-    var rec = Object.assign({}, u || { id: A.uid("s"), role: "student", enteredBy: me.id, enteredAt: A.now() }, { name: name, level: f.level, stream: stream || null, sex: f.sex, dob: f.dob, registered: subjects });
+    // the subjects by their records' ids (js/catalogue.js), and by name as before (older devices and hubs read those)
+    var subjectIds = A.Subjects ? subjects.map(function (n) { var r = A.Subjects.find(n, f.level); return r ? r.id : ""; }).filter(Boolean) : [];
+    var rec = Object.assign({}, u || { id: A.uid("s"), role: "student", enteredBy: me.id, enteredAt: A.now() }, { name: name, level: f.level, stream: stream || null, sex: f.sex, dob: f.dob, registered: subjects, subjectIds: subjectIds });
     if (A.Parents && A.Parents.available()) rec.parents = A.Parents.readFields(f);
     var lib = null;
     var finish = function () {
@@ -193,7 +197,9 @@
     var forms = '<div class="pill-tabs">' + st.levels.map(function (l) { return '<button class="' + (l === level ? "on" : "") + '" data-act="goto" data-href="#/t/enrol?f=' + encodeURIComponent(l) + '">' + esc(l) + "</button>"; }).join("") + "</div>";
     var classes = list.length > 1 ? '<div class="pill-tabs sub"><button class="' + (!cls ? "on" : "") + '" data-act="goto" data-href="#/t/enrol?f=' + encodeURIComponent(level) + '">All</button>' + list.map(function (c) { return '<button class="' + (cls === c ? "on" : "") + '" data-act="goto" data-href="#/t/enrol?f=' + encodeURIComponent(level) + "&c=" + c.id + '">' + esc(c.name) + "</button>"; }).join("") + "</div>" : "";
     var rows = kids.map(function (u) {
-      var h = M.homeroomOf(u.id), n = (u.registered || M.classesForStudent(u.id).map(function (c) { return c.subject; })).length;
+      // (2026-11-14) the subjects as the school's records have them (js/catalogue.js): before, only those registered here
+      // or in a subject class, so students with marks in eleven subjects said "None yet"
+      var h = M.homeroomOf(u.id), n = (A.Subjects ? A.Subjects.ofStudent(u) : u.registered || []).length;
       return "<tr><td><b>" + esc(u.name) + '</b></td><td class="tnum">' + esc(u.studentNo || "") + "</td><td>" + esc(h ? h.name : [u.level, u.stream].filter(Boolean).join(" ")) + "</td><td>" + (n ? n + " subject" + (n === 1 ? "" : "s") : '<span class="badge warn">None yet</span>') + '</td><td class="num">' + (may ? '<button class="btn btn-sm" data-act="en-edit" data-id="' + esc(u.id) + '">' + I("edit") + "Edit</button>" : "") + "</td></tr>";
     }).join("");
     return { title: "Enter students", html: head + forms + classes + (rows ? '<div class="card table-wrap"><table class="table"><thead><tr><th>Student</th><th>Student ID</th><th>Class</th><th>Subjects</th><th></th></tr></thead><tbody>' + rows + "</tbody></table></div>" : '<div class="card">' + UI.empty("users", "No students in " + level + " yet") + "</div>"),
@@ -218,11 +224,14 @@
   /** A student's subjects, as the school registered them. */
   En.studentPage = function (me) {
     var home = M.homeroomOf(me.id), level = me.level, stream = me.stream;
-    var names = (me.registered || []).slice();
-    M.classesForStudent(me.id).forEach(function (c) { if (!names.some(function (n) { return same(n, c.subject); })) names.push(c.subject); });
+    // (2026-11-14) by the school's subject records, with their codes (js/catalogue.js)
+    var subs = A.Subjects ? A.Subjects.ofStudent(me) : (me.registered || []).map(function (n) { return { name: n, code: "" }; });
+    var names = subs.map(function (x) { return x.name; }), codeOf = {};
+    subs.forEach(function (x) { codeOf[x.name] = x.code; });
+    M.classesForStudent(me.id).forEach(function (c) { if (!c.homeroom && !/^class$/i.test(c.subject || "") && !names.some(function (n) { return same(n, c.subject); })) names.push(c.subject); });
     names.sort();
     var html = '<div class="callout mb">' + I("info") + "<div>These are the subjects the school registered for you. If one is wrong, tell your class teacher or the school office.</div></div>" +
-      '<div class="card">' + (names.length ? names.map(function (n) { var t = M.user(teacherFor(home, level, stream, n)); return '<div class="list-row"><div class="grow"><div class="title">' + esc(n) + '</div><div class="meta"><span>' + (t ? esc(t.name) : "Teacher not set yet") + "</span></div></div></div>"; }).join("") : UI.empty("layers", "No subjects yet", "The school registers your subjects.")) + "</div>";
+      '<div class="card">' + (names.length ? names.map(function (n) { var t = M.user(teacherFor(home, level, stream, n)); return '<div class="list-row"><div class="grow"><div class="title">' + (A.Subjects ? A.Subjects.label(n, level, codeOf[n]) : esc(n)) + '</div><div class="meta"><span>' + (t ? esc(t.name) : "Teacher not set yet") + "</span></div></div></div>"; }).join("") : UI.empty("layers", "No subjects yet", "The school registers your subjects.")) + "</div>";
     return { title: "My subjects", html: html };
   };
 })(window.App);

@@ -202,8 +202,8 @@
         '<div class="field full"><span class="label">' + esc(st.levelLabel) + "s it is for</span><div class=\"row wrap\" style=\"gap:4px 14px\">" + st.levels.map(function (l) {
           return '<label class="check"><input type="checkbox" data-lvl="' + esc(l) + '"' + (levels.indexOf(l) >= 0 ? " checked" : "") + "> " + esc(l) + "</label>";
         }).join("") + '</div><span class="hint">None ticked: every one.</span></div>' +
-        '<div class="field full"><span class="label">The syllabus document</span><div class="row wrap"><label class="btn btn-sm">' + I("upload") + 'Read its PDF<input type="file" accept="application/pdf,.pdf" id="trk-file" hidden></label>' +
-        '<span class="small muted" id="trk-note">' + (fileName ? "Read from " + esc(fileName) + "." : "School Assist reads its topics, for you to check below.") + "</span></div></div>" +
+        '<div class="field full"><span class="label">The syllabus document</span><div class="row wrap"><label class="btn btn-sm">' + I("upload") + 'Read its document<input type="file" accept="' + (A.Schoolly ? A.Schoolly.ACCEPT : "application/pdf,.pdf") + '" id="trk-file" hidden></label>' +
+        '<span class="small muted" id="trk-note">' + (fileName ? "Read from " + esc(fileName) + "." : "School Assist reads its topics, for you to check below.") + "</span></div><div id=\"trk-read\" class=\"mt-sm\"></div></div>" +
         '<label class="field full"><span>Its topics, one a line</span><textarea class="textarea" name="topics" rows="14" placeholder="1 Numbers&#10;1.1 Number concepts&#10;2 Sets">' + esc(T.topicsText(o ? o.topics : [])) + "</textarea>" +
         '<span class="hint">"1 Numbers" is a topic and "1.1 Number concepts" one of its parts. Change, add or remove lines as you like: a topic keeps its ticks while its name stays the same.</span></label></form>',
       onMount: function (m) {
@@ -213,12 +213,13 @@
           if (!file) return;
           if (!A.SylRead) { note.textContent = "This copy can't read PDFs: type the topics below."; return; }
           note.textContent = "Reading " + file.name + "…";
-          A.SylRead.read(file, function (n, of) { note.textContent = "Reading page " + n + " of " + of + "…"; }).then(function (r) {
+          (A.Schoolly ? A.Schoolly.read : A.SylRead.read)(file, function (n, of) { note.textContent = "Reading page " + n + " of " + of + "…"; }).then(function (r) {
+            var box = m.querySelector("#trk-read"); if (box) box.innerHTML = A.Schoolly ? A.Schoolly.sectionsHtml(r) : "";
             var list = (r.topics || []).map(function (t) { return { n: t.n, title: tidy(t.title), parts: (t.outline || []).filter(function (x) { return x.title; }).map(function (x) { return { n: x.n || "", title: tidy(x.title) }; }) }; });
-            if (!list.length) { note.textContent = "No topics were found in " + file.name + ". Type them below, or copy them from the document."; return; }
+            if (!list.length) { note.textContent = "Schoolly found no topics or skills in " + file.name + " (what it read is below). Type them, or copy them from the document."; return; }
             f.topics.value = T.topicsText(list); fileName = file.name;
             if (!f.title.value.trim() && r.title) f.title.value = tidy(r.title).slice(0, 120);
-            note.textContent = list.length + " topics read from " + file.name + ". Check them below, then save.";
+            note.textContent = list.length + " topics read from " + file.name + (r.by === "schoolly" ? " by Schoolly, from its skills and parts" : "") + ". Check them below, then save.";
           }, function (e) { note.textContent = "That file couldn't be read (" + (e && e.message ? e.message : e) + "). Type the topics below."; });
         });
       },
