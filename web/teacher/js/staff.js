@@ -142,6 +142,29 @@
     var twin = S().filter("users", function (u) { return u.role === "teacher" && u.id !== id && !u.leftAt && String(u.name).toLowerCase() === base.toLowerCase(); }).length;
     return twin && f ? hon + " " + f.charAt(0) + ". " + tidy(last) : base;
   };
+  /** A teacher written one way everywhere it is short (the timetable, 2026-11-15): title and last name, "Mrs Dube"; the
+      first initial too only when two of the school's teachers would read the same ("Mrs T. Moyo"). A name with no title:
+      "T. Moyo" from "Tendai Moyo"; one word stays as it is ("Librarian"). Takes the user, or a name typed on a lesson. */
+  var TITLE = /^(mr|mrs|ms|miss|dr|prof|rev|pastor|sr|fr)\.?\s+/i;
+  var shortParts = function (u) {
+    if (u.hon && u.lastName) return { t: u.hon, last: tidy(u.lastName), first: u.firstName || "" };
+    var name = String(u.name || "").trim(), m = TITLE.exec(name), words = name.replace(m ? m[0] : "", "").split(/\s+/).filter(Boolean);
+    if (!words.length) return { whole: name };
+    return { t: m ? m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase() : "", last: words[words.length - 1], first: words.length > 1 ? words[0].replace(/\.$/, "") : "" };
+  };
+  var shortOf = function (p, initial) {
+    if (p.whole != null) return p.whole;
+    var ini = p.first ? p.first.charAt(0).toUpperCase() + ". " : "";
+    return p.t ? p.t + " " + (initial ? ini : "") + p.last : ini + p.last;
+  };
+  M.teacherShort = function (u) {
+    if (!u) return "";
+    if (typeof u === "string") return shortOf(shortParts({ name: u }), false);
+    var p = shortParts(u), plain = shortOf(p, false);
+    if (!p.t) return plain;
+    var twin = S().filter("users", function (x) { return x.role === "teacher" && x.id !== u.id && !x.leftAt && x.status !== "declined" && shortOf(shortParts(x), false).toLowerCase() === plain.toLowerCase(); }).length;
+    return twin ? shortOf(p, true) : plain;
+  };
   /** A first guess from a name typed before 1.6.2 ("Mrs L Madzivanyika" → Mrs, Madzivanyika, L), for the form to show. */
   M.nameGuess = function (u) {
     if (u.lastName) return { hon: u.hon || "", lastName: u.lastName, firstName: u.firstName || "" };

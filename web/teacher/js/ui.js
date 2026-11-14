@@ -481,6 +481,16 @@
       while (hi - lo > 0.25) { var mid = (lo + hi) / 2; if (fits(mid)) lo = mid; else hi = mid; }
       fits(Math.floor(lo * 4) / 4);
     });
+    // a group written alike (a timetable's lessons, 2026-11-15): every box takes the size the tightest one needs, so
+    // one subject isn't big and the next small
+    var groups = Array.prototype.slice.call((root || document).querySelectorAll("[data-fit-same]"));
+    if (root && root.matches && root.matches("[data-fit-same]")) groups.push(root);
+    groups.forEach(function (g) {
+      var els = Array.prototype.filter.call(g.querySelectorAll(g.getAttribute("data-fit-same")), function (el) { return el.clientHeight && el.style.fontSize; });
+      if (els.length < 2) return;
+      var px = Math.min.apply(null, els.map(function (el) { return parseFloat(el.style.fontSize) || 99; }));
+      els.forEach(function (el) { el.style.fontSize = px + "px"; });
+    });
   };
 
   /* Typing boxes (2026-11-10): no suggestions from what was typed on this browser before (on a school's shared computer
@@ -541,4 +551,65 @@
   window.addEventListener("resize", A.debounce(function () { UI.hydrate(); }, 150));
   // the app's own font arriving after the first drawing changes how much fits
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { UI.fitText(); });
+
+  /* One scroll, the page's and its boxes' (2026-11-15). A long table or list scrolls in its own box (A.boxLists); the
+     mouse wheel or touchpad over it used to stop dead at the box's last row, with more page below. Now:
+     - a box partly out of sight: the page moves first, until the box is all on the screen (or its top reaches the top);
+     - then the box scrolls, as the browser does it;
+     - at the box's end, the page carries on in the same movement (a box inside another: that one first).
+     The page glides (eased), so a wheel's steps don't jump. Pop-ups, the sidebar and anything outside the page's own
+     content keep the browser's way. */
+  (function () {
+    var page = function () { return document.scrollingElement || document.documentElement; };
+    var scrollerOf = function (el, stop) {
+      for (; el && el !== stop && el.nodeType === 1; el = el.parentElement) {
+        if (el.scrollHeight > el.clientHeight + 1) { var oy = getComputedStyle(el).overflowY; if (oy === "auto" || oy === "scroll") return el; }
+      }
+      return null;
+    };
+    var room = function (el, dy) { return dy > 0 ? el.scrollHeight - el.clientHeight - el.scrollTop > 0.5 : el.scrollTop > 0.5; };
+    // the eased glide: each element keeps where it is heading, so quick wheel steps add up instead of restarting
+    var glide = function (el, dy, now) {
+      var max = el.scrollHeight - el.clientHeight, g = el._glide || (el._glide = { to: null, raf: 0 });
+      if (g.to == null) g.to = el.scrollTop;
+      g.to = Math.max(0, Math.min(max, g.to + dy));
+      if (now) { el.scrollTop = g.to; g.to = null; return; }
+      if (g.raf) return;
+      var step = function () {
+        var d = g.to - el.scrollTop;
+        if (g.to == null || Math.abs(d) < 0.75) { if (g.to != null) el.scrollTop = g.to; g.to = null; g.raf = 0; return; }
+        var was = el.scrollTop;
+        el.scrollTop = was + (Math.abs(d) < 2 ? d : d * 0.24);
+        if (el.scrollTop === was) { g.to = null; g.raf = 0; return; } // it can't move (its end, or the page changed)
+        g.raf = requestAnimationFrame(step);
+      };
+      g.raf = requestAnimationFrame(step);
+    };
+    var stopGlide = function () { var el = page(); if (el._glide) { el._glide.to = null; } };
+    ["mousedown", "touchstart", "keydown"].forEach(function (t) { window.addEventListener(t, stopGlide, { passive: true }); });
+    window.addEventListener("hashchange", stopGlide);
+    window.addEventListener("wheel", function (e) {
+      if (e.defaultPrevented || e.ctrlKey || e.shiftKey || !e.deltaY || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      if (document.documentElement.classList.contains("modal-open")) return; // a pop-up: only it scrolls
+      var content = e.target && e.target.closest && e.target.closest("#view");
+      if (!content) return;
+      var box = scrollerOf(e.target, content.parentElement);
+      if (!box || box === page()) { stopGlide(); return; } // the page itself: the browser's own scrolling
+      var dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight * 0.9 : 1), pg = page();
+      var small = e.deltaMode === 0 && Math.abs(dy) < 40; // a touchpad's own fine steps need no easing
+      // 1. the box partly out of sight: bring it in first
+      var bar = document.querySelector(".topbar"), top = bar && getComputedStyle(bar).position === "sticky" ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
+      // (where the box will be once the page's glide so far is done)
+      var r = box.getBoundingClientRect(), bottom = window.innerHeight, pend = pg._glide && pg._glide.to != null ? pg._glide.to - pg.scrollTop : 0;
+      var rt = r.top - pend, rb = r.bottom - pend;
+      var take = dy > 0 ? Math.min(dy, rb - bottom, rt - top) : Math.max(dy, rt - top, rb - bottom);
+      if ((dy > 0 ? take > 1 : take < -1) && room(pg, dy)) { e.preventDefault(); glide(pg, take, small); return; }
+      // 2. the box, or a box around it, can still move that way: the browser scrolls the box itself as usual
+      for (var b = box; b && b !== pg; b = scrollerOf(b.parentElement, content.parentElement)) {
+        if (room(b, dy)) { if (b === box) return; e.preventDefault(); glide(b, dy, small); return; }
+      }
+      // 3. every box at its end: on to the page, in the same movement
+      if (room(pg, dy)) { e.preventDefault(); glide(pg, dy, small); }
+    }, { passive: false });
+  })();
 })(window.App);

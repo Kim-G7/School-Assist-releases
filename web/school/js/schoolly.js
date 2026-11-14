@@ -10,7 +10,8 @@
  *    a point the answer denies ("does not increase"), with a line saying which points it found. Where it isn't sure,
  *    it says so and the teacher has the last word. The paid AI marking (Settings → AI marking) stays for schools that
  *    want it.
- *  - Finding the way (the Schoolly button at the top): ask how to do something; the answer has the steps and the page.
+ *  - Finding the way (the Schoolly button at the top, 2026-11-15): a tour of the page on the screen, part by part
+ *    (js/tour.js), in place of asking it how to do something; what can be done on each page (HELP) opens the tour.
  * Schoolly is rules and word matching, not a language model: it doesn't make answers up, and leaves what it can't
  * settle to the teacher. */
 (function (A) {
@@ -285,7 +286,6 @@
     { who: "all", q: "Forgot my password", k: "forgot password pin reset can't sign in", steps: ["On the sign-in page, press Forgot your password?", "An admin gives you a new one."], href: "" },
     { who: "all", q: "Light or dark mode", k: "dark mode light theme colours night", steps: ["Press the moon (or sun) at the top."], href: "" },
   ];
-  var words = function (s) { return (String(s || "").toLowerCase().match(/[a-z0-9]+/g) || []).map(STEM).filter(function (w) { return w.length > 1 && !/^(how|do|i|the|a|an|to|my|of|on|in|can|what|where|is|for|and|it|me|you)$/.test(w); }); };
   function forMe(h, me) {
     if (!me) return false;
     if (h.who === "all") return true;
@@ -298,40 +298,20 @@
     if (h.who === "admin") return !!me.isAdmin;
     return h.who === "teacher";
   }
-  /** Schoolly's answers to a question, best first. */
-  Sy.ask = function (q, me) {
-    var qw = words(q);
-    return HELP.filter(function (h) { return forMe(h, me); }).map(function (h) {
-      var hw = words(h.q + " " + h.k), score = 0;
-      qw.forEach(function (w) { if (hw.some(function (x) { return Sy.same(w, x); })) score += 1; else if (hw.some(function (x) { return x.length > 3 && (x.indexOf(w) === 0 || w.indexOf(x) === 0); })) score += 0.5; });
-      return { h: h, score: score };
-    }).filter(function (x) { return !qw.length || x.score > 0; }).sort(function (a, b) { return b.score - a.score; }).map(function (x) { return x.h; });
+  /** What this person can do on the page at `hash` (the tour's welcome card): HELP's entries for that page. */
+  Sy.helpFor = function (me, hash) {
+    var at = String(hash || "").split("?"), path = at[0], s = /(?:^|&)s=([^&]+)/.exec(at[1] || "");
+    return HELP.filter(function (h) {
+      if (!h.href || !forMe(h, me)) return false;
+      var hp = h.href.split("?"), hs = /(?:^|&)s=([^&]+)/.exec(hp[1] || "");
+      return hp[0] === path && (!hs || (s && s[1] === hs[1]));
+    });
   };
+  /** The S at the top: a tour of the page (js/tour.js); a dot on it until the person has had one on this device. */
   Sy.button = function (me) {
     if (!me) return "";
-    return '<button class="btn btn-ghost btn-icon schoolly-btn" data-act="schoolly" data-tip="Ask Schoolly" aria-label="Ask Schoolly">' + Sy.mark() + "</button>";
+    var isNew = A.Tour && A.Tour.isNew(me);
+    return '<button class="btn btn-ghost btn-icon schoolly-btn' + (isNew ? " new" : "") + '" data-act="schoolly" data-tip="Schoolly: a tour of this page" aria-label="Schoolly: a tour of this page">' + Sy.mark() + "</button>";
   };
-  function answers(list) {
-    if (!list.length) return '<div class="card-pad small muted">Schoolly doesn\'t know that one yet. Try other words, such as "report cards", "register" or "subject codes".</div>';
-    return list.slice(0, 5).map(function (h) {
-      return '<div class="schoolly-ans"><b>' + esc(h.q) + "</b><ol>" + h.steps.map(function (s) { return "<li>" + esc(s) + "</li>"; }).join("") + "</ol>" +
-        (h.href ? '<a class="btn btn-sm btn-primary" href="' + h.href + '" data-schoolly-go>' + I("right") + "Take me there</a>" : "") + "</div>";
-    }).join("");
-  }
-  A.act.schoolly = function () {
-    var me = M.me();
-    if (!me) return;
-    var first = (me.name || "").split(" ")[me.role === "student" ? 0 : 1] || me.name;
-    UI.modal({ title: "Schoolly", sub: "Hello" + (first ? ", " + first : "") + ". What would you like to do?", size: "lg",
-      body: '<div class="schoolly"><input class="input" id="schoolly-q" placeholder="Ask, e.g. how do I make report cards?" autocomplete="off" aria-label="Ask Schoolly">' +
-        '<div id="schoolly-a" class="mt">' + answers(Sy.ask("", me).slice(0, 4)) + "</div>" +
-        '<p class="tiny muted mt">Schoolly works on this device and needs no internet. It reads syllabus documents part by part and marks written answers against the marking scheme; your teacher has the last word on any mark.</p></div>',
-      foot: [{ label: "Close" }],
-      onMount: function (m) {
-        var q = m.querySelector("#schoolly-q"), a = m.querySelector("#schoolly-a");
-        q.focus();
-        q.addEventListener("input", A.debounce(function () { a.innerHTML = answers(Sy.ask(q.value, me)); }, 150));
-        m.addEventListener("click", function (e) { if (e.target.closest("[data-schoolly-go]")) { var x = m.querySelector("[data-close]"); if (x) x.click(); } });
-      } });
-  };
+  A.act.schoolly = function () { if (A.Tour) A.Tour.start(); };
 })(window.App);

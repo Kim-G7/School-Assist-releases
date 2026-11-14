@@ -70,9 +70,10 @@
   TT.hasOwn = function (level, stream, key) { return !!key && S().filter("timetable", function (s) { return s.scope === key && s.level === level && s.stream === stream; }).length > 0; };
 
   /* ------------------------------------------------------------- whose lessons */
+  /** A lesson as the pages show it; its teacher as "Mrs Dube" (M.teacherShort, 2026-11-15). */
   function describe(slot) {
     var c = slot.classId ? M.cls(slot.classId) : null, t = c ? M.user(c.teacherId) : null;
-    return { slot: slot, cls: c, subject: c ? c.subject : slot.subject, teacher: t ? t.name : slot.teacherName || "", room: staffView() ? slot.room || (c && c.room) || "" : "", group: c ? c.name : M.homeClassName(slot.level, slot.stream) };
+    return { slot: slot, cls: c, subject: c ? c.subject : slot.subject, teacher: M.teacherShort(t || slot.teacherName || ""), room: staffView() ? slot.room || (c && c.room) || "" : "", group: c ? c.name : M.homeClassName(slot.level, slot.stream) };
   }
   TT.forStudent = function (u, key) {
     var seen = {}, out = [];

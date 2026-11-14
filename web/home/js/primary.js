@@ -568,10 +568,10 @@
   }
 
   /* ------------------------------------------------------------------ View other classes
-     Every teacher and admin sees the school's classes, form by form, each with its class teacher and students; an admin
-     also sees a class's marks and syllabus. Nothing is changed here: a class's own teachers change its students, marks
-     and syllabus (1.6.2, ECS: admins used to switch to any class on Today, in the mark book and in reports). Admins make
-     and edit the classes here. */
+     Every teacher and admin sees the school's classes, form by form, each with its class teacher and students, and
+     (2026-11-15, every teacher, not only admins) its marks and syllabus, to look at only. Nothing is changed here: a
+     class's own teachers change its students, marks and syllabus (1.6.2, ECS: admins used to switch to any class on
+     Today, in the mark book and in reports). Admins make and edit the classes here. */
   A.route("t/others", function (p, q, me) {
     var all = homerooms(), levels = M.structure().levels.slice();
     all.forEach(function (c) { var L = c.level || "No form"; if (levels.indexOf(L) < 0) levels.push(L); });
@@ -601,12 +601,12 @@
   A.route("t/others/:id", function (p, q, me) {
     var c = M.cls(p.id);
     if (!c || !c.homeroom) return { redirect: "#/t/others" };
-    var t = M.user(c.teacherId), kids = P.pupils(c), conf = P.conf(), term = Number(q.term) || conf.term, v = me.isAdmin && /^(marks|syllabus)$/.test(q.v || "") ? q.v : "students";
+    var t = M.user(c.teacherId), kids = P.pupils(c), conf = P.conf(), term = Number(q.term) || conf.term, v = /^(marks|syllabus)$/.test(q.v || "") ? q.v : "students";
     var base = "#/t/others/" + c.id;
     var html = '<div class="row wrap spread mb"><div><h2 style="font-size:22px">' + esc(classLabel(c)) + '</h2><p class="muted">' + (t ? "Class teacher: " + esc(t.name) : "No class teacher yet") + " · " + kids.length + " student" + (kids.length === 1 ? "" : "s") + "</p></div>" +
       (me.isAdmin ? '<div class="row wrap"><button class="btn" data-act="pclass-edit-id" data-id="' + c.id + '">' + I("edit") + "Edit the class</button></div>" : "") + "</div>";
-    html += '<div class="callout mb">' + I("eye") + "<div>You can look: " + (c.teacherId === me.id ? "this is your class (change it in My class)." : "only " + esc(c.name) + "'s own teachers change its students, marks and syllabus.") + "</div></div>";
-    if (me.isAdmin) html += '<div class="pill-tabs">' + [["students", "Students"], ["marks", "Marks"], ["syllabus", "Syllabus"]].map(function (x) {
+    html += '<div class="callout mb">' + I("eye") + "<div><b>View only.</b> " + (c.teacherId === me.id ? "This is your class: change it in My class." : "Only " + esc(c.name) + "'s own teachers change its students, marks and syllabus.") + "</div></div>";
+    html += '<div class="pill-tabs">' + [["students", "Students"], ["marks", "Marks"], ["syllabus", "Syllabus"]].map(function (x) {
       return '<button class="' + (v === x[0] ? "on" : "") + '" data-act="goto" data-href="' + base + (x[0] === "students" ? "" : "?v=" + x[0] + "&term=" + term) + '">' + x[1] + "</button>";
     }).join("") + "</div>";
     if (v === "students") {
@@ -621,8 +621,10 @@
       var eot = function (u, a) { var r = S().get("reportmarks", "rm_" + conf.year + "_t" + term + "_" + c.id + "_" + slug(a) + "_" + u.id); return r && r.mark != null && Number(r.outOf) > 0 ? Math.round(Number(r.mark) / Number(r.outOf) * 100) : null; };
       html += '<div class="row wrap mb">' + termSel + "</div>";
       html += '<div class="card table-wrap mb"><div class="card-head">' + I("award") + "<h3>End of term marks · Term " + term + '</h3><span class="sub">%</span></div>' + (areas.length && kids.length ? '<table class="table pmb-grid"><thead><tr><th>Student</th>' +
-        areas.map(function (a) { return '<th class="num" title="' + esc(a) + '">' + esc(short(a)) + "</th>"; }).join("") + "</tr></thead><tbody>" + kids.map(function (u) {
-          return "<tr><td>" + esc(u.name) + "</td>" + areas.map(function (a) { var x = eot(u, a); return '<td class="num tnum">' + (x == null ? "—" : x) + "</td>"; }).join("") + "</tr>";
+        areas.map(function (a) { return '<th class="num" title="' + esc(a) + '">' + esc(short(a)) + "</th>"; }).join("") + '<th class="num">Average</th></tr></thead><tbody>' + kids.map(function (u) {
+          var got = [];
+          return "<tr><td>" + esc(u.name) + "</td>" + areas.map(function (a) { var x = eot(u, a); if (x != null) got.push(x); return '<td class="num tnum">' + (x == null ? "—" : x) + "</td>"; }).join("") +
+            '<td class="num tnum"><b>' + (got.length ? Math.round(A.avg(got)) : "—") + "</b></td></tr>";
         }).join("") + "</tbody></table>" : '<div class="card-body muted small">No end-of-term marks yet.</div>') + "</div>";
       html += '<div class="card"><div class="card-head">' + I("edit") + "<h3>Mark book work · Term " + term + "</h3></div>" + (sc.list.length ? sc.list.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; }).map(function (a) {
         var n = kids.filter(function (u) { var x = (a.marks || {})[u.id]; return x != null && x !== ""; }).length, by = M.user(a.createdBy);
@@ -1173,22 +1175,24 @@
     });
   }
   A.route("t/assessment/:id", function (p, q, me) {
-    // its teacher changes it (a subject they teach, in a class they teach); a leader may look
+    // its teacher changes it (a subject they teach, in a class they teach); every other teacher may look (2026-11-15:
+    // View other classes, to see how a class is doing)
     var a = S().get("assessments", p.id), c = a && M.cls(a.classId), edit = !!(a && c && P.mayMark(me, c.id, a.area));
-    if (!a || !c || !(edit || me.isAdmin || P.isLeader(me))) return { redirect: "#/t/markbook" };
+    if (!a || !c) return { redirect: "#/t/markbook" };
     var kids = P.pupils(c), marks = a.marks || {};
     var html = '<div class="card card-pad mb"><div class="row wrap top"><div class="grow"><h2 style="font-size:22px">' + esc(a.title) + '</h2><p class="muted">' + esc(a.area) + " · " + esc(a.kind) + " · " +
       esc(A.fmtDateLong(Date.parse(a.date + "T12:00:00"))) + " · out of <b>" + a.outOf + "</b> · " + esc(c.name) + "</p></div>" +
       (edit ? '<button class="btn" data-act="pas-edit" data-id="' + a.id + '">' + I("edit") + "Edit</button>" : "") + "</div>" +
       '<div class="row wrap mt" id="pas-sum"></div></div>' +
       '<div class="card"><div class="card-body small muted" style="border-bottom:1px solid var(--border)">' + (edit ? "Type each mark and press <b>Enter</b> to go to the next pupil. Marks save as you type; leave a box empty for a pupil who missed it."
-        : "You can look at these marks: only the teacher of " + esc(a.area) + " in " + esc(c.name) + " changes them.") + "</div>" +
+        : "<b>View only.</b> Only the teacher of " + esc(a.area) + " in " + esc(c.name) + " changes these marks.") + "</div>" +
       '<div class="pas-grid" id="pas-grid">' + kids.map(function (u, i) {
         var v = marks[u.id];
         return '<label class="pas-row"><span class="tnum muted small">' + (i + 1) + '</span><span class="grow">' + esc(u.name) + '</span><input class="input pas-in tnum" type="number" inputmode="numeric" min="0" max="' + a.outOf + '" step="0.5" data-pid="' + u.id + '" value="' + (v == null ? "" : esc(v)) + '"' + (edit ? "" : " disabled") + ' aria-label="Mark for ' + esc(u.name) + '"><span class="pas-pct tnum muted small"></span></label>';
       }).join("") + "</div></div>";
     return {
-      title: a.title, crumbs: [{ label: "Mark book", href: "#/t/markbook?c=" + c.id }, { label: a.title }], html: html,
+      title: a.title, html: html,
+      crumbs: edit ? [{ label: "Mark book", href: "#/t/markbook?c=" + c.id }, { label: a.title }] : [{ label: "View other classes", href: "#/t/others" }, { label: c.name, href: "#/t/others/" + c.id + "?v=marks&term=" + a.term }, { label: a.title }],
       mount: function (root) {
         var ins = Array.prototype.slice.call(root.querySelectorAll(".pas-in")), save = A.debounce(function () { commit(a.id); }, 400);
         var show = function () {
@@ -1223,7 +1227,7 @@
     if (!document.querySelector(".pas-in")) return;
     if (JSON.stringify(marks) !== JSON.stringify(a.marks || {})) S().put("assessments", Object.assign({}, a, { marks: marks }));
   }
-  A.act["pas-edit"] = function (el) { assessmentModal(S().get("assessments", el.getAttribute("data-id"))); };
+  A.act["pas-edit"] = function (el) { var a = S().get("assessments", el.getAttribute("data-id")); if (a && P.mayMark(M.me(), a.classId, a.area)) assessmentModal(a); };
 
   /* ------------------------------------------------------------------ Reports */
   function reportRec(pid, year, term) { return S().get("reports", "rep_" + pid + "_" + year + "_t" + term) || { id: "rep_" + pid + "_" + year + "_t" + term, pupilId: pid, year: String(year), term: Number(term) }; }
@@ -1548,8 +1552,10 @@
     var same = function (list) { return list.map(function (e) { return [e.s.area, teacherOf(e.s, e.c), e.s.room || "", e.c ? e.c.id : ""].join("|"); }).sort().join("#"); };
     var inner = function (list) {
       return list.map(function (e) {
-        var t = M.user(teacherOf(e.s, e.c)), other = e.c && t && t.id !== e.c.teacherId;
-        return '<div class="tt-lesson"><b>' + esc(e.s.area) + "</b><span>" + esc(o.mine ? classLabel(e.c) : other ? t.name : "") + (roomOf(e.s) ? (o.mine || other ? " · " : "") + esc(roomOf(e.s)) : "") + "</span></div>";
+        // (2026-11-15) every lesson the same: its subject, then its teacher as "Mrs Dube" (the class teacher's lessons
+        // had no name, and whole names ran over); the room on its own line, for staff
+        var who = o.mine ? classLabel(e.c) : M.teacherShort(M.user(teacherOf(e.s, e.c))), room = roomOf(e.s);
+        return '<div class="tt-lesson"><b>' + esc(e.s.area) + "</b>" + (who ? '<span class="tt-who">' + esc(who) + "</span>" : "") + (room ? '<span class="tt-room">' + esc(room) + "</span>" : "") + "</div>";
       }).join("");
     };
     var head = '<tr><th class="tt-corner">Day</th>' + cols.map(function (c) {
@@ -1588,7 +1594,7 @@
     return '<table class="tt tt-days"><colgroup><col class="tt-daycol">' + new Array(w(dayEnd - day0) + 1).join("<col>") + "</colgroup><thead>" + head + "</thead><tbody>" + body + "</tbody></table>";
   }
   function ttGrid(entries, o) {
-    return '<div class="table-wrap' + (o.edit ? "" : " tt-wide") + (o.fill ? " tt-fill" : "") + '">' + ttTable(entries, o) + "</div>" + (o.edit ? "" : ttList(entries, o));
+    return '<div class="table-wrap' + (o.edit ? "" : " tt-wide") + (o.fill ? " tt-fill" : "") + '" data-fit-same=".tt-box[data-fit]">' + ttTable(entries, o) + "</div>" + (o.edit ? "" : ttList(entries, o));
   }
   /** A week that fills the screen (a student's Timetable, 2026-11-10): its rows as tall as the window allows, down to
       near the bottom, and each lesson's words as much bigger as its box is. On a phone the list shows instead. */
@@ -1614,10 +1620,10 @@
       var list = entries.map(function (e) { var tm = e.s.day === i + 1 && slotTime(e.s); return tm ? { e: e, tm: tm } : null; }).filter(Boolean).sort(function (a, b) { return a.tm.start - b.tm.start; });
       if (!list.length) return "";
       return '<div class="tt-day' + (o.now && i + 1 === today ? " today" : "") + '"><h4>' + d + (o.now && i + 1 === today ? ' <span class="badge brand">Today</span>' : "") + "</h4>" + list.map(function (x) {
-        var e = x.e, t = M.user(teacherOf(e.s, e.c)), other = e.c && t && t.id !== e.c.teacherId;
+        var e = x.e, who = o.mine ? classLabel(e.c) : M.teacherShort(M.user(teacherOf(e.s, e.c)));
         var kind = x.tm.mins >= sd.period * 1.5 ? "Double period" : x.tm.mins <= sd.period * 0.6 ? "Half period" : "";
         return '<div class="tt-row"><div class="tt-time"><b>' + hhmm(x.tm.start) + "</b><span>" + hhmm(x.tm.start + x.tm.mins) + '</span></div><div class="grow"><b>' + esc(e.s.area) + "</b>" + (kind ? ' <span class="badge">' + kind + "</span>" : "") +
-          '<div class="small muted">' + esc([o.mine ? classLabel(e.c) : other ? t.name : "", roomOf(e.s)].filter(Boolean).join(" · ")) + "</div></div></div>";
+          '<div class="small muted">' + esc([who, roomOf(e.s)].filter(Boolean).join(" · ")) + "</div></div></div>";
       }).join("") + "</div>";
     }).join("") + "</div>";
   }
@@ -1832,7 +1838,7 @@
     "#print-root .tt-print tr.today th,#print-root .tt-print tr.today td{background:#fff;color:#111}";
   function ttPage(title, sub, entries, o) {
     var b = A.Theme.get();
-    return '<div class="tt-print"><header>' + A.Theme.logoHTML() + "<div><h1>" + esc(b.name) + '</h1><div class="sub">' + esc(title) + (sub ? " · " + esc(sub) : "") + "</div></div></header>" + ttTable(entries, o) + "</div>";
+    return '<div class="tt-print" data-fit-same=".tt-box[data-fit]"><header>' + A.Theme.logoHTML() + "<div><h1>" + esc(b.name) + '</h1><div class="sub">' + esc(title) + (sub ? " · " + esc(sub) : "") + "</div></div></header>" + ttTable(entries, o) + "</div>";
   }
   A.act["ptt-print"] = function (el) {
     var me = M.me(), scope = el.getAttribute("data-scope"), key = el.getAttribute("data-key") || null, label = key ? A.TT.keyLabel(key) : "", pages = [];
@@ -1891,7 +1897,7 @@
         if (state === "now") badge = '<span class="badge accent">Now</span>';
         else if (state === "later" && isToday && !next) { next = true; badge = '<span class="badge brand">Next</span>'; }
         return '<div class="tt-row' + (state === "done" ? " past" : state === "now" ? " now" : "") + '"><div class="tt-time"><b>' + hhmm(x.start) + "</b><span>" + hhmm(x.end) + "</span></div>" +
-          '<div class="grow"><div class="row wrap"><b>' + esc(x.s.area) + "</b>" + badge + '</div><div class="small muted">' + esc(t ? t.name : "") + "</div></div></div>"; // (no room: students hear it from the teacher)
+          '<div class="grow"><div class="row wrap"><b>' + esc(x.s.area) + "</b>" + badge + '</div><div class="small muted">' + esc(M.teacherShort(t)) + "</div></div></div>"; // (no room: students hear it from the teacher)
       }).join("");
     return '<div class="card"><div class="card-head">' + I("grid") + "<h3>" + (isToday ? "Today's timetable" : WEEKDAYS[wd - 1] + "'s timetable") + '</h3><span class="sub">' + esc(c.name) + "</span>" +
       '<span class="grow"></span><a class="btn btn-sm btn-ghost" href="#/s/timetable">Full week ' + I("right") + "</a></div>" + (rows || UI.empty("grid", "No lessons on this day")) + "</div>";

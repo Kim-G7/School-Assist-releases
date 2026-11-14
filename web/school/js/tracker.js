@@ -124,6 +124,8 @@
   var trackerHref = function (c, s) { return "#/t/tracker?c=" + c.id + "&s=" + encodeURIComponent(s); };
   /** May `me` plan and tick this class's subject? Only its teacher (they teach it there), an admin too; leaders may look. */
   function canEdit(me, c, s) { return P.mayMark(me, c.id, s); }
+  /** A change from the page: only by the class's teacher of the subject (a page looked at by another teacher is view only). */
+  var mayTick = function (el) { var c = M.cls(el.getAttribute("data-c")); return !!c && canEdit(M.me(), c, el.getAttribute("data-s")); };
   var mayAddSyllabus = function (me, subject) { return me.isAdmin || P.myAreas(me).indexOf(subject) >= 0; };
 
   /* ------------------------------------------------------------------ My subjects */
@@ -250,15 +252,15 @@
   A.route("t/tracker", function (p, q, me) {
     var c = q.c && M.cls(q.c), s = q.s, conf = P.conf();
     if (!c || !s) return { redirect: "#/t/subjects" };
+    // its teacher plans and ticks it; every other teacher may look (2026-11-15: from View other classes)
     var edit = canEdit(me, c, s);
-    if (!edit && !T.isLeader(me) && !me.isAdmin) return { redirect: "#/t/subjects" };
     var st = T.stats(c, s, conf), o = st.outline, back = edit ? { label: "My subjects", href: "#/t/subjects" } : { label: c.name, href: "#/t/others/" + c.id + "?v=syllabus" };
     var crumbs = [back, { label: s + " · " + c.name }];
     var head = '<div class="row wrap spread mb"><div><h2 style="font-size:22px">' + esc(s) + " · " + esc(P.classLabel(c)) + '</h2><p class="muted">' + (o ? esc(o.title || s + " syllabus") + " · " : "") + "Term " + conf.term + " " + esc(conf.year) +
       (st.cov && st.cov.teacherId && M.user(st.cov.teacherId) ? " · " + esc(M.user(st.cov.teacherId).name) : "") + "</p></div>" +
-      (o && mayAddSyllabus(me, s) ? '<button class="btn" data-act="trk-outline" data-id="' + o.id + '">' + I("book") + "Syllabus</button>" : "") + "</div>";
+      (o && (edit || me.isAdmin) && mayAddSyllabus(me, s) ? '<button class="btn" data-act="trk-outline" data-id="' + o.id + '">' + I("book") + "Syllabus</button>" : "") + "</div>";
     if (!o) return { title: s, crumbs: crumbs, html: head + '<div class="card">' + UI.empty("book", "No syllabus yet", "Add the " + s + " syllabus (its document, a PDF): its topics come from it, and then you choose which are for which term and tick them as you teach them.",
-      mayAddSyllabus(me, s) ? '<button class="btn btn-primary" data-act="trk-outline" data-subject="' + esc(s) + '" data-level="' + esc(c.level || "") + '">' + I("upload") + "Add the syllabus</button>" : "") + "</div>" };
+      (edit || me.isAdmin) && mayAddSyllabus(me, s) ? '<button class="btn btn-primary" data-act="trk-outline" data-subject="' + esc(s) + '" data-level="' + esc(c.level || "") + '">' + I("upload") + "Add the syllabus</button>" : "") + "</div>" };
     var cv = st.cov || {}, plan = cv.plan || {}, done = cv.done || {}, f = /^[123n]$/.test(q.t || "") ? q.t : "";
     var html = head;
     html += '<div class="grid g-4 mb">' + UI.stat("book", st.pct + "%", "Whole syllabus", false, st.done + " of " + st.total + " topics taught") +
@@ -284,20 +286,23 @@
         '<select class="select sm trk-term" data-change="trk-term" data-c="' + c.id + '" data-s="' + esc(s) + '" data-t="' + t.id + '" aria-label="Term for ' + esc(t.title) + '"' + dis + ">" +
         ['<option value="">No term</option>'].concat([1, 2, 3].map(function (n) { return '<option value="' + n + '"' + (Number(plan[t.id]) === n ? " selected" : "") + ">Term " + n + "</option>"; })).join("") + "</select></div>";
     }).join("") : UI.empty("book", "No topics here", f === "n" ? "Every topic has its term." : "Choose this term for some topics, from All topics.")) + "</div>";
-    if (!edit) html += '<p class="small muted mt">Only the teacher of ' + esc(s) + " in " + esc(c.name) + " and admins change this.</p>";
+    if (!edit) html = html.replace('<div class="grid g-4 mb">', '<div class="callout mb">' + I("eye") + "<div><b>View only.</b> Only the teacher of " + esc(s) + " in " + esc(c.name) + " plans and ticks its topics.</div></div>" + '<div class="grid g-4 mb">');
     return { title: s + " · " + c.name, crumbs: crumbs, html: html };
   }, { role: "teacher" });
   A.act["trk-done"] = function (el) {
+    if (!mayTick(el)) return;
     var t = el.getAttribute("data-t"), on = el.checked;
     putCov(el.getAttribute("data-c"), el.getAttribute("data-s"), function (r) { if (on) r.done[t] = A.now(); else delete r.done[t]; });
     A.render();
   };
   A.act["trk-term"] = function (el) {
+    if (!mayTick(el)) return;
     var t = el.getAttribute("data-t"), v = Number(el.value) || 0;
     putCov(el.getAttribute("data-c"), el.getAttribute("data-s"), function (r) { if (v) r.plan[t] = v; else delete r.plan[t]; });
     A.render();
   };
   A.act["trk-auto"] = function (el) {
+    if (!mayTick(el)) return;
     var cid = el.getAttribute("data-c"), s = el.getAttribute("data-s"), c = M.cls(cid), o = c && T.outlineFor(s, c.level), cv = T.cov(cid, s);
     if (!o) return;
     var go = function () {
@@ -308,6 +313,7 @@
     else go();
   };
   A.act["trk-copy"] = function (el) {
+    if (!mayTick(el)) return;
     var from = el.value, cid = el.getAttribute("data-c"), s = el.getAttribute("data-s"), src = from && T.cov(from, s), fc = from && M.cls(from);
     if (!src) return;
     UI.confirm("Use " + fc.name + "'s term plan for " + s + "? The terms chosen here are replaced (ticks stay).", { ok: "Use it" }).then(function (ok) {
