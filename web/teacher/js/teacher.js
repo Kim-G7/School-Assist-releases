@@ -70,10 +70,10 @@
       });
     });
 
-    var noNotes = M.topicsWithoutNotes ? M.topicsWithoutNotes(me) : 0;
-    var html = (A.nameNudge ? A.nameNudge(me) : "") + (A.pwRequestsHtml ? A.pwRequestsHtml(me) : "") + (A.recoveryNote ? A.recoveryNote() : "") + (A.subjectRequestsHtml ? A.subjectRequestsHtml(me, 5) : "") +
+    var noNotes = M.topicsWithoutNotes && !A.notesPrompt ? M.topicsWithoutNotes(me) : 0;
+    var html = (A.notesPrompt ? A.notesPrompt(me) : "") + (A.nameNudge ? A.nameNudge(me) : "") + (A.pwRequestsHtml ? A.pwRequestsHtml(me) : "") + (A.recoveryNote ? A.recoveryNote() : "") + (A.subjectRequestsHtml ? A.subjectRequestsHtml(me, 5) : "") +
       (noNotes ? '<div class="callout mb">' + I("cap") + '<div class="grow"><b>' + noNotes + " topic" + (noNotes === 1 ? "" : "s") + " in your subjects " + (noNotes === 1 ? "has" : "have") + " no notes for the tutor yet.</b> Add notes for each topic, or read a whole textbook and the tutor finds its pages.</div>" +
-        '<a class="btn btn-sm" href="#/t/tutor?f=missing">Tutor content ' + I("right") + "</a></div>" : "") +
+        '<a class="btn btn-sm" href="#/t/tutor?f=missing">Co-teacher ' + I("right") + "</a></div>" : "") +
       '<section class="hero"><h2>' + A.greeting() + ", " + esc(me.name) + "</h2><p>" + esc(A.fmtDateLong(A.now())) + " · " + esc((window.SCHOOL_CONFIG || {}).term || "") + " · you teach " + classes.length + " classes and " + studentIds.length + " students</p>" +
       '<div class="hero-actions">' +
       '<button class="btn btn-accent" data-act="quick-register">' + I("calendar") + "Take register</button>" +
@@ -351,12 +351,16 @@
     if (!studs.length) return '<div class="card">' + UI.empty("award", "No students in this class yet", "Add students to the class, then their marks go here.") + "</div>";
     // the end-of-term mark and comment for the report cards (js/reportcards.js), for the term chosen (now, by default)
     var R = A.Report, now = R.termNow(), et = { year: String((q && q.year) || now.year), term: Number(q && q.term) || now.term, classId: c.id, subject: c.subject };
-    var rc = A.edition !== "home"; // home study has no report cards
+    // (2026-11-15) the end-of-term mark is entered in the Mark book (with topic tests and mock tests), not here: the
+    // Gradebook is the class's work through the term, its tasks
+    var rc = A.edition !== "home" && !A.Primary; // home study has no report cards
     if (!rc) { var none = function () { return ""; }; R = { entryBar: none, datalist: none, entryHead: none, entryCells: none, entryFoot: none }; }
-    var html = '<div class="row spread wrap mb"><p class="muted small">Type a mark and press Tab to save it. Online tests fill in automatically (grey), and you can overwrite them.' + (rc ? ' At the end of term, fill in the <b>End of term</b> mark and a <b>Comment</b> for every student: they go on the report cards.' : "") + '</p><div class="row"><button class="btn btn-sm" data-act="new-task" data-class="' + c.id + '" data-kind="test">' + I("plus") + "Record a test</button><button class=\"btn btn-sm\" data-act=\"gb-csv\" data-class=\"" + c.id + '">' + I("download") + "Export CSV</button></div></div>" +
+    var html = '<div class="row spread wrap mb"><p class="muted small">The marks of the class\'s work: class work, quizzes, homework and assignments, one column a task. Type a mark and press Tab to save it. Online quizzes fill in automatically (grey), and you can overwrite them.' + (rc ? ' At the end of term, fill in the <b>End of term</b> mark and a <b>Comment</b> for every student: they go on the report cards.' : "") + "</p>" +
+      '<div class="row"><button class="btn btn-sm" data-act="new-task" data-class="' + c.id + '" data-kind="classwork">' + I("plus") + "Class work</button><button class=\"btn btn-sm\" data-act=\"gb-csv\" data-class=\"" + c.id + '">' + I("download") + "Export CSV</button></div></div>" +
+      (A.Primary ? '<div class="callout mb">' + I("award") + '<div class="grow">Topic tests, mock tests and the end-of-term test are recorded in the <b>Mark book</b>.</div><a class="btn btn-sm" href="#/t/markbook">Mark book ' + I("right") + "</a></div>" : "") +
       R.entryBar(et, "#/t/class/" + c.id + "/gradebook?term={t}&year=" + et.year) + R.datalist() +
       '<div class="card table-wrap"><table class="table"><thead><tr><th class="sticky">Student</th>' +
-      tasks.map(function (t) { return '<th class="num" data-tip="' + esc(t.title + " · " + M.KINDS[t.kind].label + " · due " + A.fmtDate(t.dueAt)) + '"><a href="#/t/task/' + t.id + '">' + esc(t.title.length > 16 ? t.title.slice(0, 15) + "…" : t.title) + '</a><div class="tiny">/ ' + t.maxMarks + "</div></th>"; }).join("") +
+      tasks.map(function (t) { var k = (M.KINDS[t.kind] || M.KINDS.homework).label; return '<th class="num" data-tip="' + esc(t.title + " · " + k + " · due " + A.fmtDate(t.dueAt)) + '"><a href="#/t/task/' + t.id + '">' + esc(t.title.length > 16 ? t.title.slice(0, 15) + "…" : t.title) + '</a><div class="tiny">' + esc(k) + " · / " + t.maxMarks + "</div></th>"; }).join("") +
       '<th class="num">Average</th>' + R.entryHead(et) + "</tr></thead><tbody>" +
       studs.map(function (u) {
         var pcts = [];
@@ -375,7 +379,7 @@
         var sc = M.assignees(t).map(function (u) { var e = M.effectiveScore(t, u.id); return e ? (e.score / t.maxMarks) * 100 : null; }).filter(function (x) { return x != null; });
         return '<td class="num">' + UI.scoreBadge(sc.length ? Math.round(A.avg(sc)) : null) + "</td>";
       }).join("") + "<td></td>" + R.entryFoot(et) + "</tr></tbody></table></div>" +
-      (tasks.length ? "" : '<p class="muted small mt">Tasks with a mark total (tests, homework) appear here as columns too.</p>');
+      (tasks.length ? "" : '<p class="muted small mt">Tasks with a mark total (class work, quizzes, homework, assignments) appear here as columns.</p>');
     return html;
   };
   A.act["gb-score"] = function (el) {
@@ -420,20 +424,21 @@
 
   /* ---- library */
   CLASS_TABS.library = function (c) {
-    var mats = M.libraryList(S().filter("materials", function (m) { return m.classId === c.id || (!m.classId && m.syllabusId === c.syllabusId); })).sort(function (a, b) { return b.createdAt - a.createdAt; });
-    return '<div class="row spread wrap mb"><p class="muted small">PDFs, textbooks, past papers, videos and audio are stored inside the app, so students never leave it and can use them offline. You choose who can see each one.</p><button class="btn btn-primary" data-act="add-material" data-class="' + c.id + '">' + I("upload") + "Add material</button></div>" +
-      '<div class="card">' + (mats.length ? mats.map(function (m) { return A.materialRow(m, { teacher: true }); }).join("") : UI.empty("library", "No materials yet", "Upload PDFs, textbooks, videos or write a handout.")) + "</div>";
+    var mats = M.libraryList(S().filter("materials", function (m) { return (m.classId === c.id || (!m.classId && m.syllabusId === c.syllabusId)) && !M.isTopicNotes(m); })).sort(function (a, b) { return b.createdAt - a.createdAt; });
+    return '<div class="row spread wrap mb"><p class="muted small">Textbooks, past papers, videos and audio are stored inside the app, so students never leave it and can use them offline. You choose who can see each one.</p><button class="btn btn-primary" data-act="add-material" data-class="' + c.id + '">' + I("upload") + "Add material</button></div>" + toCoTeacher +
+      '<div class="card">' + (mats.length ? mats.map(function (m) { return A.materialRow(m, { teacher: true }); }).join("") : UI.empty("library", "No materials yet", "Upload textbooks, past papers or videos, or write a handout.")) + "</div>";
   };
 
   /* ---- syllabus: terms, who may open which topic, and coverage */
   CLASS_TABS.syllabus = function (c) {
     var syl = M.syllabus(c.syllabusId);
     if (!syl) return '<div class="card">' + UI.empty("layers", "No syllabus linked", "Edit the class to choose a syllabus.") + "</div>";
-    var studs = M.studentsOf(c), terms = M.syllabusTerms(syl), cur = c.currentTerm || 1, progress = {};
+    // the terms are its form's scheme of work (Schemes & records) once planned there, else the syllabus's (js/model.js)
+    var studs = M.studentsOf(c), terms = M.syllabusTerms(syl, c), cur = c.currentTerm || 1, progress = {};
     studs.forEach(function (u) { progress[u.id] = M.syllabusProgress(u.id, syl); });
 
-    var html = '<div class="card card-pad mb"><div class="row wrap top"><div class="grow"><h3 style="font-size:16px">Term content</h3><p class="small muted mt-sm">Students can open the topics of the term you have opened. Earlier terms stay open for revision, and their unfinished topics appear at the top of each student\'s Study page.</p></div>' +
-      '<div class="seg" role="group" aria-label="Open term">' + terms.map(function (n) {
+    var html = '<div class="card card-pad mb"><div class="row wrap top"><div class="grow"><h3 style="font-size:16px">Term content</h3><p class="small muted mt-sm">Each topic\'s term is the one it has in the scheme of work (Schemes & records), once planned there. Students can open the topics of the term you have opened. Earlier terms stay open for revision, and their unfinished topics appear at the top of each student\'s Study page.</p></div>' +
+      '<div class="seg" role="group" aria-label="Open term">' + [1, 2, 3].concat(terms.filter(function (n) { return n > 3; })).map(function (n) { // (every term can be opened, planned or not)
         return '<button class="' + (n === cur ? "on" : "") + '" data-act="open-term" data-class="' + c.id + '" data-term="' + n + '">' + (n <= cur ? I("unlock") : I("lock")) + esc(M.termName(n)) + "</button>";
       }).join("") + "</div></div>" +
       '<div class="divider"></div><label class="row top small" style="gap:12px;cursor:pointer"><span class="toggle"><input type="checkbox" ' + (c.sequential ? "checked" : "") + ' data-change="class-sequential" data-class="' + c.id + '" aria-label="Topics in order"><span></span></span>' +
@@ -442,34 +447,32 @@
 
     // read-only review of earlier terms
     for (var n = 1; n < cur; n++) {
-      if (!syl.topics.some(function (t) { return M.topicTerm(t) === n; })) continue;
+      if (!syl.topics.some(function (t) { return M.topicTerm(t, c) === n; })) continue;
       var rows = studs.map(function (u) { return { u: u, r: M.termReview(u.id, syl, n) }; });
       var behind = rows.filter(function (x) { return x.r.unfinished.length; });
       var avg = Math.round(A.avg(rows.map(function (x) { return x.r.pct; })) || 0);
       html += '<div class="card mb review-card"><div class="card-head">' + I("eye") + "<h3>" + esc(M.termName(n)) + ' review</h3><span class="sub">summary only</span><span class="grow"></span><span class="badge ' + (behind.length ? "warn" : "good") + '">' + (studs.length - behind.length) + " of " + studs.length + " finished every topic</span></div>" +
         '<div class="card-body"><div class="row wrap top" style="gap:22px">' + UI.ring(avg, { size: 84, stroke: 9, sub: "covered", label: M.termName(n) + " covered" }) +
-        '<div class="grow">' + (behind.length ? '<div class="label">Still unfinished</div>' + behind.slice(0, 8).map(function (x) {
-          return '<div class="row wrap small" style="margin:6px 0">' + A.avatar(x.u, "sm") + '<a href="#/t/student/' + x.u.id + "/" + c.id + '"><b>' + esc(x.u.name) + "</b></a>" + x.r.unfinished.map(function (t) { return '<span class="badge">' + esc(t.title) + "</span>"; }).join("") + "</div>";
-        }).join("") + (behind.length > 8 ? '<p class="tiny muted">and ' + (behind.length - 8) + " more</p>" : "") : '<p class="small">Everyone finished ' + esc(M.termName(n)) + ". Well done.</p>") + "</div></div></div></div>";
+        '<div class="grow">' + (behind.length ? '<div class="label">Still unfinished · tap a student for their topics</div><div class="gap-list">' + behind.map(function (x) {
+          return '<button type="button" class="gap-row" data-act="syl-gaps" data-sid="' + x.u.id + '" data-syl="' + syl.id + '" data-term="' + n + '">' + A.avatar(x.u, "sm") + '<span class="grow">' + esc(x.u.name) + "</span>" +
+            '<span class="badge warn">' + x.r.unfinished.length + " of " + x.r.total + " topics left</span>" + I("right") + "</button>";
+        }).join("") + "</div>" : '<p class="small">Everyone finished ' + esc(M.termName(n)) + ". Well done.</p>") + "</div></div></div></div>";
     }
 
     terms.forEach(function (n) {
-      var topics = syl.topics.filter(function (t) { return M.topicTerm(t) === n; });
-      html += '<div class="section-title"><h2>' + esc(M.termName(n)) + '</h2><span class="sub">' + (n < cur ? "Earlier term · open for revision" : n === cur ? "Current term" : "Not opened yet") + "</span></div>" +
+      var topics = syl.topics.filter(function (t) { return M.topicTerm(t, c) === n; });
+      html += '<div class="section-title"><h2>' + esc(M.termName(n)) + '</h2><span class="sub">' + (!n ? "No term in the scheme of work yet: locked until it has one (Schemes & records)" : n < cur ? "Earlier term · open for revision" : n === cur ? "Current term" : "Not opened yet") + "</span></div>" +
         '<div class="card">' + topics.map(function (t) { return topicAccessRow(c, syl, t, studs, progress); }).join("") + "</div>";
     });
 
-    html += '<div class="card mt"><div class="card-head"><h3>Who has covered what</h3><span class="sub">columns are topic numbers</span><span class="grow"></span><div class="legend"><span><i class="st-done"></i>Completed</span><span><i class="st-prog"></i>In progress</span><span><i class="st-none"></i>Not started</span><span><i class="st-lock" style="border:1px dashed var(--border-strong)"></i>Locked for them</span></div></div>' +
-      '<div class="card-body table-wrap"><table class="heat"><thead><tr><th></th>' + syl.topics.map(function (t, i) { return '<th style="text-align:center" data-tip="Topic ' + (i + 1) + ": " + esc(t.title) + " (" + esc(M.termName(M.topicTerm(t))) + ')">' + (i + 1) + "</th>"; }).join("") + '<th style="padding-left:8px">Done</th></tr></thead><tbody>' +
-      studs.map(function (u) {
-        var pr = progress[u.id];
-        return '<tr><th><a href="#/t/student/' + u.id + "/" + c.id + '">' + esc(u.name) + "</a></th>" + syl.topics.map(function (t) {
-          var x = pr.byTopic[t.id], acc = M.topicAccess(u.id, c, syl, t), locked = !acc.open && x.state !== "done";
-          var cls = locked ? "st-lock" : x.state === "done" ? "st-done" : x.state === "prog" ? "st-prog" : "st-none";
-          var tipTxt = u.name + " · " + t.title + ": " + (locked ? M.lockText(acc).replace("for you ", "") : x.state === "done" ? "completed" : x.state === "prog" ? "in progress" : "not started") + (x.rec && x.rec.practiceBest != null ? " · best practice " + x.rec.practiceBest + "%" : "");
-          return '<td class="cell ' + cls + '" data-tip="' + esc(tipTxt) + '">' + (x.state === "done" ? "✓" : locked ? I("lock") : x.state === "prog" ? "•" : "") + "</td>";
-        }).join("") + '<td class="small bold tnum" style="padding-left:8px">' + pr.pct + "%</td></tr>";
-      }).join("") + "</tbody></table></div></div>";
+    html += '<div class="card mt"><div class="card-head">' + I("users") + '<h3>Each student</h3><span class="sub">topics done, from the tutor, quick checks and tests; a passed end-of-term test finishes its term</span></div>' +
+      (studs.length ? '<div class="gap-list card-pad">' + studs.map(function (u) {
+        var pr = progress[u.id], left = pr.total - pr.done, fin = Object.keys(pr.terms || {}).filter(function (k) { return pr.terms[k].done; }).sort();
+        return '<button type="button" class="gap-row" data-act="syl-gaps" data-sid="' + u.id + '" data-syl="' + syl.id + '">' + A.avatar(u, "sm") + '<span class="grow"><span class="title">' + esc(u.name) + "</span>" +
+          '<span class="gap-bar">' + UI.bar(pr.pct, pr.pct >= 100 ? "good" : "") + "</span></span>" +
+          fin.map(function (k) { return '<span class="badge good">' + I("check") + "Term " + k + "</span>"; }).join("") +
+          '<span class="tnum small bold">' + pr.pct + "%</span>" + (left ? '<span class="badge warn">' + left + " left</span>" : '<span class="badge good">All done</span>') + I("right") + "</button>";
+      }).join("") + "</div>" : '<div class="card-pad">' + UI.empty("users", "No students yet", "") + "</div>") + "</div>";
     return html;
   };
   function topicAccessRow(c, syl, t, studs, progress) {
@@ -486,7 +489,7 @@
       '<span class="toggle" data-tip="' + (set.open ? "Open for the class" : "Locked for the class") + '"><input type="checkbox" ' + (set.open ? "checked" : "") + ' data-change="topic-toggle" data-class="' + c.id + '" data-topic="' + t.id + '" aria-label="' + esc(t.title) + ' open for the class"><span></span></span></div>';
   }
   function saveOverride(c, t, mode, except) {
-    var access = Object.assign({}, c.topicAccess || {}), deflt = M.topicTerm(t) <= (c.currentTerm || 1) ? "open" : "locked";
+    var tn = M.topicTerm(t, c), access = Object.assign({}, c.topicAccess || {}), deflt = tn > 0 && tn <= (c.currentTerm || 1) ? "open" : "locked";
     if (mode === deflt && !except.length) delete access[t.id];
     else access[t.id] = { mode: mode, except: except };
     S().patch("classes", c.id, { topicAccess: access });
@@ -501,7 +504,7 @@
   A.act["topic-access"] = function (el) {
     var c = M.cls(el.getAttribute("data-class")), syl = M.syllabus(c.syllabusId), t = M.topic(syl, el.getAttribute("data-topic")), set = M.topicClassSetting(c, t);
     UI.modal({
-      title: t.title, sub: esc(M.className(c)) + " · " + esc(M.termName(M.topicTerm(t))), size: "wide",
+      title: t.title, sub: esc(M.className(c)) + " · " + esc(M.termName(M.topicTerm(t, c))), size: "wide",
       body: '<span class="label">For the class</span><div class="seg" id="acc-mode"><button type="button" data-m="open" class="' + (set.open ? "on" : "") + '">' + I("unlock") + 'Open</button><button type="button" data-m="locked" class="' + (set.open ? "" : "on") + '">' + I("lock") + "Locked</button></div>" +
         '<div class="label mt" id="acc-label"></div><div id="acc-picker">' + UI.picker({ students: M.studentsOf(c), selected: set.except }) + "</div>",
       foot: [{ label: "Cancel" }, {
@@ -574,7 +577,8 @@
       '<button class="btn btn-danger" data-act="del-task" data-id="' + t.id + '">' + I("trash") + "Delete</button></div></div>" +
       '<div class="grid" style="align-content:start">' + UI.stat("check", n.received + " / " + n.total, "Received") + UI.stat("upload", n.submitted + " / " + n.total, t.kind === "test" ? "Completed" : "Submitted") + UI.stat("award", n.graded + " / " + n.total, "Graded", true) + "</div></div>";
 
-    html += '<div class="section-title"><h2>Students</h2><span class="sub">Type a mark and feedback. Everything saves as you go.</span></div>' +
+    html += '<div class="section-title"><h2>Students</h2><span class="sub">' + (t.maxMarks ? "Feedback saves as you go. The marks are entered in the Gradebook." : "Feedback saves as you go.") + "</span>" +
+      (t.maxMarks ? '<span class="grow"></span><a class="btn btn-sm" href="#/t/class/' + c.id + '/gradebook">' + I("award") + "Marks in the Gradebook</a>" : "") + "</div>" +
       '<div class="card table-wrap"><table class="table"><thead><tr><th>Student</th><th>Received</th><th>' + (t.kind === "test" ? "Completed" : "Submitted") + "</th><th>Work</th>" + (t.maxMarks ? '<th class="num">Mark / ' + t.maxMarks + "</th>" : "") + "<th>Feedback</th></tr></thead><tbody>" +
       who.map(function (u) {
         var s = M.submission(t.id, u.id) || {}, mk = M.mark(t.id, u.id) || {}, eff = M.effectiveScore(t, u.id);
@@ -585,7 +589,7 @@
           "<td>" + (s.receivedAt ? '<span class="badge good" data-tip="' + A.fmtDateTime(s.receivedAt) + '">' + I("check") + A.relTime(s.receivedAt) + "</span>" : '<span class="badge">Not yet</span>') + "</td>" +
           "<td>" + (s.submittedAt ? '<span class="badge brand" data-tip="' + A.fmtDateTime(s.submittedAt) + '">' + (s.confirmedBook ? I("check") + "Book handed in · " : "") + A.relTime(s.submittedAt) + "</span>" + (t.dueAt && s.submittedAt > t.dueAt ? ' <span class="badge bad">Late</span>' : "") : M.canSubmit(t) && t.dueAt && A.now() > t.dueAt ? '<span class="badge bad">Not submitted</span>' : '<span class="muted small">—</span>') + "</td>" +
           "<td>" + work + "</td>" +
-          (t.maxMarks ? '<td class="num"><input class="cell" inputmode="decimal" value="' + (mk.score != null ? mk.score : "") + '" placeholder="' + (eff && eff.source === "auto" ? eff.score : "") + '" data-change="gb-score" data-task="' + t.id + '" data-sid="' + u.id + '" data-max="' + t.maxMarks + '" aria-label="Mark for ' + esc(u.name) + '"></td>' : "") +
+          (t.maxMarks ? '<td class="num tnum">' + (eff ? esc(String(eff.score)) + (eff.source === "auto" ? ' <span class="tiny muted">auto</span>' : "") : '<span class="muted">—</span>') + "</td>" : "") +
           '<td><input class="input sm" style="min-width:200px" value="' + esc(mk.feedback || "") + '" placeholder="Feedback for ' + esc(A.firstName(u.name)) + '" data-change="mark-feedback" data-task="' + t.id + '" data-sid="' + u.id + '"></td></tr>';
       }).join("") + "</tbody></table></div>";
     return { title: t.title, crumbs: [{ label: "My classes", href: "#/t/classes" }, { label: M.className(c), href: "#/t/class/" + c.id + "/tasks" }, { label: "Task" }], html: html };
@@ -682,8 +686,10 @@
   /* Learning materials: sections (textbooks, notes, exam papers), a subject, and a search that
      looks in the section you are in (or everything). Items are grouped by subject so the page
      stays short even with hundreds of past papers. */
-  var MAT_SECTIONS = [["all", "Everything", "library"], ["books", "Textbooks", "book"], ["notes", "Notes", "file"], ["papers", "Exam papers", "award"]];
-  function matSection(m) { return M.isExamItem(m) ? "papers" : M.matCategory(m) === "book" ? "books" : "notes"; }
+  // (2026-11-15) notes left Learning materials for Co-teacher, where each topic has its own; the rest stays here
+  var MAT_SECTIONS = [["all", "Everything", "library"], ["books", "Textbooks", "book"], ["papers", "Exam papers", "award"], ["other", "Other", "file"]];
+  function matSection(m) { return M.isExamItem(m) ? "papers" : M.matCategory(m) === "book" || m.kind === "textbook" ? "books" : "other"; }
+  var toCoTeacher = '<div class="callout mb">' + I("cap") + '<div class="grow">Notes for each topic are in <b>Co-teacher</b>, in the syllabus\'s order, where the students\' tutor takes them from.</div><a class="btn btn-sm" href="#/t/tutor">Co-teacher ' + I("right") + "</a></div>";
   /** "May/June 2025" from an exam item's sort key (2025.2), or the start of its title. */
   function sessionName(m) {
     var k = Number(m.sortKey), y = Math.floor(k), n = Math.round((k - y) * 10);
@@ -695,7 +701,7 @@
     var sec = MAT_SECTIONS.some(function (x) { return x[0] === q.t; }) ? q.t : "all", subj = q.s || "";
     // a marking scheme opens from its paper's row, so it doesn't get a row of its own
     var mine = M.libraryList(S().filter("materials", function (m) { return cids.indexOf(m.classId) >= 0 || (!m.classId && sids.indexOf(m.syllabusId) >= 0); }))
-      .filter(function (m) { return !(m.kind === "markscheme" && m.paperId && S().get("materials", m.paperId)); });
+      .filter(function (m) { return !(m.kind === "markscheme" && m.paperId && S().get("materials", m.paperId)) && !M.isTopicNotes(m); });
     var sylOf = function (m) { var c = M.cls(m.classId); return m.syllabusId || (c && c.syllabusId) || ""; };
     var inSubj = mine.filter(function (m) { return !subj || sylOf(m) === subj; });
     var count = {}; inSubj.forEach(function (m) { count[matSection(m)] = (count[matSection(m)] || 0) + 1; });
@@ -703,8 +709,8 @@
     var link = function (t, s) { var parts = []; if (t && t !== "all") parts.push("t=" + t); if (s) parts.push("s=" + encodeURIComponent(s)); return "#/t/materials" + (parts.length ? "?" + parts.join("&") : ""); };
     var subjects = sids.filter(function (id, i) { return id && sids.indexOf(id) === i; }).map(M.syllabus).filter(Boolean).sort(function (a, b) { return a.subject.localeCompare(b.subject); });
 
-    var html = '<div class="row spread wrap mb"><p class="muted" style="max-width:640px">Textbooks, notes and exam papers live inside the app. Choose a section and a subject, or search. Notes are also read for the tutor.</p>' +
-      '<button class="btn btn-primary" data-act="add-material">' + I("upload") + "Add material</button></div>" + A.subjectScopeBar(me) +
+    var html = '<div class="row spread wrap mb"><p class="muted" style="max-width:640px">Textbooks, exam papers and other files live inside the app. Choose a section and a subject, or search.</p>' +
+      '<button class="btn btn-primary" data-act="add-material">' + I("upload") + "Add material</button></div>" + toCoTeacher + A.subjectScopeBar(me) +
       '<div class="pill-tabs mat-tabs">' + MAT_SECTIONS.map(function (x) {
         var n = x[0] === "all" ? inSubj.length : count[x[0]] || 0;
         return '<button class="' + (sec === x[0] ? "on" : "") + '" data-act="goto" data-href="' + link(x[0], subj) + '">' + I(x[2]) + esc(x[1]) + ' <span class="muted">' + n + "</span></button>";
@@ -733,7 +739,7 @@
           return head + A.materialRow(m, { teacher: true }).replace('<div class="list-row click"', '<div class="list-row click" data-find="' + esc(find) + '"');
         }).join("") + "</details>";
     }).join("") + '<div class="card hidden" id="mat-none">' + UI.empty("search", "Nothing matches", "Try another word, or search everything.") + "</div>"
-      : '<div class="card">' + UI.empty("library", "Nothing here yet", sec === "papers" ? "Add exam papers with Add material." : "Add textbooks and notes with Add material.") + "</div>";
+      : '<div class="card">' + UI.empty("library", "Nothing here yet", sec === "papers" ? "Add exam papers with Add material." : "Add textbooks, worksheets and other files with Add material.") + "</div>";
     return { title: "Learning materials", html: html };
   }, { role: "teacher" });
   A.act["mat-subject"] = function (el) {
@@ -1008,7 +1014,7 @@
           el.querySelector("#task-mats").innerHTML = mats.length ? mats.map(function (m) { return '<label class="check"><input type="checkbox" value="' + m.id + '"' + ((t.materialIds || []).indexOf(m.id) >= 0 ? " checked" : "") + ">" + I((M.MAT_KINDS[m.kind] || {}).icon) + esc(m.title) + "</label>"; }).join("") : '<p class="muted small" style="padding:8px 0">No materials in this class library yet.</p>';
           el.querySelector("#task-test").classList.toggle("hidden", kind !== "test");
           el.querySelector("#task-pres-hint").classList.toggle("hidden", kind !== "presentation");
-          el.querySelector("#task-kind-hint").textContent = M.canSubmit({ kind: kind }) ? "Students tick “done and book handed in”. You are told when everyone has submitted, and 5 minutes before it is due." : kind === "presentation" ? "Presentations are marked by you after the student presents." : "Written tests: record the marks in the gradebook.";
+          el.querySelector("#task-kind-hint").textContent = M.canSubmit({ kind: kind }) ? "Students tick “done and book handed in”. You are told when everyone has submitted, and 5 minutes before it is due. Its marks go in the Gradebook." : kind === "presentation" ? "Presentations are marked by you after the student presents, in the Gradebook." : kind === "classwork" ? "Work done in class: its marks go in the Gradebook." : "A quiz in class, or online and marked by itself: its marks go in the Gradebook. Topic tests, mock tests and the end-of-term test go in the Mark book.";
           var pSel = el.querySelector("#task-paper");
           pSel.innerHTML = '<option value="">Build from topics…</option>' + (syl && syl.papers ? syl.papers.map(function (pp) { return '<option value="' + pp.id + '"' + (t.test && t.test.paperId === pp.id ? " selected" : "") + ">" + esc(pp.title) + " (" + pp.durationMin + " min)</option>"; }).join("") : "");
           var tids = (t.test && t.test.topicIds) || [];

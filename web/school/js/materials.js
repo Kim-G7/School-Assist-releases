@@ -28,6 +28,10 @@
 
   /** What a library item is for. Students filter the library by these, and by tags. */
   M.MAT_CATS = { book: "Books", notes: "Notes", summary: "Summary notes", flashcards: "Flashcards", revision: "Revision", worksheet: "Worksheets", other: "Other" };
+  /** Notes for a topic (notes, summaries, flashcards, revision) are added and kept in Co-teacher (js/tutoradmin.js), topic by
+      topic; Learning materials has the rest (2026-11-15). */
+  M.isTopicNotes = function (m) { return !!m && !M.isExamItem(m) && ["notes", "summary", "flashcards", "revision"].indexOf(M.matCategory(m)) >= 0 && m.kind !== "textbook"; };
+  A.LIBRARY_CATS = ["book", "worksheet", "other"];
   /** What the tutor can teach from: PDFs of notes, summaries, flashcards, revision, worksheets and textbooks. */
   M.tutorable = function (m) {
     return !M.isExamItem(m) && /pdf/i.test(m.fileType || m.fileName || "") && ["notes", "summary", "flashcards", "revision", "worksheet", "book", "other"].indexOf(M.matCategory(m)) >= 0;
@@ -39,7 +43,7 @@
     return A.NoteScan.forMaterial(mat, opts).then(function (scan) {
       var now = S().get("materials", mat.id) || mat, n = Object.keys(now.topicPages || {}).length;
       if (!quiet) UI.toast("The tutor found " + n + " topic" + (n === 1 ? "" : "s") + " in its " + scan.pages + " page" + (scan.pages === 1 ? "" : "s") +
-        (scan.cards.length ? " and made " + scan.cards.length + " flashcard" + (scan.cards.length === 1 ? "" : "s") : "") + ". Check its pages in Tutor content.");
+        (scan.cards.length ? " and made " + scan.cards.length + " flashcard" + (scan.cards.length === 1 ? "" : "s") : "") + ". Check its pages in Co-teacher.");
       A.render();
       return scan;
     }).catch(function (e) { if (!quiet) UI.toast("Couldn't read it for the tutor: " + (e.message || e), "bad"); return null; });
@@ -216,7 +220,8 @@
   };
 
   /* ------------------------------------------------------------ add modal
-     opts: { classId?, syllabusId?, kind?, category?, topicId?, title?, intro? } */
+     opts: { classId?, syllabusId?, kind?, category?, topicId?, title?, intro?, kinds?: the kinds offered, cats?: the kinds of
+     material offered, tutor?: notes for Co-teacher (a written handout is "Short notes" there) } */
   A.materialModal = function (opts) {
     opts = opts || {};
     if (opts.kind === "pastpaper" || opts.kind === "markscheme") return A.examBatchModal({ mode: opts.kind === "markscheme" ? "schemes" : "papers", classId: opts.classId, syllabusId: opts.syllabusId });
@@ -227,15 +232,17 @@
     var dest = opts.classId ? "c:" + opts.classId : opts.syllabusId ? "s:" + opts.syllabusId : classes[0] ? "c:" + classes[0].id : "";
     var destOptions = classes.map(function (c) { return '<option value="c:' + c.id + '"' + (dest === "c:" + c.id ? " selected" : "") + ">" + esc(M.className(c)) + "</option>"; }).join("") +
       Object.keys(syllabi).map(function (id) { return '<option value="s:' + id + '"' + (dest === "s:" + id ? " selected" : "") + ">Everyone studying " + esc(M.syllabusTitle(syllabi[id])) + "</option>"; }).join("");
-    var kind0 = opts.kind && M.MAT_KINDS[opts.kind] && opts.kind !== "link" ? opts.kind : "pdf";
-    var kinds = ["pdf", "textbook", "video", "audio", "image", "note"];
+    var kinds = opts.kinds || ["pdf", "textbook", "video", "audio", "image", "note"];
+    var kind0 = opts.kind && M.MAT_KINDS[opts.kind] && kinds.indexOf(opts.kind) >= 0 ? opts.kind : kinds[0];
+    var kindLabel = function (k) { return opts.tutor && k === "note" ? "Short notes" : M.MAT_KINDS[k].label; };
+    var cats = (opts.cats || Object.keys(M.MAT_CATS)).filter(function (c) { return M.MAT_CATS[c]; });
     var body =
       '<input type="hidden" name="kind" value="' + kind0 + '">' +
-      '<div class="seg" id="mat-kind">' + kinds.map(function (k) { return '<button type="button" data-k="' + k + '" class="' + (kind0 === k ? "on" : "") + '">' + I(M.MAT_KINDS[k].icon) + esc(M.MAT_KINDS[k].label) + "</button>"; }).join("") + "</div>" +
+      '<div class="seg" id="mat-kind">' + kinds.map(function (k) { return '<button type="button" data-k="' + k + '" class="' + (kind0 === k ? "on" : "") + '">' + I(M.MAT_KINDS[k].icon) + esc(kindLabel(k)) + "</button>"; }).join("") + "</div>" +
       '<div class="form-grid mt">' +
       '<label class="field full"><span>Title</span><input class="input" name="title" required placeholder="e.g. Chapter 4 notes: Indices"></label>' +
       '<label class="field" data-hide="note"><span>Author / source <span class="muted">(optional)</span></span><input class="input" name="author" placeholder="e.g. School Maths Dept"></label>' +
-      '<label class="field"><span>Kind of material</span><select class="select" name="category">' + Object.keys(M.MAT_CATS).map(function (c) { return '<option value="' + c + '"' + (c === (opts.category || "notes") ? " selected" : "") + ">" + esc(M.MAT_CATS[c]) + "</option>"; }).join("") + "</select></label>" +
+      '<label class="field" data-hide="note"><span>Kind of material</span><select class="select" name="category">' + cats.map(function (c) { return '<option value="' + c + '"' + (c === (opts.category || cats[0]) ? " selected" : "") + ">" + esc(M.MAT_CATS[c]) + "</option>"; }).join("") + "</select></label>" +
       '<label class="field"><span>Tags <span class="muted">(optional, separated by commas)</span></span><input class="input" name="tags" placeholder="e.g. revision, formulas"><span class="hint tag-ideas">' + M.TAG_IDEAS.map(function (t) { return '<button type="button" class="tag tag-btn" data-tag="' + esc(t) + '">+ ' + esc(t) + "</button>"; }).join("") + "</span></label>" +
       '<label class="field"><span>Share with</span><select class="select" name="dest">' + destOptions + "</select></label>" +
       '<label class="field"><span>Topic <span class="muted">(optional)</span></span><select class="select" name="topicId"></select></label>' +
@@ -247,7 +254,7 @@
       '<div class="row mt-sm"><input class="input grow" name="fetchUrl" placeholder="https://…/file.pdf"><button type="button" class="btn" id="mat-fetch">' + I("download") + "Download</button></div>" +
       '<p class="tiny muted mt-sm">The file is copied into the library, so students open it here, not on the website. Some websites block this. If so, download the file in your browser first and then choose it above.</p></details>' +
       '<label class="check mt"><input type="checkbox" name="offline" checked><span><b>Students can save it on their device</b> <span class="tiny muted">Untick for online only: students open it from the school server while connected (good for very large videos).</span></span></label></div>' +
-      '<label class="field mt" data-show="note"><span>Handout <span class="muted">(## headings, - bullets, **bold**, [[formula]])</span></span><textarea class="textarea" name="body" rows="8" placeholder="## Key points&#10;- …"></textarea></label>' +
+      '<label class="field mt" data-show="note"><span>' + (opts.tutor ? "Short notes" : "Handout") + ' <span class="muted">(## headings, - bullets, **bold**, [[formula]])</span></span><textarea class="textarea" name="body" rows="' + (opts.tutor ? 12 : 8) + '" placeholder="## Key points&#10;- …"></textarea></label>' +
       '<div class="mt" id="mat-audience"><span class="label">Who can see it?</span>' +
       '<div class="seg" id="mat-aud"><button type="button" data-a="all" class="on">Whole class</button><button type="button" data-a="some">Selected students</button></div>' +
       '<div class="mt-sm hidden" id="mat-students"></div></div>';
@@ -261,18 +268,18 @@
           if (!f.title.trim()) { UI.toast("Give the material a title", "bad"); return false; }
           var file = f.file || fetched;
           if (kind !== "note" && !file) { UI.toast("Choose a file to upload", "bad"); return false; }
-          if (kind === "note" && !f.body.trim()) { UI.toast("Write the handout first", "bad"); return false; }
+          if (kind === "note" && !f.body.trim()) { UI.toast(opts.tutor ? "Write the short notes first" : "Write the handout first", "bad"); return false; }
           var d = f.dest.split(":"), aud = el.querySelector("#mat-aud .on").getAttribute("data-a");
           var picked = aud === "some" ? UI.pickerValue(el.querySelector("#mat-students")) : [];
           if (d[0] === "c" && aud === "some" && !picked.length) { UI.toast("Choose at least one student", "bad"); return false; }
           var tags = String(f.tags || "").split(",").map(function (t) { return t.trim().toLowerCase(); }).filter(function (t, i, all) { return t && all.indexOf(t) === i; }).slice(0, 8);
-          var rec = { kind: kind, title: f.title.trim(), author: f.author || "", topicId: f.topicId || null, createdBy: me.id, offline: kind === "note" ? true : !!f.offline, category: f.category || "notes", tags: tags,
+          var rec = { kind: kind, title: f.title.trim(), author: f.author || "", topicId: f.topicId || null, createdBy: me.id, offline: kind === "note" ? true : !!f.offline, category: kind === "note" && opts.tutor ? "summary" : f.category || "notes", tags: tags,
             classId: d[0] === "c" ? d[1] : null, syllabusId: d[0] === "s" ? d[1] : null, audience: d[0] === "c" && aud === "some" ? picked : "all" };
           if (kind === "note") rec.body = f.body;
           var save = file ? A.Files.fromInput(file).then(function (fr) { rec.fileId = fr.id; rec.fileName = fr.name; rec.fileType = fr.type; rec.fileSize = fr.size; }) : Promise.resolve();
           return save.then(function () {
             var saved = S().put("materials", rec);
-            UI.toast("Added to the library");
+            UI.toast(opts.tutor ? (kind === "note" ? "Short notes added: the students' tutor shows them for this topic" : "Added: the students' tutor reads it") : "Added to the library");
             A.render();
             // notes, summaries and flashcards: read them for the tutor straight away
             if (M.tutorable(saved || rec)) A.tutorRead(S().get("materials", (saved || rec).id) || saved || rec);
@@ -317,8 +324,9 @@
           el.querySelector("#mat-file-name").innerHTML = f ? "Selected: <b>" + esc(f.name) + "</b> (" + A.fmtBytes(f.size) + ")" + (f.size > 300 * 1048576 ? ' <span class="badge warn">Large: consider online only</span>' : "") : "";
           var tIn = form.querySelector("[name=title]");
           if (f && !tIn.value) { var nm = f.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " "); tIn.value = nm.charAt(0).toUpperCase() + nm.slice(1); }
-          if (f && /^video\//.test(f.type) && form.kind.value !== "video") el.querySelector('#mat-kind [data-k="video"]').click();
-          if (f && /^audio\//.test(f.type) && form.kind.value !== "audio") el.querySelector('#mat-kind [data-k="audio"]').click();
+          var kb = function (k) { return el.querySelector('#mat-kind [data-k="' + k + '"]'); }; // (Co-teacher offers no video or audio)
+          if (f && /^video\//.test(f.type) && form.kind.value !== "video" && kb("video")) kb("video").click();
+          if (f && /^audio\//.test(f.type) && form.kind.value !== "audio" && kb("audio")) kb("audio").click();
         };
         fileInput.addEventListener("change", function () { fetched = null; showName(fileInput.files[0]); });
         var drop = el.querySelector("#mat-drop");

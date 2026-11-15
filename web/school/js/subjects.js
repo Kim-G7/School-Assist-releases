@@ -181,7 +181,11 @@
     if (me.isAdmin) return M.chosenSubjects(me);
     var ids = [];
     M.classesForTeacher(me.id).forEach(function (c) { if (c.syllabusId && ids.indexOf(c.syllabusId) < 0) ids.push(c.syllabusId); });
-    S().all("syllabi").forEach(function (s) { if (s.createdBy === me.id && ids.indexOf(s.id) < 0) ids.push(s.id); });
+    // the syllabuses they made, and those of the subjects they teach (added from a class too: one library, 2026-11-15)
+    var areas = A.Primary && A.Primary.myAreas ? A.Primary.myAreas(me) : me.areas || [];
+    S().all("syllabi").forEach(function (s) {
+      if ((s.createdBy === me.id || (A.Syl && areas.some(function (a) { return A.Syl.sameSubject(a, s.subject); }))) && ids.indexOf(s.id) < 0) ids.push(s.id);
+    });
     return ids;
   };
   /** The subjects in view on staff pages: a list of syllabus ids, or null for every subject. */
@@ -218,7 +222,7 @@
     M.chosenSubjects(me).forEach(function (id) { chosen[id] = 1; });
     var list = S().all("syllabi");
     UI.modal({
-      title: "My subjects", size: "wide", sub: "Tick the subjects you work with. Your classes, learning materials, tutor content and syllabus library then show just these, and All subjects is one tap away.",
+      title: "My subjects", size: "wide", sub: "Tick the subjects you work with. Your classes, learning materials, Co-teacher and syllabus library then show just these, and All subjects is one tap away.",
       body: '<form id="my-subj" class="subj-picker">' + A.subjectPicker(list, chosen) + "</form>",
       foot: [{ label: "Cancel" }, { label: "Save", cls: "btn-primary", icon: "check", onClick: function (m) {
         var ids = picked(m.querySelector("#my-subj")), rec = viewRec(), mine = Object.assign({}, rec.mine || {});

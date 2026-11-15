@@ -1,4 +1,7 @@
-/* Tutor content (teachers and the admin): what the tutor has for each topic of a subject.
+/* Co-teacher (teachers and admins; "Tutor content" until 2026-11-15, still the tutor for students): what the tutor has for
+ * each topic of a subject. Every syllabus of the teacher's subjects is here (the Syllabus library's, however it was entered:
+ * js/syllabus.js), its topics in the syllabus's order, each waiting for its notes: a document, a textbook's pages, or short
+ * notes typed in the app.
  * The topics come from the syllabus (and what to study in each, once the syllabus PDF has been
  * read: js/sylread.js). For every topic the teacher can see which pages of which documents the
  * tutor shows, add notes for just that topic, or change the pages. A whole textbook or set of notes
@@ -11,9 +14,19 @@
 
   function sylOf(m) { var c = M.cls(m.classId); return m.syllabusId || (c && c.syllabusId) || ""; }
   function mySubjects(me) {
-    var ids = [];
-    M.myClasses(me).forEach(function (c) { if (c.syllabusId && ids.indexOf(c.syllabusId) < 0) ids.push(c.syllabusId); });
-    return ids.map(M.syllabus).filter(Boolean).sort(function (a, b) { return a.subject.localeCompare(b.subject); });
+    var ids = [], add = function (s) { if (s && ids.indexOf(s.id) < 0) ids.push(s.id); };
+    M.myClasses(me).forEach(function (c) { add(M.syllabus(c.syllabusId)); });
+    // (2026-11-15) the syllabus of each subject they teach in each of their forms (js/tracker.js pairs), so one entered from a
+    // class or in the library has its topics here, in order, waiting for notes; an admin: the school's (their subjects)
+    if (A.Tracker && A.Syl) A.Tracker.pairs(me).forEach(function (x) { add(A.Syl.forClass(x.subject, x.c.level, x.c)); });
+    if (me.isAdmin) { var only = M.subjectFilter(me); S().all("syllabi").forEach(function (s) { if (!only || only.indexOf(s.id) >= 0) add(s); }); }
+    return ids.map(M.syllabus).filter(Boolean).sort(function (a, b) { return a.subject.localeCompare(b.subject) || String(a.level || "").localeCompare(String(b.level || "")); });
+  }
+  /** Short notes typed in the app for a subject's topics: { topicId: [materials] }. */
+  function shortNotes(syl) {
+    var out = {};
+    S().filter("materials", function (m) { return m.kind === "note" && m.topicId && sylOf(m) === syl.id; }).forEach(function (m) { (out[m.topicId] = out[m.topicId] || []).push(m); });
+    return out;
   }
   /** The documents of a subject the tutor can teach from. */
   M.tutorDocs = function (sylId) {
@@ -22,8 +35,8 @@
   };
   /** For each topic of a subject: [{ m, r: ranges }] and how many flashcards. */
   function coverage(syl, docs) {
-    var out = {};
-    syl.topics.forEach(function (t) { out[t.id] = { docs: [], cards: 0 }; });
+    var out = {}, shorts = shortNotes(syl);
+    syl.topics.forEach(function (t) { out[t.id] = { docs: [], cards: 0, shorts: shorts[t.id] || [] }; });
     docs.forEach(function (m) {
       var tp = M.matTopicPages(m, null);
       Object.keys(tp).forEach(function (tid) { if (out[tid] && tp[tid].length) out[tid].docs.push({ m: m, r: tp[tid] }); });
@@ -36,35 +49,43 @@
     var n = 0;
     mySubjects(me).forEach(function (syl) {
       var cov = coverage(syl, M.tutorDocs(syl.id));
-      syl.topics.forEach(function (t) { if (!cov[t.id].docs.length) n++; });
+      syl.topics.forEach(function (t) { if (!cov[t.id].docs.length && !cov[t.id].shorts.length) n++; });
     });
     return n;
+  };
+  /** Today's reminder: the topics of the teacher's subjects with no notes yet, and a way to Co-teacher. */
+  A.notesPrompt = function (me) {
+    if (!me || me.role !== "teacher" || A.edition === "home" || (A.Primary && !A.Primary.withStudents)) return "";
+    var n = M.topicsWithoutNotes(me);
+    return n ? '<div class="callout mb">' + I("cap") + '<div class="grow"><b>' + n + " topic" + (n === 1 ? "" : "s") + " of your subjects " + (n === 1 ? "has" : "have") + " no notes yet.</b> Co-teacher lists each syllabus's topics in order: add notes, short notes or a textbook for each, and the students' tutor teaches from them.</div>" +
+      '<a class="btn btn-sm" href="#/t/tutor?f=missing">Co-teacher ' + I("right") + "</a></div>" : "";
   };
 
   A.route("t/tutor", function (p, q, me) {
     var subjects = mySubjects(me);
-    if (!subjects.length) return { title: "Tutor content", html: A.subjectScopeBar(me) + '<div class="card">' + UI.empty("cap", "No subjects yet", "Subjects appear here once you teach a class.") + "</div>" };
+    if (!subjects.length) return { title: "Co-teacher", html: A.subjectScopeBar(me) + '<div class="card">' + UI.empty("cap", "No syllabus yet", "Each subject you teach appears here once its syllabus is in the Syllabus library (added there, or from a class's syllabus): its topics in order, ready for notes.") + "</div>" };
     var syl = M.syllabus(q.s) && subjects.some(function (s) { return s.id === q.s; }) ? M.syllabus(q.s) : subjects[0];
     var docs = M.tutorDocs(syl.id), cov = coverage(syl, docs), only = q.f === "missing";
     var topics = syl.topics; // in the syllabus's own order
-    var ready = topics.filter(function (t) { return cov[t.id].docs.length; }).length, pct = topics.length ? Math.round(ready / topics.length * 100) : 0;
+    var ready = topics.filter(function (t) { return cov[t.id].docs.length || cov[t.id].shorts.length; }).length, pct = topics.length ? Math.round(ready / topics.length * 100) : 0;
     var withOutline = topics.filter(function (t) { return t.outline && t.outline.length; }).length;
 
     var html = A.subjectScopeBar(me) + '<div class="row wrap mb tutor-admin-head"><select class="select" data-change="tutor-subject" aria-label="Subject">' +
       subjects.map(function (s) { return '<option value="' + s.id + '"' + (s.id === syl.id ? " selected" : "") + ">" + esc(s.subject + (s.code ? " " + s.code : "") + " · " + M.boardName(s)) + "</option>"; }).join("") + "</select>" +
       '<span class="grow"></span><button class="btn" data-act="tutor-add" data-syl="' + syl.id + '" data-whole="1">' + I("upload") + "Read a whole book or notes</button>" +
       (me.isAdmin ? '<button class="btn" data-act="syl-read-pdf" data-syl="' + syl.id + '">' + I("layers") + "Read topics from the syllabus</button>" : "") + "</div>" +
-      '<div class="card card-pad mb"><div class="row spread wrap"><div><b>' + ready + " of " + topics.length + " topics</b> have notes for the tutor" +
+      '<div class="card card-pad mb"><div class="row spread wrap"><div><b>' + ready + " of " + topics.length + " topics</b> have notes for the students' tutor" +
       (withOutline ? "" : '<div class="small muted mt-sm">' + (me.isAdmin ? "Read the syllabus PDF to show what to study in each topic." : "The admin can read the syllabus PDF to show what to study in each topic.") + "</div>") + "</div>" +
       '<div class="pill-tabs sm" style="margin:0"><button class="' + (only ? "" : "on") + '" data-act="goto" data-href="#/t/tutor?s=' + syl.id + '">All topics</button><button class="' + (only ? "on" : "") + '" data-act="goto" data-href="#/t/tutor?s=' + syl.id + '&f=missing">Need notes (' + (topics.length - ready) + ")</button></div></div>" +
       '<div class="mt-sm">' + UI.bar(pct, pct >= 100 ? "good" : "") + "</div>" +
-      '<p class="small muted mt">For each topic, add notes, summary notes or flashcards (the whole document goes with that topic), or read a whole textbook and the tutor finds its pages for each topic. Students see the pages whole, in order, then practise with flashcards and a quick check.</p></div>';
+      '<p class="small muted mt">The syllabus\'s topics, in its order. For each, add notes (a document), short notes typed here, or flashcards; or read a whole textbook and its pages for each topic are found. Students\' tutor takes them through each topic in order, then flashcards and a quick check.</p></div>';
 
-    html += '<div class="card mb">' + topics.filter(function (t) { return !only || !cov[t.id].docs.length; }).map(function (t, i) {
-      var c = cov[t.id], has = c.docs.length, tests = S().filter("materials", function (m) { return m.kind === "pastpaper" && m.topicId === t.id; }).length;
+    html += '<div class="card mb">' + topics.filter(function (t) { return !only || !(cov[t.id].docs.length || cov[t.id].shorts.length); }).map(function (t, i) {
+      var c = cov[t.id], has = c.docs.length || c.shorts.length, tests = S().filter("materials", function (m) { return m.kind === "pastpaper" && m.topicId === t.id; }).length;
       return '<div class="list-row tutor-topic"><div class="tutor-num tnum">' + (syl.topics.indexOf(t) + 1) + "</div>" +
         '<div class="grow"><div class="title">' + esc(t.title) + "</div>" +
-        '<div class="meta">' + (has ? c.docs.map(function (d) { return '<span class="chip-doc" data-tip="' + esc(d.m.title) + '">' + I("file") + esc(d.m.title.length > 34 ? d.m.title.slice(0, 32) + "…" : d.m.title) + " · p. " + esc(M.pagesText(d.r)) + "</span>"; }).join("") : '<span class="warn-text">No notes yet</span>') +
+        '<div class="meta">' + (has ? c.docs.map(function (d) { return '<span class="chip-doc" data-tip="' + esc(d.m.title) + '">' + I("file") + esc(d.m.title.length > 34 ? d.m.title.slice(0, 32) + "…" : d.m.title) + " · p. " + esc(M.pagesText(d.r)) + "</span>"; }).join("") +
+          c.shorts.map(function (m) { return '<button type="button" class="chip-doc" data-act="open-mat" data-id="' + esc(m.id) + '" data-tip="Short notes">' + I("pen") + esc(m.title.length > 34 ? m.title.slice(0, 32) + "…" : m.title) + "</button>"; }).join("") : '<span class="warn-text">No notes yet</span>') +
         (c.cards ? '<span class="sep"></span><span>Flashcards</span>' : "") +
         (tests ? '<span class="sep"></span><span>' + tests + " topic test" + (tests === 1 ? "" : "s") + "</span>" : "") + "</div>" +
         (t.outline && t.outline.length ? '<details class="tutor-outline mt-sm"><summary class="small">' + I("list") + " What to study (" + t.outline.length + " part" + (t.outline.length === 1 ? "" : "s") + ")</summary>" + A.outlineHtml(t, true) + "</details>" : "") + "</div>" +
@@ -81,7 +102,7 @@
           (m.tutorCards ? '<span class="sep"></span><span>' + m.tutorCards + " flashcards</span>" : "") + "</div></div>" +
           (read ? '<button class="btn btn-sm" data-act="tutor-pages" data-id="' + m.id + '">' + I("layers") + "Pages per topic</button>" : '<button class="btn btn-sm" data-act="tutor-read-mat" data-id="' + m.id + '">' + I("cap") + "Read for the tutor</button>") + "</div>";
       }).join("") : UI.empty("file", "No notes for " + syl.subject + " yet", "Add notes for a topic above, or read a whole textbook.")) + "</div>";
-    return { title: "Tutor content", html: html };
+    return { title: "Co-teacher", html: html };
   }, { role: "teacher" });
 
   A.act["tutor-subject"] = function (el) { location.hash = "#/t/tutor?s=" + el.value; };
@@ -89,11 +110,12 @@
   /** Add notes for one topic (the whole document goes with it), or a whole book to be read. */
   A.act["tutor-add"] = function (el) {
     var syl = M.syllabus(el.getAttribute("data-syl")), t = M.topic(syl, el.getAttribute("data-topic"));
+    // notes for the tutor: a document, a textbook or short notes typed here (no video or audio for now: 2026-11-15)
     if (t) {
-      A.materialModal({ syllabusId: syl.id, topicId: t.id, category: "notes", title: "Add notes for " + t.title,
-        intro: "The whole document goes with <b>" + esc(t.title) + "</b>: the tutor shows its pages in order and makes flashcards from it. For a book or notes on many topics, use <b>Read a whole book or notes</b>." });
+      A.materialModal({ syllabusId: syl.id, topicId: t.id, category: "notes", title: "Add notes for " + t.title, kinds: ["note", "pdf", "textbook"], kind: "note", tutor: true,
+        intro: "<b>Short notes</b> are typed here and shown to the students as they are. A document goes with <b>" + esc(t.title) + "</b> whole: the tutor shows its pages in order and makes flashcards from it. For a book or notes on many topics, use <b>Read a whole book or notes</b>." });
     } else {
-      A.materialModal({ syllabusId: syl.id, category: "book",
+      A.materialModal({ syllabusId: syl.id, category: "book", kinds: ["pdf", "textbook"], tutor: true,
         title: "Read a whole book or notes", intro: "Choose a textbook or a set of notes for " + esc(syl.subject) + ". The tutor reads every page, finds which pages are about which topic, and then you can check them in <b>Pages per topic</b>. A big book takes a minute or two." });
     }
   };

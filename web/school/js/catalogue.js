@@ -171,6 +171,7 @@
   Sub.section = function (me) {
     var edit = Sub.mayEdit(me), all = Sub.all();
     var html = '<div class="callout mb">' + I("info") + '<div class="small">Each subject has its own record and code, so it is the same subject everywhere: Enter students, timetables, mark books, report cards and the students\' portal, which show the code small beside its name. ' +
+      "Its syllabus is the Syllabus library's with the same code, whether it was added there or from a class, and the school has each syllabus once. " +
       "The same subject at IGCSE and at AS &amp; A Level is two subjects, each with its own code and students; a teacher who teaches both simply teaches the subject. " +
       (edit ? "Admins and heads of department set them here." : "Admins and heads of department set them.") + "</div></div>";
     if (!all.length) html += '<div class="card">' + UI.empty("book", "No subjects yet", "They are made from the school's subjects (Learning areas & terms) the first time an admin opens this page.") + "</div>";
@@ -179,20 +180,23 @@
       if (!list.length && g.id !== "school") return;
       html += '<div class="card mb"><div class="card-head">' + I("book") + "<h3>" + esc(g.label) + '</h3><span class="sub">' + esc(g.forms) + " · " + list.length + " subject" + (list.length === 1 ? "" : "s") + "</span>" +
         (edit ? '<button class="btn btn-sm" style="margin-left:auto" data-act="sbj-add" data-group="' + g.id + '">' + I("plus") + "Add a subject</button>" : "") + "</div>" +
-        (list.length ? '<div class="table-wrap"><table class="table"><thead><tr><th>Subject</th><th>Code</th><th>Forms</th><th class="num">Students</th><th>Teachers</th><th></th></tr></thead><tbody>' + list.map(function (r) {
-          var n = Sub.students(r).length, t = Sub.teachers(r);
+        (list.length ? '<div class="table-wrap"><table class="table"><thead><tr><th>Subject</th><th>Code</th><th>Syllabus</th><th>Forms</th><th class="num">Students</th><th>Teachers</th><th></th></tr></thead><tbody>' + list.map(function (r) {
+          var n = Sub.students(r).length, t = Sub.teachers(r), sy = A.Syl ? A.Syl.forSubject(r) : null;
           return "<tr><td><b>" + esc(r.name) + '</b><div class="tiny muted">' + esc(r.id) + "</div></td>" +
             "<td>" + (edit ? '<input class="input sm tnum" style="width:96px" value="' + esc(r.code || "") + '" maxlength="12" placeholder="' + (g.id === "school" ? "none" : "e.g. 0580") + '" aria-label="' + esc(r.name) + ' code" data-change="sbj-code" data-id="' + esc(r.id) + '">' : r.code ? '<span class="tnum">' + esc(r.code) + "</span>" : '<span class="muted">—</span>') + "</td>" +
+            // its syllabus in the Syllabus library, by its syllabus ID (one store: js/syllabus.js A.Syl)
+            '<td class="small">' + (sy ? '<a href="#/t/syllabus/' + esc(sy.id) + '">' + esc(A.Syl.title(sy)) + '</a><div class="tiny muted tnum">' + esc(sy.id) + "</div>"
+              : edit && A.Tracker ? '<button class="btn btn-sm btn-ghost" data-act="trk-outline" data-subject="' + esc(r.name) + '" data-level="' + esc((r.forms || [])[0] || "") + '" data-forms="' + esc((r.forms || []).join("|")) + '">' + I("plus") + "Add</button>" : '<span class="muted">None yet</span>') + "</td>" +
             '<td class="small">' + esc((r.forms || []).join(", ") || "—") + "</td>" +
             '<td class="num"><button class="btn btn-sm btn-ghost" data-act="sbj-students" data-id="' + esc(r.id) + '">' + n + "</button></td>" +
-            '<td class="small">' + (t.length ? t.map(function (x) { return esc(x.name) + (x.staffNo ? ' <span class="subj-code">' + esc(x.staffNo) + "</span>" : ""); }).join(", ") : '<span class="muted">Nobody yet</span>') + "</td>" +
+            '<td class="small">' + (t.length ? t.map(function (x) { return esc(x.name) + (x.staffNo && me.isAdmin ? ' <span class="subj-code">' + esc(x.staffNo) + "</span>" : ""); }).join(", ") : '<span class="muted">Nobody yet</span>') + "</td>" +
             '<td class="num">' + (edit ? '<button class="btn btn-sm btn-ghost btn-icon" data-act="sbj-edit" data-id="' + esc(r.id) + '" aria-label="Edit ' + esc(r.name) + '">' + I("edit") + "</button>" : "") + "</td></tr>";
         }).join("") + "</tbody></table></div>" : '<div class="card-pad small muted">None.</div>') + "</div>";
     });
     // the teachers, each by their staff ID, with the subjects (and codes) they teach
     var staff = M.teachers ? M.teachers() : S().filter("users", function (u) { return alive(u) && u.role === "teacher" && u.status !== "declined"; });
     staff = staff.filter(function (u) { return !(A.Fees && A.Fees.isFinance && A.Fees.isFinance(u)); }).sort(function (a, b) { return String(a.staffNo || "~").localeCompare(String(b.staffNo || "~")) || a.name.localeCompare(b.name); });
-    if (all.length && staff.length) html += '<div class="card mb"><div class="card-head">' + I("users") + '<h3>Teachers</h3><span class="sub">by staff ID, with the subjects they teach</span></div><div class="table-wrap"><table class="table"><thead><tr><th>Staff ID</th><th>Teacher</th><th>Subjects</th></tr></thead><tbody>' +
+    if (all.length && staff.length && me.isAdmin) html += '<div class="card mb"><div class="card-head">' + I("users") + '<h3>Teachers</h3><span class="sub">by staff ID, with the subjects they teach</span></div><div class="table-wrap"><table class="table"><thead><tr><th>Staff ID</th><th>Teacher</th><th>Subjects</th></tr></thead><tbody>' +
       staff.map(function (t) {
         var subs = Sub.ofTeacher(t);
         return '<tr><td class="tnum">' + esc(t.staffNo || "—") + "</td><td><b>" + esc(t.name) + '</b><div class="tiny muted">' + esc(t.title || "") + "</div></td><td class=\"small\">" +

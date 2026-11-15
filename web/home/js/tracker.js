@@ -1,8 +1,11 @@
 /* School Assist Teacher (1.6.2): My subjects, the syllabus tracker and the Teachers' overview.
- *   outlines  a subject's syllabus as its topics, read from the syllabus document (a PDF, js/sylread.js) or typed:
- *             { id, subject, levels: ["Form 1", …] (none: every one), title, file, topics: [{ id, n, title, parts: [{ n, title }] }] }
+ *   syllabi   a subject's syllabus: the Syllabus library's records (js/syllabus.js, one store since 2026-11-15: a syllabus
+ *             added from a class is the library's too, with its syllabus ID; forms: the forms that follow it, none: those
+ *             at its level). Its topics are read from its document (a PDF, js/sylread.js) or typed. Before, School Assist
+ *             Teacher kept its own "outlines" ({ id, subject, levels, title, file, topics: [{ id, n, title, parts }] }); an
+ *             admin's device brings them into the library (A.Syl.adopt) and older devices still read them.
  *   coverage  one class's way through it in a school year: { id: "cov_<year>_<classId>_<subject>", classId, subject, year,
- *             outlineId, plan: { topicId: term 1–3 }, done: { topicId: when ticked }, teacherId }
+ *             syllabusId (outlineId before), plan: { topicId: term 1–3 }, done: { topicId: when ticked }, teacherId }
  * My subjects (#/t/subjects): each subject a teacher teaches in each class they teach, and how far that class is through
  * its syllabus; for an admin also teachers' requests and everyone's subjects (they left Today in 1.6.2: a long list in a
  * big school). The tracker (#/t/tracker?c=…&s=…): the syllabus's topics, the term each is for (the teacher decides) and
@@ -51,9 +54,13 @@
   }
 
   /* ------------------------------------------------------------------ syllabuses and coverage */
-  /** The syllabus a class uses for a subject: the one for its form or grade, else one for every form. */
-  T.outlineFor = function (subject, level) {
-    var list = S().filter("outlines", function (o) { return o.subject === subject; });
+  /** The syllabus a class uses for a subject, as the tracker reads it: { id (its syllabus ID), syl, subject, title, code,
+      topics: [{ id, n, title, parts }] }, from the Syllabus library (A.Syl.forClass: the subject's record and code, the
+      form, its level). An older syllabus not in the library yet: as it was (the one for the form, else for every form). */
+  T.outlineFor = function (subject, level, c) {
+    var s = A.Syl ? A.Syl.forClass(subject, level, c) : null;
+    if (s) return { id: s.id, syl: s, subject: s.subject, title: A.Syl.title(s), code: s.code || "", topics: A.Syl.topics(s) };
+    var list = S().filter("outlines", function (o) { return !o.movedTo && o.subject === subject; });
     return list.filter(function (o) { return (o.levels || []).indexOf(level) >= 0; })[0] || list.filter(function (o) { return !(o.levels || []).length; })[0] || null;
   };
   var covId = function (year, cid, subject) { return "cov_" + year + "_" + cid + "_" + slug(subject); };
@@ -63,7 +70,7 @@
       an earlier term's left), noplan (no term chosen for any topic), none (no syllabus). */
   T.stats = function (c, subject, conf, term) {
     conf = conf || P.conf(); term = term || conf.term;
-    var o = T.outlineFor(subject, c.level);
+    var o = T.outlineFor(subject, c.level, c);
     if (!o || !(o.topics || []).length) return { none: true, status: "none" };
     var cv = T.cov(c.id, subject, conf.year) || {}, plan = cv.plan || {}, done = cv.done || {}, ids = o.topics.map(function (t) { return t.id; });
     var ticked = ids.filter(function (id) { return done[id]; }), inTerm = ids.filter(function (id) { return Number(plan[id]) === term; });
@@ -126,17 +133,34 @@
   function canEdit(me, c, s) { return P.mayMark(me, c.id, s); }
   /** A change from the page: only by the class's teacher of the subject (a page looked at by another teacher is view only). */
   var mayTick = function (el) { var c = M.cls(el.getAttribute("data-c")); return !!c && canEdit(M.me(), c, el.getAttribute("data-s")); };
-  var mayAddSyllabus = function (me, subject) { return me.isAdmin || P.myAreas(me).indexOf(subject) >= 0; };
+  var mayAddSyllabus = function (me, subject) { return me.isAdmin || P.myAreas(me).some(function (a) { return a === subject || (!!A.Syl && A.Syl.sameSubject(a, subject)); }); };
 
   /* ------------------------------------------------------------------ My subjects */
-  function card(me, x, conf) {
-    var st = T.stats(x.c, x.subject, conf), name = '<div><b>' + esc(x.subject) + '</b><div class="muted small">' + esc(P.classLabel(x.c)) + "</div></div>";
-    if (st.none) return '<div class="card card-pad trk-card"><div class="row spread top">' + name + T.chip("none") + '</div><p class="small muted mt-sm">Add the subject\'s syllabus (its document, a PDF) and its topics come from it.</p>' +
-      (mayAddSyllabus(me, x.subject) ? '<div class="row mt"><button class="btn btn-sm btn-primary" data-act="trk-outline" data-subject="' + esc(x.subject) + '" data-level="' + esc(x.c.level || "") + '">' + I("upload") + "Add the syllabus</button></div>" : "") + "</div>";
-    return '<a class="card card-pad trk-card click" href="' + trackerHref(x.c, x.subject) + '"><div class="row spread top">' + name + T.chip(st.status) + "</div>" +
-      '<div class="mt"><div class="row spread small"><span>Whole syllabus</span><b class="tnum">' + st.done + " of " + st.total + " topics · " + st.pct + "%</b></div>" + UI.bar(st.pct) + "</div>" +
-      '<div class="mt-sm"><div class="row spread small"><span>Term ' + conf.term + '</span><b class="tnum">' + (st.termPlanned ? st.termDone + " of " + st.termPlanned + " planned" : "none planned") + "</b></div>" + UI.bar(st.termPct || 0, toneOf(st.status)) + "</div></a>";
+  /** A subject on My subjects: its syllabus, its classes and how far they are, at a glance. */
+  function subjectCard(me, s, list, conf) {
+    var sts = list.map(function (x) { return T.stats(x.c, s, conf); }), n = function (k) { return sts.filter(function (st) { return st.status === k; }).length; };
+    var withSyl = sts.filter(function (st) { return !st.none; }), pctAll = withSyl.length ? Math.round(A.avg(withSyl.map(function (st) { return st.pct; }))) : null;
+    var o = withSyl.length ? withSyl[0].outline : null, code = A.Subjects ? A.Subjects.code(s, list[0].c.level) : "";
+    var chips = [["behind", n("behind")], ["noplan", n("noplan")], ["ontrack", n("ontrack") + n("done")], ["none", n("none")]].filter(function (x) { return x[1]; })
+      .map(function (x) { return T.chip(x[0]).replace(/<\/span>$/, " · " + x[1] + "</span>"); }).join(" ");
+    return '<div class="card card-pad trk-card trk-subj click" role="button" tabindex="0" data-act="trk-subject" data-s="' + esc(s) + '"><div class="row spread top"><div><b>' + esc(s) + "</b>" + (A.Subjects ? A.Subjects.tag(code) : "") +
+      '<div class="muted small">' + list.length + " class" + (list.length === 1 ? "" : "es") + (o ? " · " + esc(o.title) : " · no syllabus yet") + "</div></div>" + I("right") + "</div>" +
+      (pctAll != null ? '<div class="mt"><div class="row spread small"><span>Whole syllabus, all its classes</span><b class="tnum">' + pctAll + "%</b></div>" + UI.bar(pctAll) + "</div>" : "") +
+      '<div class="row wrap mt-sm" style="gap:6px">' + chips + "</div></div>";
   }
+  /** The classes that take a subject (of the teacher's), each with how far it is: a pop-up from My subjects. */
+  A.act["trk-subject"] = function (el) {
+    var me = M.me(), conf = P.conf(), s = el.getAttribute("data-s"), list = T.pairs(me).filter(function (x) { return x.subject === s; });
+    UI.modal({ title: s, sub: list.length + " class" + (list.length === 1 ? "" : "es") + " · Term " + conf.term + " " + esc(conf.year), size: "wide", flush: true,
+      body: list.map(function (x) {
+        var st = T.stats(x.c, s, conf), label = '<div class="grow"><div class="title">' + esc(P.classLabel(x.c)) + "</div>";
+        if (st.none) return '<div class="list-row">' + label + '<div class="meta">No syllabus yet</div></div>' + T.chip("none") +
+          (mayAddSyllabus(me, s) ? '<button class="btn btn-sm btn-primary" data-act="trk-outline" data-subject="' + esc(s) + '" data-level="' + esc(x.c.level || "") + '" data-c="' + esc(x.c.id) + '">' + I("upload") + "Add the syllabus</button>" : "") + "</div>";
+        return '<a class="list-row" href="' + trackerHref(x.c, s) + '">' + label + '<div class="meta"><span class="tnum">' + st.done + " of " + st.total + " topics taught</span><span class=\"sep\"></span><span>Term " + conf.term + ": " +
+          (st.termPlanned ? st.termDone + " of " + st.termPlanned + " planned" : "none planned") + '</span></div><div class="mt-sm" style="max-width:320px">' + UI.bar(st.pct, toneOf(st.status)) + "</div></div>" + T.chip(st.status) + I("right") + "</a>";
+      }).join("") || '<div class="card-pad">' + UI.empty("book", "No classes", "") + "</div>",
+      foot: [{ label: "Close", cls: "btn-primary" }] });
+  };
   A.route("t/subjects", function (p, q, me) {
     var conf = P.conf(), pairs = T.pairs(me);
     var html = '<div class="row wrap spread mb"><div><h2 style="font-size:22px">My subjects</h2><p class="muted">Term ' + conf.term + " " + esc(conf.year) + " · how far each class is through its syllabus</p></div>" +
@@ -144,19 +168,26 @@
         : '<button class="btn" data-act="psubj-ask">' + I("edit") + "Ask to change my subjects or classes</button>") + "</div>";
     if (!me.isAdmin && P.asks(me)) html += '<div class="callout mb">' + I("clock") + "<div>Your request is with the head: they agree or say no.</div></div>";
     html += P.requestsCard(me);
-    html += pairs.length ? '<div class="grid g-2 mb">' + pairs.map(function (x) { return card(me, x, conf); }).join("") + "</div>"
+    // (2026-11-15) one card a subject; it opens the list of the classes that take it (a card for every class and subject was
+    // the same subject over and over)
+    var bySubj = {}, order = [];
+    pairs.forEach(function (x) { if (!bySubj[x.subject]) { bySubj[x.subject] = []; order.push(x.subject); } bySubj[x.subject].push(x); });
+    html += pairs.length ? '<div class="grid g-auto mb">' + order.map(function (s) { return subjectCard(me, s, bySubj[s], conf); }).join("") + "</div>"
       : '<div class="card mb">' + UI.empty("book", "No subjects here yet", me.isAdmin ? "Admins record every subject's marks. The subjects you teach yourself show here once you have them (Change, below) and teach them in a class." : "The head gives you your subjects and the classes you teach them in. Ask, above.") + "</div>";
     html += P.subjectTeachersCard(me) + (me.isAdmin ? outlinesCard(me) : "");
     return { title: "My subjects", html: html };
   }, { role: "teacher" });
-  /** The school's syllabuses (admins): add, check and change them. */
+  /** The school's syllabuses (admins): the Syllabus library's, each with its syllabus ID and the forms that follow it;
+      added, checked and changed here or there. */
   function outlinesCard(me) {
-    var list = S().all("outlines").sort(function (a, b) { return a.subject.localeCompare(b.subject); });
-    return '<div class="card mb"><div class="card-head">' + I("library") + '<h3>Syllabuses</h3><span class="sub">' + list.length + '</span><span class="grow"></span><button class="btn btn-sm" data-act="trk-outline">' + I("plus") + "Add a syllabus</button></div>" +
-      (list.length ? list.map(function (o) {
-        return '<div class="list-row"><div class="grow"><div class="title">' + esc(o.subject) + " · " + esc(o.title || "syllabus") + '</div><div class="meta"><span>' + o.topics.length + " topics</span>" +
-          '<span class="sep"></span><span>' + esc((o.levels || []).length ? o.levels.join(", ") : "Every form") + "</span>" + (o.file ? '<span class="sep"></span><span>From ' + esc(o.file) + "</span>" : "") + "</div></div>" +
-          '<button class="btn btn-sm btn-ghost" data-act="trk-outline" data-id="' + o.id + '">' + I("edit") + "Check or change</button></div>";
+    var list = S().all("syllabi").sort(function (a, b) { return a.subject.localeCompare(b.subject) || String(a.level || "").localeCompare(String(b.level || "")); });
+    return '<div class="card mb"><div class="card-head">' + I("library") + '<h3>Syllabuses</h3><span class="sub">' + list.length + ' · the <a href="#/t/syllabi">Syllabus library</a>\'s</span><span class="grow"></span><button class="btn btn-sm" data-act="trk-outline">' + I("plus") + "Add a syllabus</button></div>" +
+      (list.length ? list.map(function (s) {
+        var used = A.Syl.usedBy(s).map(function (c) { return c.name; });
+        return '<div class="list-row"><div class="grow"><div class="title">' + esc(s.subject) + " · " + esc(A.Syl.title(s)) + '</div><div class="meta"><span>' + (s.topics || []).length + " topics</span>" +
+          '<span class="sep"></span><span class="tnum">ID ' + esc(s.id) + "</span>" +
+          (used.length ? '<span class="sep"></span><span>' + esc(used.slice(0, 4).join(", ") + (used.length > 4 ? " and " + (used.length - 4) + " more" : "")) + "</span>" : '<span class="sep"></span><span>No class yet</span>') + "</div></div>" +
+          '<button class="btn btn-sm btn-ghost" data-act="trk-outline" data-id="' + esc(s.id) + '">' + I("edit") + "Check or change</button></div>";
       }).join("") : '<div class="card-body muted small">No syllabus yet. Add each subject\'s syllabus document (a PDF) and School Assist reads its topics; then teachers plan their terms and tick what they have taught.</div>') + "</div>";
   }
 
@@ -188,26 +219,39 @@
     });
     return out;
   };
+  /* A subject's syllabus from a class (or My subjects): one of the Syllabus library's, the same record wherever it is
+     added (js/syllabus.js A.Syl). A new one: choose the school's or a ready-made one under Syllabus, or read its document
+     (or type its topics); a syllabus already in the library can't be added again (its code says which it is). One there:
+     its topics, code and forms, changed here or in the library. */
   A.act["trk-outline"] = function (el) {
-    var me = M.me(), st = M.structure(), conf = P.conf();
-    var o = el.getAttribute("data-id") ? S().get("outlines", el.getAttribute("data-id")) : null;
-    var subject = o ? o.subject : el.getAttribute("data-subject") || "", level = el.getAttribute("data-level") || "";
-    if (!o && subject) o = T.outlineFor(subject, level);
+    var me = M.me(), st = M.structure(), conf = P.conf(), Syl = A.Syl;
+    var cls = el.getAttribute("data-c") ? M.cls(el.getAttribute("data-c")) : null;
+    var id = el.getAttribute("data-id"), subject = el.getAttribute("data-subject") || "", level = el.getAttribute("data-level") || (cls && cls.level) || "";
+    var old = id ? S().get("outlines", id) : null, syl = old ? Syl.adopt(old) : id ? M.syllabus(id) : null; // (an older one: into the library first)
+    if (!syl && subject) { var v = T.outlineFor(subject, level || null, cls); syl = v ? v.syl || Syl.adopt(S().get("outlines", v.id)) : null; }
+    if (syl && !subject) subject = syl.subject;
     if (subject && !mayAddSyllabus(me, subject)) { UI.toast("Only the subject's teachers and admins change its syllabus", "bad"); return; }
-    var levels = o ? o.levels || [] : level ? [level] : [], fileName = o ? o.file || "" : "";
-    var subjects = me.isAdmin ? conf.areas : P.myAreas(me);
+    var byLevel = function (s) { var bare = Object.assign({}, s, { forms: [] }); return st.levels.filter(function (l) { return Syl.fits(bare, l); }); };
+    var asked = (el.getAttribute("data-forms") || "").split("|").filter(Boolean); // (Settings → Subjects & codes: the subject's forms)
+    var on = syl ? ((syl.forms || []).length ? syl.forms : byLevel(syl)) : asked.length ? asked : level ? [level] : [];
+    var subjects = me.isAdmin ? conf.areas : P.myAreas(me), fileName = syl ? syl.file || "" : "";
+    var recOf = function (subj) { return A.Subjects ? A.Subjects.find(subj, level || null) : null; }, rec = subject ? recOf(subject) : null;
+    var own = function (body) { return body.replace(/^<(label|div) class="field/, '<$1 class="trk-own field'); };
     UI.modal({
-      title: o ? "Syllabus: " + o.subject : "Add a syllabus", size: "wide",
+      title: syl ? "Syllabus: " + syl.subject : "Add a syllabus", size: "wide",
       body: '<form id="trk-o" class="form-grid">' +
         (subject ? '<div class="field"><span class="label">Subject</span><b>' + esc(subject) + "</b></div>" : '<label class="field"><span>Subject</span><select class="select" name="subject">' + subjects.map(function (a) { return "<option>" + esc(a) + "</option>"; }).join("") + "</select></label>") +
-        '<label class="field"><span>Its name</span><input class="input" name="title" value="' + esc(o ? o.title || "" : "") + '" placeholder="e.g. Cambridge IGCSE Mathematics 0580"></label>' +
-        '<div class="field full"><span class="label">' + esc(st.levelLabel) + "s it is for</span><div class=\"row wrap\" style=\"gap:4px 14px\">" + st.levels.map(function (l) {
-          return '<label class="check"><input type="checkbox" data-lvl="' + esc(l) + '"' + (levels.indexOf(l) >= 0 ? " checked" : "") + "> " + esc(l) + "</label>";
+        (syl ? '<div class="field"><span class="label">Syllabus ID</span><div><b class="tnum">' + esc(syl.id) + '</b> · <a class="small" href="#/t/syllabus/' + esc(syl.id) + '">Open it in the Syllabus library</a></div></div>'
+          : '<label class="field"><span>Syllabus</span><select class="select" name="pick"><option value="">A new one: read its document, or type its topics</option></select><span class="hint" id="trk-pick-note">The school\'s syllabuses for this subject, and the ready-made ones.</span></label>') +
+        own('<label class="field"><span>Its name</span><input class="input" name="title" value="' + esc(syl ? syl.title || "" : "") + '" placeholder="e.g. Cambridge IGCSE Mathematics 0580"></label>') +
+        own('<label class="field"><span>Code</span><input class="input tnum" name="code" maxlength="12" value="' + esc(syl ? syl.code || "" : rec && rec.code ? rec.code : "") + '" placeholder="e.g. 0580" autocomplete="off"><span class="hint">Its exam code: a syllabus is in the school once.</span></label>') +
+        '<div class="field full"><span class="label">' + esc(st.levelLabel) + "s that follow it</span><div class=\"row wrap\" style=\"gap:4px 14px\">" + st.levels.map(function (l) {
+          return '<label class="check"><input type="checkbox" data-lvl="' + esc(l) + '"' + (on.indexOf(l) >= 0 ? " checked" : "") + "> " + esc(l) + "</label>";
         }).join("") + '</div><span class="hint">None ticked: every one.</span></div>' +
-        '<div class="field full"><span class="label">The syllabus document</span><div class="row wrap"><label class="btn btn-sm">' + I("upload") + 'Read its document<input type="file" accept="' + (A.Schoolly ? A.Schoolly.ACCEPT : "application/pdf,.pdf") + '" id="trk-file" hidden></label>' +
-        '<span class="small muted" id="trk-note">' + (fileName ? "Read from " + esc(fileName) + "." : "School Assist reads its topics, for you to check below.") + "</span></div><div id=\"trk-read\" class=\"mt-sm\"></div></div>" +
-        '<label class="field full"><span>Its topics, one a line</span><textarea class="textarea" name="topics" rows="14" placeholder="1 Numbers&#10;1.1 Number concepts&#10;2 Sets">' + esc(T.topicsText(o ? o.topics : [])) + "</textarea>" +
-        '<span class="hint">"1 Numbers" is a topic and "1.1 Number concepts" one of its parts. Change, add or remove lines as you like: a topic keeps its ticks while its name stays the same.</span></label></form>',
+        own('<div class="field full"><span class="label">The syllabus document</span><div class="row wrap"><label class="btn btn-sm">' + I("upload") + 'Read its document<input type="file" accept="' + (A.Schoolly ? A.Schoolly.ACCEPT : "application/pdf,.pdf") + '" id="trk-file" hidden></label>' +
+        '<span class="small muted" id="trk-note">' + (fileName ? "Read from " + esc(fileName) + "." : "School Assist reads its topics, for you to check below.") + "</span></div><div id=\"trk-read\" class=\"mt-sm\"></div></div>") +
+        own('<label class="field full"><span>Its topics, one a line</span><textarea class="textarea" name="topics" rows="14" placeholder="1 Numbers&#10;1.1 Number concepts&#10;2 Sets">' + esc(syl ? T.topicsText(Syl.topics(syl)) : "") + "</textarea>" +
+        '<span class="hint">"1 Numbers" is a topic and "1.1 Number concepts" one of its parts. Change, add or remove lines as you like: a topic keeps its ticks, notes and questions while its name stays the same.</span></label>') + "</form>",
       onMount: function (m) {
         var input = m.querySelector("#trk-file"), note = m.querySelector("#trk-note"), f = m.querySelector("#trk-o");
         input.addEventListener("change", function () {
@@ -224,26 +268,67 @@
             note.textContent = list.length + " topics read from " + file.name + (r.by === "schoolly" ? " by Schoolly, from its skills and parts" : "") + ". Check them below, then save.";
           }, function (e) { note.textContent = "That file couldn't be read (" + (e && e.message ? e.message : e) + "). Type the topics below."; });
         });
+        if (syl) return;
+        // Syllabus: the school's for this subject (any forms), then the ready-made ones it hasn't got
+        var pick = f.pick, pnote = m.querySelector("#trk-pick-note");
+        var show = function () { m.querySelectorAll(".trk-own").forEach(function (x) { x.style.display = pick.value ? "none" : ""; }); };
+        var fill = function () {
+          var subj = subject || (f.subject && f.subject.value) || "", r = recOf(subj), code = r && r.code ? String(r.code).toLowerCase().replace(/[^a-z0-9]/g, "") : "";
+          var mine = S().filter("syllabi", function (s) { return Syl.sameSubject(s.subject, subj) || (!!r && s.subjectId === r.id) || (!!code && Syl.code(s) === code); });
+          var opt = function (v, label) { return '<option value="' + esc(v) + '">' + esc(label) + "</option>"; };
+          pick.innerHTML = opt("", "A new one: read its document, or type its topics") +
+            (mine.length ? '<optgroup label="In the Syllabus library">' + mine.map(function (s) { return opt("have:" + s.id, Syl.title(s) + " · ID " + s.id); }).join("") + "</optgroup>" : "");
+          if (f.code && !syl) f.code.value = r && r.code ? r.code : "";
+          show();
+          if (!A.loadSyllabusLibrary) return;
+          A.loadSyllabusLibrary().then(function (lib) {
+            if ((subject || (f.subject && f.subject.value)) !== subj) return; // (the subject was changed meanwhile)
+            var ready = lib.filter(function (x) { return (Syl.sameSubject(x.subject, subj) || (!!code && Syl.code(x) === code)) && !M.syllabus(x.id) && !Syl.twin(x); });
+            if (!ready.length) return;
+            pick.insertAdjacentHTML("beforeend", '<optgroup label="Ready-made (Cambridge)">' + ready.map(function (x) { return opt("ready:" + x.id, M.syllabusTitle(x) + " · ready-made"); }).join("") + "</optgroup>");
+            var same = ready.filter(function (x) { return code && Syl.code(x) === code; })[0];
+            if (same && !pick.value) { pick.value = "ready:" + same.id; pnote.textContent = "Ready-made, with the subject's code " + same.code + ": its topics and what to study in each come with it."; show(); }
+          }, function () { /* offline with no copy of the list: the school's own only */ });
+        };
+        pick.addEventListener("change", function () { pnote.textContent = pick.value ? "Its topics come from it. The forms ticked below follow it." : "The school's syllabuses for this subject, and the ready-made ones."; show(); });
+        if (f.subject) f.subject.addEventListener("change", fill);
+        fill();
       },
-      foot: (o && me.isAdmin ? [{ label: "Delete", cls: "btn-danger", onClick: function () {
-        return UI.confirm("Delete the " + o.subject + " syllabus? The classes' ticks are kept, and come back with a syllabus of the same topics.", { danger: true, ok: "Delete" }).then(function (ok) { if (!ok) return false; S().remove("outlines", o.id); UI.toast("Syllabus deleted"); A.render(); });
-      } }] : []).concat([{ label: "Cancel" }, { label: "Save", cls: "btn-primary", onClick: function (m) {
+      foot: [{ label: "Cancel" }, { label: "Save", cls: "btn-primary", onClick: function (m) {
         var f = m.querySelector("#trk-o"), subj = subject || (f.subject && f.subject.value);
-        var topics = T.parseTopics(f.topics.value, o ? o.topics : []);
         if (!subj) { UI.toast("Choose the subject", "bad"); return false; }
-        if (!topics.length) { UI.toast("Read the syllabus's PDF, or type its topics", "bad"); return false; }
-        var lv = Array.prototype.map.call(f.querySelectorAll("[data-lvl]:checked"), function (x) { return x.getAttribute("data-lvl"); });
-        S().put("outlines", Object.assign({}, o || { id: A.uid("out"), createdBy: me.id }, { subject: subj, levels: lv, title: f.title.value.trim().slice(0, 120), file: fileName || null, topics: topics, by: me.id }));
-        UI.toast("The " + subj + " syllabus is saved: " + topics.length + " topics"); A.render();
-      } }]),
+        var ticked = Array.prototype.map.call(f.querySelectorAll("[data-lvl]:checked"), function (x) { return x.getAttribute("data-lvl"); });
+        var forms = ticked.length ? ticked : st.levels.slice(), chosen = !syl && f.pick ? f.pick.value : "";
+        if (chosen) {
+          var lib = (window.SYLLABUS_LIBRARY || []).filter(function (x) { return "ready:" + x.id === chosen; })[0];
+          var s = lib ? A.addLibrarySyllabus(lib, me) : M.syllabus(chosen.slice(5));
+          if (!s) { UI.toast("That syllabus couldn't be found", "bad"); return false; }
+          s = Syl.addForms(s, forms);
+          UI.toast(subj + ": " + Syl.title(s) + " (syllabus ID " + s.id + ")" + (lib ? Syl.notesNote() : "")); A.render(); return;
+        }
+        var lines = T.parseTopics(f.topics.value, syl ? syl.topics : []);
+        if (!lines.length) { UI.toast("Read the syllabus's document, or type its topics", "bad"); return false; }
+        var code = f.code.value.trim().slice(0, 12), next;
+        if (syl) {
+          var lvl = byLevel(syl), same = lvl.length === forms.length && lvl.every(function (l) { return forms.indexOf(l) >= 0; });
+          next = Object.assign({}, syl, { title: f.title.value.trim().slice(0, 120), code: code, file: fileName || null, topics: Syl.mergeTopics(lines, syl.topics), forms: same ? [] : forms });
+        } else {
+          next = Object.assign(Syl.draft(subj, forms, A.Subjects ? A.Subjects.find(subj, forms[0]) : null, code), { title: f.title.value.trim().slice(0, 120), file: fileName || null, topics: Syl.mergeTopics(lines, []), createdBy: me.id });
+        }
+        var tw = Syl.twin(next, syl && syl.id);
+        if (tw) { UI.toast(Syl.title(tw) + " is in the library already (syllabus ID " + tw.id + ")" + (syl ? ": give this one its own code." : ": choose it under Syllabus."), "bad"); return false; }
+        next = S().put("syllabi", next);
+        UI.toast("The " + subj + " syllabus is saved: " + next.topics.length + " topics (syllabus ID " + next.id + ")" + (syl ? "" : Syl.notesNote())); A.render();
+      } }],
     });
   };
 
   /* ------------------------------------------------------------------ the tracker */
   function putCov(cid, s, change) {
-    var me = M.me(), conf = P.conf(), c = M.cls(cid), id = covId(conf.year, cid, s), o = T.outlineFor(s, c && c.level);
+    var me = M.me(), conf = P.conf(), c = M.cls(cid), id = covId(conf.year, cid, s), o = T.outlineFor(s, c && c.level, c);
     var cur = S().get("coverage", id) || { id: id, classId: cid, subject: s, year: String(conf.year), plan: {}, done: {} };
-    var rec = Object.assign({}, cur, { plan: Object.assign({}, cur.plan), done: Object.assign({}, cur.done), outlineId: o ? o.id : cur.outlineId || null });
+    var rec = Object.assign({}, cur, { plan: Object.assign({}, cur.plan), done: Object.assign({}, cur.done) });
+    if (o && o.syl) rec.syllabusId = o.id; else if (o) rec.outlineId = o.id;
     // the teacher whose tracker it is (an admin ticking for them leaves it theirs)
     if (!rec.teacherId || (!me.isAdmin && rec.teacherId !== me.id)) rec.teacherId = me.id;
     change(rec, o);
@@ -256,11 +341,11 @@
     var edit = canEdit(me, c, s);
     var st = T.stats(c, s, conf), o = st.outline, back = edit ? { label: "My subjects", href: "#/t/subjects" } : { label: c.name, href: "#/t/others/" + c.id + "?v=syllabus" };
     var crumbs = [back, { label: s + " · " + c.name }];
-    var head = '<div class="row wrap spread mb"><div><h2 style="font-size:22px">' + esc(s) + " · " + esc(P.classLabel(c)) + '</h2><p class="muted">' + (o ? esc(o.title || s + " syllabus") + " · " : "") + "Term " + conf.term + " " + esc(conf.year) +
+    var head = '<div class="row wrap spread mb"><div><h2 style="font-size:22px">' + esc(s) + " · " + esc(P.classLabel(c)) + '</h2><p class="muted">' + (o ? esc(o.title || s + " syllabus") + (o.syl ? ' <a class="small tnum" href="#/t/syllabus/' + esc(o.id) + '">ID ' + esc(o.id) + "</a>" : "") + " · " : "") + "Term " + conf.term + " " + esc(conf.year) +
       (st.cov && st.cov.teacherId && M.user(st.cov.teacherId) ? " · " + esc(M.user(st.cov.teacherId).name) : "") + "</p></div>" +
-      (o && (edit || me.isAdmin) && mayAddSyllabus(me, s) ? '<button class="btn" data-act="trk-outline" data-id="' + o.id + '">' + I("book") + "Syllabus</button>" : "") + "</div>";
+      (o && (edit || me.isAdmin) && mayAddSyllabus(me, s) ? '<button class="btn" data-act="trk-outline" data-id="' + esc(o.id) + '" data-c="' + esc(c.id) + '">' + I("book") + "Syllabus</button>" : "") + "</div>";
     if (!o) return { title: s, crumbs: crumbs, html: head + '<div class="card">' + UI.empty("book", "No syllabus yet", "Add the " + s + " syllabus (its document, a PDF): its topics come from it, and then you choose which are for which term and tick them as you teach them.",
-      (edit || me.isAdmin) && mayAddSyllabus(me, s) ? '<button class="btn btn-primary" data-act="trk-outline" data-subject="' + esc(s) + '" data-level="' + esc(c.level || "") + '">' + I("upload") + "Add the syllabus</button>" : "") + "</div>" };
+      (edit || me.isAdmin) && mayAddSyllabus(me, s) ? '<button class="btn btn-primary" data-act="trk-outline" data-subject="' + esc(s) + '" data-level="' + esc(c.level || "") + '" data-c="' + esc(c.id) + '">' + I("upload") + "Add the syllabus</button>" : "") + "</div>" };
     var cv = st.cov || {}, plan = cv.plan || {}, done = cv.done || {}, f = /^[123n]$/.test(q.t || "") ? q.t : "";
     var html = head;
     html += '<div class="grid g-4 mb">' + UI.stat("book", st.pct + "%", "Whole syllabus", false, st.done + " of " + st.total + " topics taught") +
@@ -286,6 +371,21 @@
         '<select class="select sm trk-term" data-change="trk-term" data-c="' + c.id + '" data-s="' + esc(s) + '" data-t="' + t.id + '" aria-label="Term for ' + esc(t.title) + '"' + dis + ">" +
         ['<option value="">No term</option>'].concat([1, 2, 3].map(function (n) { return '<option value="' + n + '"' + (Number(plan[t.id]) === n ? " selected" : "") + ">Term " + n + "</option>"; })).join("") + "</select></div>";
     }).join("") : UI.empty("book", "No topics here", f === "n" ? "Every topic has its term." : "Choose this term for some topics, from All topics.")) + "</div>";
+    // (2026-11-15) the students: who has finished the term's topics (their tutor, quick checks and tests; the end-of-term
+    // test passed finishes the term), each with their topics left
+    if (o.syl && P.withStudents && A.Syl) {
+      var kids = P.pupils(c).filter(function (u) { return u.role === "student"; }), srows = kids.map(function (u) {
+        var stt = A.Syl.studentTopics(u.id, o.syl), mine = o.syl.topics.filter(function (t) { return stt.byTopic[t.id].term === conf.term; });
+        var left = mine.filter(function (t) { return stt.byTopic[t.id].state !== "done"; }).length;
+        return { u: u, left: left, total: mine.length, fin: stt.terms[conf.term] };
+      }), finished = srows.filter(function (r) { return r.fin && r.fin.done; }).length, clear = srows.filter(function (r) { return !r.left; }).length;
+      if (kids.length) html += '<div class="card mt"><div class="card-head">' + I("users") + "<h3>Students · Term " + conf.term + '</h3><span class="sub">' + clear + " of " + kids.length + " done with the term's topics · " + finished + " passed the end-of-term test</span></div>" +
+        '<div class="gap-list card-pad">' + srows.sort(function (x, y) { return y.left - x.left || x.u.name.localeCompare(y.u.name); }).map(function (r) {
+          return '<button type="button" class="gap-row" data-act="syl-gaps" data-sid="' + r.u.id + '" data-syl="' + o.syl.id + '" data-term="' + conf.term + '">' + A.avatar(r.u, "sm") + '<span class="grow">' + esc(r.u.name) + "</span>" +
+            (r.fin ? '<span class="badge ' + (r.fin.done ? "good" : "warn") + '">' + esc(r.fin.label) + " · " + r.fin.pct + "%</span>" : "") +
+            (r.left ? '<span class="badge warn">' + r.left + " of " + r.total + " left</span>" : '<span class="badge good">' + I("check") + "Term done</span>") + I("right") + "</button>";
+        }).join("") + "</div></div>";
+    }
     if (!edit) html = html.replace('<div class="grid g-4 mb">', '<div class="callout mb">' + I("eye") + "<div><b>View only.</b> Only the teacher of " + esc(s) + " in " + esc(c.name) + " plans and ticks its topics.</div></div>" + '<div class="grid g-4 mb">');
     return { title: s + " · " + c.name, crumbs: crumbs, html: html };
   }, { role: "teacher" });
@@ -303,7 +403,7 @@
   };
   A.act["trk-auto"] = function (el) {
     if (!mayTick(el)) return;
-    var cid = el.getAttribute("data-c"), s = el.getAttribute("data-s"), c = M.cls(cid), o = c && T.outlineFor(s, c.level), cv = T.cov(cid, s);
+    var cid = el.getAttribute("data-c"), s = el.getAttribute("data-s"), c = M.cls(cid), o = c && T.outlineFor(s, c.level, c), cv = T.cov(cid, s);
     if (!o) return;
     var go = function () {
       putCov(cid, s, function (r) { var n = o.topics.length; r.plan = {}; o.topics.forEach(function (t, i) { r.plan[t.id] = 1 + Math.floor(i * 3 / n); }); });

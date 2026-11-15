@@ -212,7 +212,7 @@
     var teaching = [
       { href: "#/t/syllabi", icon: "layers", label: "Syllabus library", key: "syllabi", match: ["syllabi", "syllabus"] },
       { href: "#/t/materials", icon: "library", label: "Learning materials", key: "materials" },
-      { href: "#/t/tutor", icon: "cap", label: "Tutor content", key: "tutor" },
+      { href: "#/t/tutor", icon: "cap", label: "Co-teacher", key: "tutor" }, // (the students' tutor works from it: 2026-11-15)
     ];
     var settings = { href: me.isAdmin && A.pwRequestList && A.pwRequestList().length ? "#/t/settings?s=people" : me.isAdmin && A.joinsWaiting ? "#/t/settings?s=devices" : "#/t/settings", icon: "sliders", label: "Settings", key: "settings",
       count: me.isAdmin ? (A.pwRequestList ? A.pwRequestList().length : 0) + (A.joinsWaiting || 0) : 0 }; // password requests, devices waiting to join

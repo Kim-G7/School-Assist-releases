@@ -58,6 +58,12 @@
     return sys;
   };
   var KINDS = ["Exercise", "Test", "Homework", "CALA", "Mid-term test", "End of term exam"];
+  /* (2026-11-15) The School edition's Mark book is for tests: a topic test (one topic of the syllabus), a mock test and the
+     end-of-term test; class work, quizzes, homework and assignments are its subject classes' Gradebook (js/teacher.js).
+     School Assist Teacher has no Gradebook, so its Mark book keeps every kind. A topic test counts towards that topic for
+     each student, and the end-of-term test finishes the term's topics (A.Syl.studentTopics, js/syllabus.js). */
+  var SCHOOL_KINDS = ["Topic test", "Mock test", "End of term test"];
+  P.markKinds = function (cur) { var list = (P.withStudents ? SCHOOL_KINDS : KINDS.concat(["Topic test", "Mock test"])).slice(); if (cur && list.indexOf(cur) < 0) list.unshift(cur); return list; };
   var COMMENTS = [
     "A hardworking pupil who takes part well in class.", "Reads fluently and writes neatly. Keep it up.",
     "Good progress this term. More practice with mental maths will help.", "Capable, but needs to finish classwork on time.",
@@ -667,7 +673,7 @@
       }).join("") : '<div class="card-body muted small">Nothing waiting to be marked in your ' + classes.length + " subject class" + (classes.length === 1 ? "" : "es") + ".</div>") + "</div>";
   }
   A.route("t/home", function (p, q, me) {
-    var nc = needClass(me, "Today"); if (nc.view) return { title: nc.view.title, html: A.nameNudge(me) + P.requestsNote(me) + nc.view.html.replace(/^<div class="card">/, '<div class="card mb">') + lessonsCard(me) + workCard(me) };
+    var nc = needClass(me, "Today"); if (nc.view) return { title: nc.view.title, html: A.nameNudge(me) + P.requestsNote(me) + (A.notesPrompt ? A.notesPrompt(me) : "") + nc.view.html.replace(/^<div class="card">/, '<div class="card mb">') + lessonsCard(me) + workCard(me) };
     var c = nc.c, kids = P.pupils(c), today = A.isoDate(), reg = M.register(c.id, today), conf = P.conf();
     var boys = kids.filter(function (u) { return u.sex === "M"; }).length, girls = kids.filter(function (u) { return u.sex === "F"; }).length;
     var week = M.recentRegisters(c.id, 5), wk = { p: 0, n: 0 };
@@ -676,7 +682,7 @@
     var hour = A.date().getHours(), hi = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
     var school = M.isSchoolDay(A.now());
     var html = '<div class="row wrap spread mb"><div><h2 style="font-size:24px">' + hi + ", " + esc(greetName(me.name)) + '</h2><p class="muted">' + esc(A.fmtDateLong(A.now())) + " · " + esc(c.name) + " · Term " + conf.term + " " + esc(conf.year) + "</p></div>" + classSwitch(me, c, "home") + "</div>";
-    html += A.nameNudge(me) + P.requestsNote(me);
+    html += A.nameNudge(me) + P.requestsNote(me) + (A.notesPrompt ? A.notesPrompt(me) : "");
     html += school && !reg ? '<div class="callout warn mb">' + I("clock") + '<div class="grow"><b>Today\'s register isn\'t taken yet.</b> It takes a minute.</div><a class="btn btn-primary" href="#/t/register">' + I("check") + "Take the register</a></div>"
       : reg ? '<div class="callout mb">' + I("checkCircle") + "<div>Today's register is done: " + count(reg.marks, "P", "L", kids) + " of " + kids.length + " in class.</div></div>" : "";
     html += '<div class="grid g-4 mb">' + UI.stat("users", kids.length, "Pupils", false, boys + " boys, " + girls + " girls") +
@@ -927,12 +933,13 @@
       '<button class="btn" data-act="pupil-edit" data-id="' + u.id + '">' + I("edit") + "Edit details</button></div>" +
       '<dl class="kv mt">' + (u.studentNo ? "<dt>Student ID</dt><dd class=\"tnum\">" + esc(u.studentNo) + "</dd>" : "") + "<dt>Guardian</dt><dd>" + esc(P.guardianOf(u) ||"—") + "</dd><dt>Phone</dt><dd>" + esc(P.phoneOf(u) ||"—") + "</dd><dt>Address</dt><dd>" + esc(u.address || "—") + "</dd>" +
       (u.birthNo ? "<dt>Birth entry no.</dt><dd>" + esc(u.birthNo) + "</dd>" : "") + "</dl></div>";
-    // (2026-11-14) the student's subjects, each by its record and code, with who teaches it to them (by staff ID)
+    // (2026-11-14) the student's subjects, each by its record and code, with who teaches it to them (2026-11-15: their staff
+    // ID only for admins, as staff IDs are the school's to know)
     var subs = A.Subjects ? A.Subjects.ofStudent(u) : [], home = M.homeroomOf ? M.homeroomOf(u.id) : null;
     if (subs.length) html += '<div class="card mb"><div class="card-head">' + I("book") + "<h3>Subjects</h3><span class=\"sub\">" + subs.length + (home ? " · " + esc(home.name) : "") + '</span></div><div class="table-wrap"><table class="table"><thead><tr><th>Subject</th><th>Teacher</th></tr></thead><tbody>' +
       subs.map(function (x) {
         var tid = A.Enrol && A.Enrol.teacherFor ? A.Enrol.teacherFor(home, u.level, u.stream, x.name) : null, t = tid ? M.user(tid) : null;
-        return "<tr><td>" + A.Subjects.label(x.name, u.level, x.code) + "</td><td>" + (t ? esc(t.name) + (t.staffNo ? ' <span class="subj-code">' + esc(t.staffNo) + "</span>" : "") : '<span class="muted">Not set yet</span>') + "</td></tr>";
+        return "<tr><td>" + A.Subjects.label(x.name, u.level, x.code) + "</td><td>" + (t ? esc(t.name) + (t.staffNo && me.isAdmin ? ' <span class="subj-code">' + esc(t.staffNo) + "</span>" : "") : '<span class="muted">Not set yet</span>') + "</td></tr>";
       }).join("") + "</tbody></table></div></div>";
     html += '<div class="grid g-main"><div class="card"><div class="card-head">' + I("edit") + "<h3>Term " + conf.term + " marks</h3>" + (sc && sc.avg != null ? '<span class="sub">average ' + sc.avg + "%</span>" : "") + "</div>" +
       (sc && Object.keys(sc.area).length ? conf.areas.filter(function (a) { return sc.area[a] != null; }).map(function (a) {
@@ -1121,7 +1128,7 @@
       var avg = vals.length ? Math.round(A.avg(vals) / a.outOf * 100) : null;
       return '<a class="list-row click" href="#/t/assessment/' + a.id + '"><div class="grow"><div class="title">' + esc(a.title) + '</div><div class="meta"><span>' + esc(a.area) + '</span><span class="sep"></span><span>' + esc(a.kind) +
         '</span><span class="sep"></span><span>' + esc(A.fmtDate(Date.parse(a.date + "T12:00:00"))) + '</span><span class="sep"></span><span>out of ' + a.outOf + '</span><span class="sep"></span><span>' + vals.length + " of " + kids.length + " marked</span></div></div>" + UI.scoreBadge(avg) + "</a>";
-    }).join("") : UI.empty("edit", "Nothing marked yet", canNew ? "Add an exercise, test, homework or CALA task and enter each pupil's mark." : "", canNew ? '<button class="btn btn-primary" data-act="pas-new" data-c="' + c.id + '" data-a="' + esc(area) + '">' + I("plus") + "New marks</button>" : "")) + "</div>";
+    }).join("") : UI.empty("edit", "Nothing marked yet", canNew ? (P.withStudents ? "Add a topic test, a mock test or the end-of-term test and enter each student's mark. Class work, quizzes and homework go in each subject class's Gradebook." : "Add an exercise, test, homework or CALA task and enter each pupil's mark.") : "", canNew ? '<button class="btn btn-primary" data-act="pas-new" data-c="' + c.id + '" data-a="' + esc(area) + '">' + I("plus") + "New marks</button>" : "")) + "</div>";
     // the end-of-term mark and comment of each subject this teacher teaches: they go on the report cards (js/reportcards.js)
     html += endOfTerm(me, c, conf, term, area, q);
     // the class at a glance: each pupil's % per learning area this term
@@ -1153,22 +1160,34 @@
     var areas = P.ownAreasIn(me, c);
     if (!areas.length) { UI.toast(P.ownAreas(me).length ? "None of your subjects are taken in " + c.level : "You have no subjects yet: ask the head", "bad"); return; }
     if (a && areas.indexOf(a.area) < 0) { UI.toast("Only the teacher of " + a.area + " changes these marks", "bad"); return; }
-    a = a || { area: areas.indexOf(area) >= 0 ? area : areas[0], title: "", kind: "Exercise", date: A.isoDate(), outOf: 10, term: conf.term, year: conf.year };
+    a = a || { area: areas.indexOf(area) >= 0 ? area : areas[0], title: "", kind: P.markKinds()[0], date: A.isoDate(), outOf: P.withStudents ? 50 : 10, term: conf.term, year: conf.year };
+    var sylFor = function (ar) { return A.Syl ? A.Syl.forClass(ar, c.level, c) : null; };
+    var topicOpts = function (ar, cur) { var s = sylFor(ar); return '<option value="">' + (s ? "Choose the topic" : "No syllabus for " + esc(ar) + " yet") + "</option>" + (s ? s.topics.map(function (tp, i) { return '<option value="' + esc(tp.id) + '"' + (tp.id === cur ? " selected" : "") + ">" + (i + 1) + ". " + esc(tp.title) + "</option>"; }).join("") : ""); };
     var opts = areas.indexOf(a.area) >= 0 ? areas : [a.area].concat(areas);
     UI.modal({
       title: a.id ? "Edit " + a.title : "New marks · " + c.name,
+      onMount: function (m) {
+        var fm = m.querySelector("#pas"), box = m.querySelector("#pas-topic");
+        fm.kind.addEventListener("change", function () { box.style.display = fm.kind.value === "Topic test" ? "" : "none"; });
+        fm.area.addEventListener("change", function () { fm.topicId.innerHTML = topicOpts(fm.area.value, ""); });
+      },
       body: '<form id="pas" class="form-grid"><label class="field"><span>Subject</span><select class="select" name="area">' + opts.map(function (x) { return "<option" + (x === a.area ? " selected" : "") + ">" + esc(x) + "</option>"; }).join("") + "</select></label>" +
-        '<label class="field"><span>Type</span><select class="select" name="kind">' + KINDS.map(function (x) { return "<option" + (x === a.kind ? " selected" : "") + ">" + esc(x) + "</option>"; }).join("") + "</select></label>" +
-        '<label class="field full"><span>Title</span><input class="input" name="title" value="' + esc(a.title) + '" placeholder="e.g. Fractions test, Spelling list 4"></label>' +
+        '<label class="field"><span>Type</span><select class="select" name="kind">' + P.markKinds(a.kind).map(function (x) { return "<option" + (x === a.kind ? " selected" : "") + ">" + esc(x) + "</option>"; }).join("") + "</select></label>" +
+        '<label class="field full" id="pas-topic"' + (a.kind === "Topic test" ? "" : ' style="display:none"') + '><span>Topic</span><select class="select" name="topicId">' + topicOpts(a.area, a.topicId) + '</select><span class="hint">From the syllabus: each student\'s mark counts towards this topic in their syllabus progress.</span></label>' +
+        '<label class="field full"><span>Title</span><input class="input" name="title" value="' + esc(a.title) + '" placeholder="' + (P.withStudents ? "e.g. Algebra topic test, Term 1 mock" : "e.g. Fractions test, Spelling list 4") + '"></label>' +
         '<label class="field"><span>Date</span><input class="input" type="date" name="date" value="' + esc(a.date) + '"></label>' +
         '<label class="field"><span>Out of</span><input class="input" type="number" min="1" max="1000" name="outOf" value="' + esc(a.outOf) + '"></label></form>',
       foot: (a.id ? [{ label: "Delete", cls: "btn-danger", onClick: function () {
         return UI.confirm("Delete " + a.title + " and its marks?", { danger: true, ok: "Delete" }).then(function (ok) { if (!ok) return false; S().remove("assessments", a.id); location.hash = "#/t/markbook?c=" + c.id; });
       } }] : []).concat([{ label: "Cancel" }, { label: a.id ? "Save" : "Next: enter marks", cls: "btn-primary", onClick: function (m) {
         var f = UI.formData(m.querySelector("#pas")), out = Number(f.outOf);
+        if (f.kind === "Topic test" && !f.topicId) { UI.toast("Choose the topic it tests", "bad"); return false; }
+        if (!f.title.trim() && f.kind === "Topic test") { var tsyl = sylFor(f.area), tp = tsyl && M.topic(tsyl, f.topicId); f.title = tp ? tp.title + " test" : ""; }
         if (!f.title.trim()) { UI.toast("Give it a title", "bad"); return false; }
         if (!(out > 0)) { UI.toast("Enter what it is out of", "bad"); return false; }
+        var tsy = f.kind === "Topic test" ? sylFor(f.area) : null;
         var rec = S().put("assessments", Object.assign({}, a, { classId: c.id, area: f.area, kind: f.kind, title: f.title.trim(), date: f.date || A.isoDate(), outOf: out,
+          topicId: tsy ? f.topicId : null, syllabusId: tsy ? tsy.id : null,
           year: String((f.date || A.isoDate()).slice(0, 4)), term: termOf(f.date || A.isoDate(), conf), marks: a.marks || {}, createdBy: a.createdBy || me.id }));
         location.hash = "#/t/assessment/" + rec.id; A.render();
       } }]),
@@ -1296,15 +1315,17 @@
     var done = kids.filter(function (u) { return reportRec(u.id, conf.year, term).teacherComment; }).length;
     var html = reportTabs("class", term) + '<div class="row wrap spread mb"><div><h2 style="font-size:22px">Term ' + term + " reports · " + esc(c.name) + '</h2><p class="muted">' + done + " of " + kids.length + " have the class teacher's comment</p></div>" +
       '<div class="row wrap">' + classSwitch(me, c, "reports") + '<select class="select sm" style="width:auto" data-change="prep-term" aria-label="Term">' + [1, 2, 3].map(function (t) { return '<option value="' + t + '"' + (t === term ? " selected" : "") + ">Term " + t + "</option>"; }).join("") + "</select>" +
-      // the report cards (js/reportcards.js): PDFs in the desktop app, printed in a browser
-      '<button class="btn btn-primary" data-act="rc-make" data-scope="class" data-level="' + esc(c.level || "No grade") + '" data-key="' + esc(c.id) + '">' + I("download") + (window.desktop && window.desktop.reports ? "Make report cards" : "Print all reports") + "</button></div></div>";
-    html += '<div class="callout mb">' + I("info") + "<div>Write each pupil's comment, then <b>" + (window.desktop && window.desktop.reports ? "Make report cards" : "Print all reports") + "</b>.</div></div>";
+      // the report cards (js/reportcards.js): PDFs in the desktop app, printed in a browser; only admins make them (2026-11-15:
+      // a card has every one of a student's subjects, so one class's teacher printing theirs is no use)
+      (me.isAdmin ? '<button class="btn btn-primary" data-act="rc-make" data-scope="class" data-level="' + esc(c.level || "No grade") + '" data-key="' + esc(c.id) + '">' + I("download") + (window.desktop && window.desktop.reports ? "Make report cards" : "Print all reports") + "</button>" : "") + "</div></div>";
+    html += '<div class="callout mb">' + I("info") + "<div>" + (me.isAdmin ? "Write each pupil's comment, then <b>" + (window.desktop && window.desktop.reports ? "Make report cards" : "Print all reports") + "</b>."
+      : "Write each pupil's comment. The report cards, with every subject's marks, are made by the school's admins.") + "</div></div>";
     html += kids.length ? '<div class="card table-wrap"><table class="table"><thead><tr><th>Pupil</th><th class="num">Average</th><th class="num">Position</th><th class="num">Days present</th><th>Teacher\'s comment</th><th></th></tr></thead><tbody>' +
       kids.map(function (u) {
         var s = sc.by[u.id], r = reportRec(u.id, conf.year, term), att = termAttendance(c, u.id, term, conf);
         return "<tr><td><b>" + esc(u.name) + '</b></td><td class="num">' + UI.scoreBadge(s.avg) + '</td><td class="num tnum">' + (s.pos ? s.pos + " / " + sc.ranked : "—") + '</td><td class="num tnum">' + att.present + " / " + att.days + "</td>" +
           '<td class="small">' + (r.teacherComment ? esc(r.teacherComment) : '<span class="muted">Not written yet</span>') + "</td>" +
-          '<td class="nowrap"><button class="btn btn-sm" data-act="prep-edit" data-id="' + u.id + '" data-term="' + term + '">' + I("edit") + 'Comments</button> <button class="btn btn-sm btn-ghost" data-act="rc-make" data-scope="student" data-level="' + esc(c.level || "No grade") + '" data-key="' + esc(c.id) + '" data-sid="' + u.id + '">' + I("download") + (window.desktop && window.desktop.reports ? "PDF" : "Print") + "</button></td></tr>";
+          '<td class="nowrap"><button class="btn btn-sm" data-act="prep-edit" data-id="' + u.id + '" data-term="' + term + '">' + I("edit") + "Comments</button>" + (me.isAdmin ? ' <button class="btn btn-sm btn-ghost" data-act="rc-make" data-scope="student" data-level="' + esc(c.level || "No grade") + '" data-key="' + esc(c.id) + '" data-sid="' + u.id + '">' + I("download") + (window.desktop && window.desktop.reports ? "PDF" : "Print") + "</button>" : "") + "</td></tr>";
       }).join("") + "</tbody></table></div>" : '<div class="card">' + UI.empty("users", "No pupils yet", "Add your class list first.") + "</div>";
     return { title: "Reports", html: html };
   }, { role: "teacher" });
@@ -1344,6 +1365,7 @@
       conf.bands.slice().sort(function (a, b2) { return b2[0] - a[0]; }).map(function (x) { return esc(x[1]) + " " + x[0] + "%+"; }).join(", ") + ".</footer></section>";
   };
   A.act["prep-print"] = function (el) {
+    if (!(M.me() || {}).isAdmin) return; // (admins make the reports)
     var me = M.me(), c = P.cls(me), conf = P.conf(), term = Number(el.getAttribute("data-term")) || conf.term, sc = P.scores(c, conf.year, term), id = el.getAttribute("data-id");
     var kids = P.pupils(c).filter(function (u) { return !id || u.id === id; });
     P.print(kids.map(function (u) { return P.reportHtml(u, c, term, sc, conf); }).join(""));
@@ -1353,9 +1375,10 @@
 
   /* ------------------------------------------------------------------ Schemes and records */
   function schemeId(c, area, year, term) { return "sch_" + c.id + "_" + year + "_t" + term + "_" + area.toLowerCase().replace(/[^a-z0-9]+/g, "-"); }
-  /* Schemes & records: the term's work in a learning area (its topics, listed once), each ticked when it is taught
-     (the record of work: the date it was taught). schemes record { classId, area, year, term, rows: [{ topic, taught, taughtAt }] }
-     (schemes kept before 1.6.2 had a week, objectives, activities, resources and an evaluation per row: their topics show here). */
+  /* Schemes & records: the term's work in a subject, from its syllabus (2026-11-15): the syllabus's topics, each given its
+     term by the subject's teacher and ticked when it is taught (the record of work: the date it was taught), kept in the
+     class's coverage record (js/tracker.js), the same as its syllabus tracker. Before, the topics were typed into a
+     schemes record { classId, area, year, term, rows: [{ topic, taught, taughtAt }] }: those still show, to look at. */
   /* Whose schemes (2026-10-26): a teacher's own subjects only, in the classes they teach (one subject: no list to
      choose from); admins and the school's leaders also look at every other subject's, in any class, without changing
      them. */
@@ -1372,61 +1395,55 @@
     if (!classes.length) return { title: "Schemes & records", html: '<div class="card">' + UI.empty("users", "No classes yet", "Your scheme of work is kept for each class you teach " + area + " in. Ask an admin to add your classes (My subjects).") + "</div>" };
     var home = P.cls(me), c = classes.filter(function (x) { return x.id === q.c; })[0] || (home && classes.filter(function (x) { return x.id === home.id; })[0]) || classes[0];
     var edit = P.mayMark(me, c.id, area);
-    var id = schemeId(c, area, conf.year, term), rows = schemeRowsOf(id), taught = rows.filter(function (r) { return r.taught; }).length;
-    var opt = function (a) { var n = schemeRowsOf(schemeId(c, a, conf.year, term)).length; return '<option value="' + esc(a) + '"' + (a === area ? " selected" : "") + ">" + esc(a) + (n ? " (" + n + ")" : "") + "</option>"; };
+    // (2026-11-15) the scheme is the syllabus's: its topics (the one syllabus in the library, js/syllabus.js), each given its
+    // term here and ticked when taught (the record of work, with the date). It is the class's syllabus tracker too
+    // (js/tracker.js coverage), so My subjects, the tracker and the Teachers' overview agree; no topics are typed in
+    var TR = A.Tracker, o = TR ? TR.outlineFor(area, c.level, c) : null, cv = (o && TR.cov(c.id, area)) || {}, plan = cv.plan || {}, done = cv.done || {};
+    var old = schemeRowsOf(schemeId(c, area, conf.year, term));
+    var inTerm = o ? o.topics.filter(function (t) { return Number(plan[t.id]) === term; }) : [], taught = inTerm.filter(function (t) { return done[t.id]; }).length;
+    var planned = function (a) { var oo = TR ? TR.outlineFor(a, c.level, c) : null, cc = oo && TR.cov(c.id, a); return oo && cc ? oo.topics.filter(function (t) { return Number((cc.plan || {})[t.id]) === term; }).length : 0; };
+    var opt = function (a) { var n = planned(a); return '<option value="' + esc(a) + '"' + (a === area ? " selected" : "") + ">" + esc(a) + (n ? " (" + n + ")" : "") + "</option>"; };
     var areaPick = own.length + others.length < 2 ? "" : '<select class="select sm" style="width:auto" data-change="psch-go" data-k="a" aria-label="Subject">' +
       (others.length && own.length ? '<optgroup label="Your subjects">' + own.map(opt).join("") + '</optgroup><optgroup label="Other subjects (view only)">' + others.map(opt).join("") + "</optgroup>" : own.concat(others).map(opt).join("")) + "</select>";
     var classPick = classes.length < 2 ? "" : '<select class="select sm" style="width:auto" data-change="psch-go" data-k="c" aria-label="Class">' + classes.map(function (x) { return '<option value="' + x.id + '"' + (x.id === c.id ? " selected" : "") + ">" + esc(x.name) + "</option>"; }).join("") + "</select>";
-    var who = (A.Tracker && A.Tracker.whoTeaches()[c.id + "|" + area] || []).map(function (uid) { var u = M.user(uid); return u ? u.name : ""; }).filter(Boolean);
-    var html = '<div class="row wrap spread mb"><div><h2 style="font-size:22px">Scheme of work · ' + esc(area) + '</h2><p class="muted">' + esc(c.name) + " · Term " + term + " " + esc(conf.year) + (rows.length ? " · " + taught + " of " + rows.length + " topics taught" : "") + "</p></div>" +
+    var who = (TR && TR.whoTeaches()[c.id + "|" + area] || []).map(function (uid) { var u = M.user(uid); return u ? u.name : ""; }).filter(Boolean);
+    var at = ' data-c="' + esc(c.id) + '" data-s="' + esc(area) + '"';
+    var termSel = function (t) {
+      return '<select class="select sm trk-term" data-change="trk-term"' + at + ' data-t="' + esc(t.id) + '" aria-label="Term for ' + esc(t.title) + '"' + (edit ? "" : " disabled") + ">" +
+        ['<option value="">No term</option>'].concat([1, 2, 3].map(function (n) { return '<option value="' + n + '"' + (Number(plan[t.id]) === n ? " selected" : "") + ">Term " + n + "</option>"; })).join("") + "</select>";
+    };
+    var html = '<div class="row wrap spread mb"><div><h2 style="font-size:22px">Scheme of work · ' + esc(area) + '</h2><p class="muted">' + esc(c.name) + " · Term " + term + " " + esc(conf.year) + (inTerm.length ? " · " + taught + " of " + inTerm.length + " topics taught" : "") + "</p></div>" +
       '<div class="row wrap" id="psch-picks" data-a="' + esc(area) + '" data-c="' + esc(c.id) + '" data-term="' + term + '">' + classPick +
       '<select class="select sm" style="width:auto" data-change="psch-go" data-k="term" aria-label="Term">' + [1, 2, 3].map(function (t) { return '<option value="' + t + '"' + (t === term ? " selected" : "") + ">Term " + t + "</option>"; }).join("") + "</select>" +
-      areaPick + (rows.length ? '<button class="btn" data-act="psch-print">' + I("download") + "Print</button>" : "") + "</div></div>";
+      areaPick + (inTerm.length || old.length ? '<button class="btn" data-act="psch-print">' + I("download") + "Print</button>" : "") + "</div></div>";
     if (!edit) html += '<div class="callout mb">' + I("eye") + "<div>View only: " + esc(area) + " in " + esc(c.name) + (who.length ? " is " + esc(who.join(" and ")) + "'s to plan and tick" : " has no teacher on record yet") + ".</div></div>";
-    html += '<div class="card" id="psch" data-id="' + esc(id) + '" data-class="' + esc(c.id) + '" data-area="' + esc(area) + '" data-term="' + term + '">' +
-      '<div class="card-head">' + I("book") + "<h3>Term " + term + " work</h3>" + (rows.length && edit ? '<span class="grow"></span><span class="muted small">Tick each topic when it has been taught</span>' : "") + "</div>" +
-      (rows.length ? rows.map(function (r, i) {
-        return '<div class="list-row psch-topic' + (r.taught ? " done" : "") + '"><label class="row grow" style="gap:10px;' + (edit ? "cursor:pointer" : "") + '"><input type="checkbox"' + (edit ? ' data-change="psch-tick" data-i="' + i + '"' : " disabled") + (r.taught ? " checked" : "") + ' aria-label="Taught">' +
-          '<span class="grow"><span class="title">' + esc(r.topic) + "</span>" + (r.taught ? '<span class="meta"> · taught' + (r.taughtAt ? " " + esc(A.fmtDate(Date.parse(r.taughtAt + "T12:00:00"))) : "") + "</span>" : "") + "</span></label>" +
-          (edit ? '<button class="btn btn-ghost btn-icon btn-sm" data-act="psch-del" data-i="' + i + '" aria-label="Remove ' + esc(r.topic) + '">' + I("trash") + "</button>" : "") + "</div>";
-      }).join("") : edit ? "" : '<div class="card-pad"><p class="muted small">No topics planned for this term yet.</p></div>') +
-      (edit ? '<div class="card-pad"><label class="field"><span>' + (rows.length ? "More topics" : "This term's topics in " + esc(area)) + ' <span class="muted">(one per line, or paste a list)</span></span>' +
-        '<textarea class="input" id="psch-new" rows="' + (rows.length ? 2 : 6) + '" placeholder="e.g. Fractions&#10;Decimals&#10;Measurement"></textarea></label>' +
-        '<div class="row mt-sm"><button class="btn btn-primary" data-act="psch-add">' + I("plus") + "Add the topics</button></div></div>" : "") + "</div>";
+    html += '<div class="card" id="psch" data-id="' + esc(schemeId(c, area, conf.year, term)) + '" data-class="' + esc(c.id) + '" data-area="' + esc(area) + '" data-term="' + term + '">' +
+      '<div class="card-head">' + I("book") + "<h3>Term " + term + " work</h3>" + (o ? '<span class="sub">' + esc(o.title) + (o.syl ? ' · <a class="tnum" href="#/t/syllabus/' + esc(o.id) + '">ID ' + esc(o.id) + "</a>" : "") + "</span>" : "") +
+      (inTerm.length && edit ? '<span class="grow"></span><span class="muted small">Tick each topic when it has been taught</span>' : "") + "</div>" +
+      (!o ? '<div class="card-pad">' + UI.empty("book", "No syllabus for " + area + " yet", "The scheme of work takes its topics from the subject's syllabus in the Syllabus library. Add it once (or choose one there) and every class of this form has its topics.",
+        '<button class="btn btn-primary" data-act="trk-outline" data-subject="' + esc(area) + '" data-level="' + esc(c.level || "") + '" data-c="' + esc(c.id) + '">' + I("upload") + "Add the syllabus</button>") + "</div>"
+        : inTerm.length ? inTerm.map(function (t) {
+          var d = done[t.id];
+          return '<div class="list-row psch-topic' + (d ? " done" : "") + '"><label class="row grow" style="gap:10px;' + (edit ? "cursor:pointer" : "") + '"><input type="checkbox" data-change="trk-done"' + at + ' data-t="' + esc(t.id) + '"' + (d ? " checked" : "") + (edit ? "" : " disabled") + ' aria-label="Taught: ' + esc(t.title) + '">' +
+            '<span class="grow"><span class="title">' + (t.n ? '<span class="muted tnum">' + esc(t.n) + "</span> " : "") + esc(t.title) + "</span>" + (d ? '<span class="meta"> · taught ' + esc(A.fmtDate(d)) + "</span>" : "") +
+            ((t.parts || []).length ? '<span class="small muted" style="display:block">' + esc(t.parts.map(function (x) { return x.title; }).join(" · ")) + "</span>" : "") + "</span></label>" + (edit ? termSel(t) : "") + "</div>";
+        }).join("") : '<div class="card-pad"><p class="muted small">No topics chosen for Term ' + term + " yet" + (edit ? ": give each of the syllabus's topics its term below." : ".") + "</p></div>") + "</div>";
+    // every topic of the syllabus, with its term: the teacher chooses, here and only here (the syllabus itself stays one entry)
+    if (o && edit) html += '<details class="card mt psch-all"' + (inTerm.length ? "" : " open") + '><summary class="card-head">' + I("calendar") + "<h3>The syllabus's topics</h3><span class=\"sub\">" + o.topics.length + " · choose each one's term</span></summary>" +
+      '<div class="card-pad row wrap" style="padding-bottom:0"><button class="btn btn-sm" data-act="trk-auto"' + at + ">" + I("calendar") + "Spread them over the three terms</button></div>" +
+      o.topics.map(function (t) {
+        return '<div class="list-row"><div class="grow"><div class="title">' + (t.n ? '<span class="muted tnum">' + esc(t.n) + "</span> " : "") + esc(t.title) + "</div>" + (done[t.id] ? '<div class="meta"><span>taught ' + esc(A.fmtDate(done[t.id])) + "</span></div>" : "") + "</div>" + termSel(t) + "</div>";
+      }).join("") + "</details>";
+    // what was typed into this term's scheme before it came from the syllabus: kept, to look at
+    if (old.length) html += '<div class="card mt"><div class="card-head">' + I("clock") + '<h3>Written before</h3><span class="sub">typed into this term\'s scheme before it came from the syllabus</span></div>' +
+      old.map(function (r) { return '<div class="list-row"><div class="grow"><div class="title">' + esc(r.topic) + "</div>" + (r.taught ? '<div class="meta"><span>taught' + (r.taughtAt ? " " + esc(A.fmtDate(Date.parse(r.taughtAt + "T12:00:00"))) : "") + "</span></div>" : "") + "</div>" + (r.taught ? '<span class="badge good">' + I("check") + "Taught</span>" : "") + "</div>"; }).join("") + "</div>";
     return { title: "Schemes & records", html: html };
   }, { role: "teacher" });
-  /** Only the subject's own teacher, in a class they teach, changes its scheme (the page shows the rest view only). */
-  function schemeMine(x) { return !!x && P.mayMark(M.me(), x.classId, x.area); }
   function schemeRowsOf(id) { var r = S().get("schemes", id); return ((r && r.rows) || []).filter(function (x) { return x && String(x.topic || "").trim(); }); }
   function schemeHere() {
     var t = document.getElementById("psch");
     return t ? { id: t.getAttribute("data-id"), classId: t.getAttribute("data-class"), area: t.getAttribute("data-area"), term: Number(t.getAttribute("data-term")) } : null;
   }
-  function putScheme(x, rows) {
-    var cur = S().get("schemes", x.id);
-    S().put("schemes", Object.assign({}, cur || { id: x.id }, { classId: x.classId, area: x.area, year: P.conf().year, term: x.term, rows: rows }));
-  }
-  A.act["psch-add"] = function () {
-    var x = schemeHere(), box = document.getElementById("psch-new"); if (!schemeMine(x) || !box) return;
-    var add = box.value.split(/\r?\n/).map(function (s) { return s.replace(/^\s*[-•*\d.)]+\s*/, "").trim().slice(0, 200); }).filter(Boolean), rows = schemeRowsOf(x.id), n = 0;
-    if (!add.length) { UI.toast("Type the topics, one per line", "bad"); box.focus(); return; }
-    add.forEach(function (t) { if (!rows.some(function (r) { return r.topic.toLowerCase() === t.toLowerCase(); })) { rows.push({ topic: t, taught: false }); n++; } });
-    putScheme(x, rows);
-    UI.toast(n ? n + " topic" + (n === 1 ? "" : "s") + " added" : "Those topics are already there");
-    A.render();
-  };
-  A.act["psch-tick"] = function (el) {
-    var x = schemeHere(); if (!schemeMine(x)) return;
-    var rows = schemeRowsOf(x.id), r = rows[Number(el.getAttribute("data-i"))]; if (!r) return;
-    r.taught = el.checked; r.taughtAt = el.checked ? A.isoDate() : "";
-    putScheme(x, rows);
-    A.render();
-  };
-  A.act["psch-del"] = function (el) {
-    var x = schemeHere(); if (!schemeMine(x)) return;
-    var rows = schemeRowsOf(x.id), i = Number(el.getAttribute("data-i")), r = rows[i]; if (!r) return;
-    UI.confirm("Remove " + r.topic + " from this term's work?", { danger: true, ok: "Remove" }).then(function (ok) { if (!ok) return; rows.splice(i, 1); putScheme(x, rows); A.render(); });
-  };
   // the class, term or subject chosen: the page again with the others kept
   A.act["psch-go"] = function (el) {
     var box = document.getElementById("psch-picks"); if (!box) return;
@@ -1436,7 +1453,9 @@
   };
   A.act["psch-print"] = function () {
     var x = schemeHere(); if (!x) return;
-    var c = S().get("classes", x.classId), conf = P.conf(), rows = schemeRowsOf(x.id), b = A.Theme.get();
+    // the term's topics from the syllabus, taught or not, with the date; then anything typed in before
+    var c = S().get("classes", x.classId), conf = P.conf(), b = A.Theme.get(), TR = A.Tracker, o = TR && c ? TR.outlineFor(x.area, c.level, c) : null, cv = (o && TR.cov(c.id, x.area)) || {};
+    var rows = (o ? o.topics.filter(function (t) { return Number((cv.plan || {})[t.id]) === x.term; }).map(function (t) { var d = (cv.done || {})[t.id]; return { topic: (t.n ? t.n + " " : "") + t.title, taught: !!d, taughtAt: d ? A.isoDate(d) : "" }; }) : []).concat(schemeRowsOf(x.id));
     P.print('<section class="preport pscheme"><header class="preport-head">' + A.Theme.logoHTML() + '<div class="grow"><h1>' + esc(b.name) + "</h1><p>Scheme of work and record of work</p></div>" +
       '<div class="preport-term"><b>' + esc(x.area) + "</b><span>" + esc(c ? c.name : "") + " · Term " + x.term + " " + esc(conf.year) + "</span></div></header>" +
       '<table class="preport-marks"><thead><tr><th>#</th><th>Topic</th><th>Taught</th><th>Date</th></tr></thead><tbody>' +

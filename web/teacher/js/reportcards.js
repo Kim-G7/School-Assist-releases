@@ -674,6 +674,7 @@
   }
   /** Make the PDFs (desktop app), or print (a browser); first, a word about any end-of-term marks not in yet. */
   A.act["rc-make"] = function (el) {
+    if (!(M.me() || {}).isAdmin) { UI.toast("The school's admins make the report cards", "bad"); return; } // (2026-11-15)
     var t = pageTerm(), scope = el.getAttribute("data-scope"), level = el.getAttribute("data-level"), k = el.getAttribute("data-key"), sid = el.getAttribute("data-sid");
     var groups = R.groups().filter(function (g) { return scope === "all" || g.level === level; }).map(function (g) {
       return { level: g.level, classes: g.classes.filter(function (c) { return scope === "all" || scope === "level" || c.key === k; }) };

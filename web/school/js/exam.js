@@ -74,10 +74,11 @@
       html += '<div class="card mt review-card"><div class="card-head">' + I("alert") + "<h3>Finish these first</h3><span class=\"sub\">unfinished from earlier terms</span></div>" +
         carry.map(function (x) { return A.topicRow(me, syl, x.t, syl.topics.indexOf(x.t), pr.byTopic[x.t.id], M.topicAccess(me.id, cls, syl, x.t)) .replace('class="topic-row"', 'class="topic-row" data-term="' + x.term + '"'); }).join("") + "</div>";
     }
-    var termBlocks = M.syllabusTerms(syl).map(function (n) {
-      var topics = syl.topics.filter(function (t) { return M.topicTerm(t) === n; }), r = M.termReview(me.id, syl, n);
-      var label = allTerms ? r.done + " of " + r.total + " completed" : n < cur ? "Review · " + r.done + " of " + r.total + " completed" : n === cur ? "Current term" : "Opens later";
-      var badge = allTerms ? (r.unfinished.length ? "brand" : "good") : n < cur ? (r.unfinished.length ? "warn" : "good") : n === cur ? "brand" : "";
+    // (the class's scheme of work gives the terms: js/model.js M.topicTerm)
+    var termBlocks = M.syllabusTerms(syl, cls).map(function (n) {
+      var topics = syl.topics.filter(function (t) { return M.topicTerm(t, cls) === n; }), r = M.termReview(me.id, syl, n);
+      var label = allTerms ? r.done + " of " + r.total + " completed" : !n ? "Not planned yet" : n < cur ? "Review · " + r.done + " of " + r.total + " completed" : n === cur ? "Current term" : "Opens later";
+      var badge = allTerms ? (r.unfinished.length ? "brand" : "good") : !n ? "" : n < cur ? (r.unfinished.length ? "warn" : "good") : n === cur ? "brand" : "";
       return '<div class="term-head"><b>' + esc(M.termName(n)) + '</b><span class="badge ' + badge + '">' + esc(label) + "</span></div>" +
         topics.map(function (t) { return A.topicRow(me, syl, t, syl.topics.indexOf(t), pr.byTopic[t.id], M.topicAccess(me.id, cls, syl, t)); }).join("");
     }).join("");

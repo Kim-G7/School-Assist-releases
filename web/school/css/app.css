@@ -355,9 +355,11 @@ details.paper-group[open] > summary::after { content: "▾"; }
 .badge.k-assignment { background: var(--cat-3-soft); color: var(--cat-3-text); }
 .badge.k-test { background: var(--cat-4-soft); color: var(--cat-4-text); }
 .badge.k-presentation { background: var(--cat-2-soft); color: var(--cat-2-text); }
+.badge.k-classwork { background: var(--brand-soft); color: var(--brand-text); }
 .kind-bar { width: 4px; align-self: stretch; border-radius: 4px; flex: none; }
 .kind-bar.k-homework { background: var(--cat-1); } .kind-bar.k-assignment { background: var(--cat-3); }
 .kind-bar.k-test { background: var(--cat-4); } .kind-bar.k-presentation { background: var(--cat-2); }
+.kind-bar.k-classwork { background: var(--brand); }
 
 /* ------------------------------------------------------------------ avatar */
 .avatar { width: 36px; height: 36px; border-radius: 99px; display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; color: #fff; letter-spacing: .02em; }
@@ -1413,13 +1415,23 @@ table.tt-days { min-width: 880px; }
 
 /* My subjects and the syllabus tracker (js/tracker.js) */
 a.trk-card { display: block; color: inherit; text-decoration: none; }
+.trk-subj { cursor: pointer; }
+@media (hover: hover) { .trk-subj:hover { border-color: var(--brand-text); } }
+/* a student a row, with how far they are; their topics left open from the row (2026-11-15) */
+.gap-list { display: grid; gap: 6px; }
+.gap-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+@media (hover: hover) { .gap-row:hover { border-color: var(--brand-text); } }
+.gap-row .title { display: block; font-weight: 600; }
+.gap-bar { display: block; max-width: 260px; margin-top: 4px; }
 @media (hover: hover) { a.trk-card:hover { border-color: var(--brand-text); } }
 .trk-card .bar { margin-top: 6px; }
 .trk-row { align-items: center; }
 .trk-row .trk-tick { min-height: 0; flex: none; }
 .trk-row .trk-tick input { width: 22px; height: 22px; }
 .trk-row.done .title { color: var(--text-2); }
-.trk-row .trk-term { width: auto; flex: none; }
+.trk-row .trk-term, .psch-topic .trk-term, .psch-all .trk-term { width: auto; flex: none; }
+.psch-topic label input[type="checkbox"] { flex: none; width: 20px; height: 20px; }
+.psch-all > summary { cursor: pointer; list-style: none; }
 .ov-table td { vertical-align: middle; }
 .ov-table .pct-cell { min-width: 120px; }
 @media (max-width: 720px) { .trk-row .trk-term { margin-left: 34px; } }

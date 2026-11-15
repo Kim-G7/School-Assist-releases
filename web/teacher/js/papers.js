@@ -80,7 +80,7 @@
     UI.modal({
       title: "What are you adding?", size: "wide", foot: [{ label: "Cancel" }],
       body: '<div class="upload-choices">' +
-        card("study", "book", "Study material", "Notes, textbooks, videos, audio, pictures and written handouts.") +
+        card("study", "book", "Study material", "Textbooks, worksheets, videos, audio, pictures and written handouts. Notes for a topic go in Co-teacher.") +
         card("papers", "award", "Exam papers", "Question papers, and their marking schemes if you have them. Choose many files at once: they are sorted and paired for you.") +
         card("schemes", "key", "Marking schemes", "For exam papers already in the library. Each one is matched to its paper.") +
         "</div>",
@@ -89,7 +89,7 @@
           var b = e.target.closest("[data-choose]"); if (!b) return;
           var c = b.getAttribute("data-choose");
           close();
-          if (c === "study") A.materialModal(opts);
+          if (c === "study") A.materialModal(Object.assign({ cats: A.LIBRARY_CATS }, opts));
           else A.examBatchModal(Object.assign({}, opts, { mode: c }));
         });
       },

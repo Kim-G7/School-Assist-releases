@@ -9,10 +9,13 @@
 
   var M = (A.M = { EXAM: EXAM });
 
+  /* Tasks and the Gradebook are a class's work through the term: class work, quizzes, homework and assignments (and
+     presentations). Topic tests, mock tests and the end-of-term test are in the Mark book (js/primary.js, 2026-11-15). */
   M.KINDS = {
+    classwork: { label: "Class work", icon: "edit" },
     homework: { label: "Homework", icon: "notebook" },
     assignment: { label: "Assignment", icon: "file" },
-    test: { label: "Test", icon: "target" },
+    test: { label: "Quiz", icon: "target" }, // ("test" until 2026-11-15: a quiz in class, or online and marked by itself)
     presentation: { label: "Presentation", icon: "present" },
   };
   M.kindBadge = function (kind) {
@@ -217,23 +220,57 @@
      Default: a topic is open when its term has been opened for the class.
      The teacher can override any topic (open / locked) with exceptions for
      chosen students, and can require topics to be completed in order. */
-  M.topicTerm = function (t) { return Number(t && t.term) || 1; };
-  M.syllabusTerms = function (syl) {
-    var set = {};
-    (syl.topics || []).forEach(function (t) { set[M.topicTerm(t)] = 1; });
-    return Object.keys(set).map(Number).sort();
+  /* A topic's term (2026-11-15): for a class, its form's scheme of work (Schemes & records: the teacher gives each of the
+     syllabus's topics its term there, js/primary.js and js/tracker.js coverage) once any topic has one there; a topic the
+     scheme hasn't given a term yet is 0, "Not planned yet", and stays locked. Before any planning, and with no class, the
+     syllabus's own term. */
+  var schemeCache = null;
+  /** The form a class's term plan comes from: the form itself, the form of the same level and stream, else the form most
+      of its students are in. */
+  function formOf(cls) {
+    if (cls.homeroom) return cls;
+    var forms = S().filter("classes", function (c) { return c.homeroom && c.level === cls.level; });
+    var same = forms.filter(function (c) { return cls.stream && c.stream === cls.stream; });
+    if (same.length === 1) return same[0];
+    var best = null, n = 0;
+    forms.forEach(function (c) { var k = (cls.studentIds || []).filter(function (id) { return (c.studentIds || []).indexOf(id) >= 0; }).length; if (k > n) { n = k; best = c; } });
+    return best;
+  }
+  /** A class's plan { topicId: term } for its subject (null: none planned yet). */
+  function schemePlan(cls) {
+    if (!cls || !A.Tracker || !A.Primary) return null;
+    if (!schemeCache) { schemeCache = {}; setTimeout(function () { schemeCache = null; }, 0); }
+    if (cls.id in schemeCache) return schemeCache[cls.id];
+    var form = formOf(cls), syl = M.syllabus(cls.syllabusId), subj = cls.homeroom ? "" : cls.subject || (syl && syl.subject) || "", plan = null;
+    if (form && subj) {
+      var area = ((A.Primary.levelAreas && A.Primary.levelAreas(form.level)) || []).filter(function (a) { return A.Syl ? A.Syl.sameSubject(a, subj) : a === subj; })[0] || subj;
+      var cv = A.Tracker.cov(form.id, area);
+      plan = cv && cv.plan && Object.keys(cv.plan).length ? cv.plan : null;
+    }
+    return (schemeCache[cls.id] = plan);
+  }
+  M.topicTerm = function (t, cls) {
+    var plan = cls ? schemePlan(cls) : null;
+    return plan ? Number(plan[t.id]) || 0 : Number(t && t.term) || 1;
   };
-  M.termName = function (n) { return ((CFG.terms || [])[n - 1]) || "Term " + n; };
+  /** The terms a syllabus's topics are in (for a class: by its scheme), "not planned yet" (0) last. */
+  M.syllabusTerms = function (syl, cls) {
+    var set = {};
+    (syl.topics || []).forEach(function (t) { set[M.topicTerm(t, cls)] = 1; });
+    return Object.keys(set).map(Number).sort(function (a, b) { return (a || 9) - (b || 9); });
+  };
+  M.termName = function (n) { return n ? ((CFG.terms || [])[n - 1]) || "Term " + n : "Not planned yet"; };
+  var termOpen = function (t, cls) { var n = M.topicTerm(t, cls); return n > 0 && n <= (cls.currentTerm || 1); };
   function baseOpen(sid, cls, t) {
     var ov = (cls.topicAccess || {})[t.id];
-    var open = ov ? ov.mode === "open" : M.topicTerm(t) <= (cls.currentTerm || 1);
+    var open = ov ? ov.mode === "open" : termOpen(t, cls);
     if (ov && sid && (ov.except || []).indexOf(sid) >= 0) open = !open;
     return open;
   }
   /** Class-wide setting (ignores per-student exceptions). */
   M.topicClassSetting = function (cls, t) {
     var ov = (cls.topicAccess || {})[t.id];
-    var open = ov ? ov.mode === "open" : M.topicTerm(t) <= (cls.currentTerm || 1);
+    var open = ov ? ov.mode === "open" : termOpen(t, cls);
     return { open: open, override: !!ov, except: (ov && ov.except) || [] };
   };
   /** -> { open, reason: term|teacher|student|sequence, prev?, term? } */
@@ -241,7 +278,7 @@
     if (!cls || !t) return { open: false, reason: "teacher" };
     if (!baseOpen(sid, cls, t)) {
       var ov = (cls.topicAccess || {})[t.id], mine = ov && (ov.except || []).indexOf(sid) >= 0;
-      return { open: false, reason: mine ? "student" : ov ? "teacher" : "term", term: M.topicTerm(t) };
+      return { open: false, reason: mine ? "student" : ov ? "teacher" : "term", term: M.topicTerm(t, cls) };
     }
     if (cls.sequential) {
       var i = syl.topics.indexOf(t);
@@ -256,7 +293,7 @@
   };
   M.lockText = function (acc) {
     if (!acc || acc.open) return "";
-    if (acc.reason === "term") return "Opens in " + M.termName(acc.term);
+    if (acc.reason === "term") return acc.term ? "Opens in " + M.termName(acc.term) : "Not planned for a term yet";
     if (acc.reason === "sequence") return "Finish \u201c" + acc.prev.title + "\u201d first";
     if (acc.reason === "student") return "Locked for you by your teacher";
     return "Locked by your teacher";
@@ -270,9 +307,10 @@
   };
   /** A finished term: what the student completed and what is still unfinished. */
   M.termReview = function (sid, syl, term) {
-    var topics = syl.topics.filter(function (t) { return M.topicTerm(t) === term; });
-    var unfinished = topics.filter(function (t) { return M.topicState(M.topicProgress(sid, t.id), t) !== "done"; });
-    return { term: term, total: topics.length, done: topics.length - unfinished.length, unfinished: unfinished, pct: A.pct(topics.length - unfinished.length, topics.length) };
+    var ev = A.Syl && A.Syl.studentTopics ? A.Syl.studentTopics(sid, syl) : null;
+    var topics = syl.topics.filter(function (t) { return (ev ? ev.byTopic[t.id].term : M.topicTerm(t)) === term; });
+    var unfinished = topics.filter(function (t) { return ev ? ev.byTopic[t.id].state !== "done" : M.topicState(M.topicProgress(sid, t.id), t) !== "done"; });
+    return { term: term, total: topics.length, done: topics.length - unfinished.length, unfinished: unfinished, pct: A.pct(topics.length - unfinished.length, topics.length), finished: ev ? ev.terms[term] || null : null };
   };
   M.classForSyllabus = function (sid, sylId) {
     return M.classesForStudent(sid).find(function (c) { return c.syllabusId === sylId; }) || null;
@@ -479,16 +517,18 @@
     if (rec.practiceBest >= EXAM.topicMasteryMark && !rec.completedAt) rec.completedAt = A.now();
     return S().put("progress", rec);
   };
-  /** Syllabus coverage for one student. */
+  /** Syllabus coverage for one student: each topic's state from its evidence (the tutor, quick checks, topic tests; a
+      passed end-of-term test finishes the term: js/syllabus.js A.Syl.studentTopics, 2026-11-15). */
   M.syllabusProgress = function (sid, syl) {
     var topics = syl.topics || [], done = 0, prog = 0, minsLeft = 0, last = 0, byTopic = {};
+    var ev = A.Syl && A.Syl.studentTopics ? A.Syl.studentTopics(sid, syl) : null;
     topics.forEach(function (t) {
-      var rec = M.topicProgress(sid, t.id), st = M.topicState(rec, t);
-      byTopic[t.id] = { rec: rec, state: st };
+      var rec = M.topicProgress(sid, t.id), x = ev && ev.byTopic[t.id], st = x ? x.state : M.topicState(rec, t);
+      byTopic[t.id] = { rec: rec, state: st, ev: x ? x.ev : [], term: x ? x.term : M.topicTerm(t) };
       if (st === "done") done++; else { minsLeft += t.estMinutes || 30; if (st === "prog") prog++; }
       if (rec && rec.lastStudiedAt > last) last = rec.lastStudiedAt;
     });
-    return { total: topics.length, done: done, prog: prog, pct: A.pct(done, topics.length), minsLeft: minsLeft, lastStudiedAt: last, byTopic: byTopic };
+    return { total: topics.length, done: done, prog: prog, pct: A.pct(done, topics.length), minsLeft: minsLeft, lastStudiedAt: last, byTopic: byTopic, terms: ev ? ev.terms : {} };
   };
 
   /* ------------------------------------------------------------ exam engine */

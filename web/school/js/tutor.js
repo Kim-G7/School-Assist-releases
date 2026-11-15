@@ -3,6 +3,7 @@
  * about which syllabus topic (the admin can change them in Tutor content, js/tutoradmin.js) and
  * flashcards. For a topic, the tutor puts together:
  *   What to study  what the syllabus says to learn for the topic (when its outline has been read)
+ *   Short notes  notes the teacher typed for the topic in Co-teacher (2026-11-15), shown as they are
  *   Read        the topic's pages of each document, whole, as printed, with their key points
  *   Flashcards  the topic's cards; the ones she doesn't know come back sooner (spaced repetition)
  *   Quick check a short quiz made from the cards, marked straight away; passing it completes the topic
@@ -72,6 +73,11 @@
     return list;
   };
   var ORDER = { summary: 0, notes: 1, revision: 2, flashcards: 3, worksheet: 4, other: 4, book: 5 };
+  /** Short notes for a topic, typed by a teacher in Co-teacher. */
+  M.shortNotesFor = function (sid, sylId, topicId) {
+    return M.materialsForStudent(sid).filter(function (m) { return m.kind === "note" && m.topicId === topicId && sylOf(m) === sylId && String(m.body || "").trim(); })
+      .sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
+  };
   /** Topical tests: exam papers set for one topic. */
   M.topicTests = function (sid, sylId, topicId) {
     return M.materialsForStudent(sid).filter(function (m) { return m.kind === "pastpaper" && m.topicId === topicId && sylOf(m) === sylId; });
@@ -93,7 +99,7 @@
       });
       // short notes before long ones; the textbook last
       reads.sort(function (a, b) { return (ORDER[M.matCategory(a.m)] || 0) - (ORDER[M.matCategory(b.m)] || 0) || a.pages.length - b.pages.length; });
-      return { reads: reads, cards: cards, tests: M.topicTests(me.id, syl.id, t.id), missing: list.filter(function (x) { return !x.scan && !x.m.topicPages; }).length };
+      return { reads: reads, cards: cards, shorts: M.shortNotesFor(me.id, syl.id, t.id), tests: M.topicTests(me.id, syl.id, t.id), missing: list.filter(function (x) { return !x.scan && !x.m.topicPages; }).length };
     });
   }
 
@@ -120,7 +126,8 @@
     // the syllabus's own notes, unless they are only the "how to revise it" placeholder
     var notes = String(t.notes || "").replace(/##[^\n]*\n/g, "").trim(), placeholder = /How to revise it/i.test(t.notes || ""), outline = t.outline && t.outline.length;
     if (outline) out.push({ type: "study", label: "What to study" });
-    if ((!placeholder && notes.length > 200) || (!data.reads.length && notes && !outline)) out.push({ type: "topic", label: "The topic in brief" });
+    data.shorts.forEach(function (m) { out.push({ type: "short", label: m.title, m: m }); }); // (the teacher's, first)
+    if ((!placeholder && notes.length > 200) || (!data.reads.length && !data.shorts.length && notes && !outline)) out.push({ type: "topic", label: "The topic in brief" });
     data.reads.forEach(function (x) { out.push({ type: "read", label: x.m.title, x: x, n: x.pages.length + (x.pages.length === 1 ? " page" : " pages") }); });
     if (data.cards.length) out.push({ type: "cards", label: "Flashcards", n: data.cards.length });
     if (quizCards(data.cards).length >= 3) out.push({ type: "check", label: "Quick check" });
@@ -131,6 +138,7 @@
     if (st.type === "read") return !!tu.read[st.x.key];
     if (st.type === "topic") return !!tu.read.topic;
     if (st.type === "study") return !!tu.read.study;
+    if (st.type === "short") return !!tu.read["s:" + st.m.id];
     if (st.type === "cards") return T.data.cards.every(function (x) { return tu.cards[x.key]; });
     if (st.type === "check") return !!(tu.check && tu.check.best >= M.EXAM.topicMasteryMark);
     if (st.type === "test") return T.data.tests.some(function (p) { return M.paperDone(T.me.id, p.id); });
@@ -157,11 +165,11 @@
       },
     };
   };
-  M.tutorHas = function (sid, sylId, topicId) { return M.tutorMaterials(sid, sylId, topicId).length > 0 || M.topicTests(sid, sylId, topicId).length > 0; };
+  M.tutorHas = function (sid, sylId, topicId) { return M.tutorMaterials(sid, sylId, topicId).length > 0 || M.shortNotesFor(sid, sylId, topicId).length > 0 || M.topicTests(sid, sylId, topicId).length > 0; };
 
   function draw() {
     var root = document.getElementById("tutor-root"); if (!root) return;
-    if (!T.data.reads.length && !T.data.cards.length && !T.data.tests.length && !T.steps.some(function (s) { return s.type === "topic"; })) {
+    if (!T.data.reads.length && !T.data.shorts.length && !T.data.cards.length && !T.data.tests.length && !T.steps.some(function (s) { return s.type === "topic"; })) {
       root.innerHTML = '<div class="card">' + UI.empty("book", "The tutor has nothing for this topic yet", "When your teacher adds notes, summary notes or flashcards for " + T.t.title + ", the tutor takes you through them here, step by step." +
         (T.data.missing ? " Some notes aren't on this device yet: connect to the internet once." : "")) + "</div>";
       return;
@@ -204,6 +212,8 @@
     var head = '<div class="label">Step ' + (T.i + 1) + " of " + T.steps.length + "</div>";
     if (st.type === "topic") {
       main.innerHTML = head + '<h2 class="tutor-title">' + esc(T.t.title) + '</h2><div class="prose mt">' + A.md(T.t.notes) + "</div>" + foot("Got it", "tutor-read");
+    } else if (st.type === "short") {
+      main.innerHTML = head + '<h2 class="tutor-title">' + esc(st.m.title) + '</h2><div class="small muted">Short notes' + (M.user(st.m.createdBy) ? " · " + esc(M.user(st.m.createdBy).name) : "") + '</div><div class="prose mt">' + A.md(st.m.body) + "</div>" + foot("I've read this", "tutor-read");
     } else if (st.type === "study") {
       main.innerHTML = head + '<h2 class="tutor-title">What to study</h2><p class="muted">What the syllabus says you need to know for ' + esc(T.t.title) + ". The next steps take you through it.</p>" +
         A.outlineHtml(T.t) + foot("Got it", "tutor-read");
@@ -242,10 +252,10 @@
   A.act["tutor-go"] = function (el) { var i = Number(el.getAttribute("data-i")); if (i < 0 || i >= T.steps.length) return; T.i = i; T.flash = null; T.quiz = null; draw(); };
   A.act["tutor-read"] = function () {
     var st = T.steps[T.i];
-    saveTutor(T.me, T.syl, T.t, function (tu) { tu.read[st.type === "topic" || st.type === "study" ? st.type : st.x.key] = A.now(); });
+    saveTutor(T.me, T.syl, T.t, function (tu) { tu.read[st.type === "topic" || st.type === "study" ? st.type : st.type === "short" ? "s:" + st.m.id : st.x.key] = A.now(); });
     // everything read, and no quiz to pass: the topic counts as revised
     var tu = tutorState(T.me, T.t);
-    if (!T.steps.some(function (s) { return s.type === "check"; }) && T.steps.filter(function (s) { return s.type === "read" || s.type === "topic" || s.type === "study"; }).every(function (s) { return stepDone(s, tu); })) M.markNotesRead(T.me.id, T.syl.id, T.t.id);
+    if (!T.steps.some(function (s) { return s.type === "check"; }) && T.steps.filter(function (s) { return s.type === "read" || s.type === "topic" || s.type === "study" || s.type === "short"; }).every(function (s) { return stepDone(s, tu); })) M.markNotesRead(T.me.id, T.syl.id, T.t.id);
     if (T.i + 1 < T.steps.length) T.i++;
     draw();
   };

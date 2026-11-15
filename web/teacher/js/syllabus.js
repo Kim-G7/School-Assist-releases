@@ -37,10 +37,279 @@
     if (k) folded[k] = !e.target.open;
   }, true);
 
-  function sylCard(s) {
-    var used = usedBy(s);
+  /* ================================================================ ONE STORE (2026-11-15)
+     Every syllabus is one record in "syllabi", with its syllabus ID, wherever it was added: in this library (new, from a
+     file or the ready-made list) or from a class (My subjects, a class's syllabus tracker, View other classes). So it is
+     the same here, in the tracker of every class that uses it and in Settings → Subjects & codes. Its code says which
+     syllabus it is: the school can't have one twice (the same code and board; without a code, the same subject, level
+     and board). A class finds its syllabus by the subject: a subject class by its own syllabusId; a form by the subject's
+     record (js/catalogue.js: linked by subjectId, or the same code), else by the subject's name at the form or its level.
+     School Assist Teacher's syllabuses of 1.6.2 to 1.8.5 ("outlines") come into the library keeping their topics' ids, so
+     every class's ticks stay (Syl.adopt). */
+  var Syl = (A.Syl = {});
+  var key = function (s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]/g, ""); };
+  var normT = function (s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); };
+  /** An exam board as a key: "" for the school's own, Cambridge however it is written. */
+  function boardKey(b) { var k = key(b); return !k || k === "schoolbased" || k === "school" ? "" : /^(cie|caie|cambridge)/.test(k) ? "cambridge" : k; }
+  function sameBoard(a, b) { var x = boardKey(a), y = boardKey(b); return !x || !y || x === y; }
+  /** The names a subject goes by, as keys (English: English First Language, English Language…). */
+  function names(subject) { var k = key(subject), al = (A.Enrol && A.Enrol.ALIAS && A.Enrol.ALIAS[k.replace(/[0-9]/g, "")]) || []; return [k].concat(al); }
+  /** After a syllabus goes in: where its topics wait for notes (Co-teacher, where students sign in). */
+  Syl.notesNote = function () { return A.Primary && A.Primary.withStudents ? ". Its topics are in Co-teacher, in order, waiting for notes" : ""; };
+  Syl.sameSubject = function (a, b) { return names(a).indexOf(key(b)) >= 0 || names(b).indexOf(key(a)) >= 0; };
+  var forms = function () { return (M.structure && M.structure().levels) || []; };
+  var groupOfForm = function (level) { return A.Subjects ? A.Subjects.group(level) : "school"; };
+  /** Its group of forms, as the school's subjects have them (js/catalogue.js): igcse, alevel or school. */
+  Syl.group = function (s) {
+    var n = levelName(s);
+    if (n === "AS & A Level") return "alevel";
+    if (/^(IGCSE|International GCSE|O-Level|GCSE)$/.test(n)) return "igcse";
+    return groupOfForm((s.forms || [])[0] || s.level);
+  };
+  Syl.code = function (s) { return key(s && s.code); };
+  /** What a syllabus is called: its own name, else "Cambridge IGCSE Mathematics (0580)". */
+  Syl.title = function (s) { return (s && s.title) || M.syllabusTitle(s); };
+  /** The school's syllabus that this one would be a second copy of (null: none). */
+  Syl.twin = function (rec, exceptId) {
+    var code = Syl.code(rec), subj = key(rec.subject), lv = key(levelName(rec));
+    return S().filter("syllabi", function (s) {
+      if (s.id === exceptId || !sameBoard(s.board, rec.board)) return false;
+      var c = Syl.code(s);
+      return code && c ? c === code : key(s.subject) === subj && key(levelName(s)) === lv;
+    })[0] || null;
+  };
+  /** Does a syllabus suit a form? 0: made for it (on its list of forms, or its level is the form); 1: the form is at its
+      level (IGCSE: Forms 1 to 4); -1: no. */
+  function fit(s, level) {
+    if ((s.forms || []).length) return s.forms.indexOf(level) >= 0 ? 0 : -1;
+    if (!level) return 1;
+    if (key(s.level) === key(level)) return 0;
+    if (forms().some(function (l) { return key(l) === key(s.level); })) return -1; // (made for another form)
+    return Syl.group(s) === groupOfForm(level) ? 1 : -1;
+  }
+  Syl.fits = function (s, level) { return fit(s, level) >= 0; };
+  /** The syllabus a class uses for a subject (null: none yet). A subject class: its own. A form: the one linked to the
+      subject's record or with its code, else one with the subject's name; one made for the form before one for its level. */
+  Syl.forClass = function (subject, level, c) {
+    if (c && !c.homeroom && c.syllabusId) { var own = M.syllabus(c.syllabusId); if (own) return own; }
+    var rec = A.Subjects ? A.Subjects.find(subject, level || null) : null, code = rec ? key(rec.code) : "", ks = names(subject), best = null, rank = 99;
+    S().all("syllabi").forEach(function (s) {
+      var f = fit(s, level), linked = !!rec && (s.subjectId === rec.id || (!!code && Syl.code(s) === code));
+      if (f < 0 || (!linked && ks.indexOf(key(s.subject)) < 0)) return;
+      var r = (f === 0 ? 0 : 2) + (linked ? 0 : 1) + ((s.topics || []).length ? 0 : 10);
+      if (r < rank) { rank = r; best = s; }
+    });
+    return best;
+  };
+  /** The syllabus of a subject's record (Settings → Subjects & codes). */
+  Syl.forSubject = function (r) {
+    var list = (r.forms || []).length ? r.forms : [r.group === "alevel" ? "AS & A Level" : r.group === "igcse" ? "IGCSE" : null], s = null;
+    list.some(function (lv) { s = Syl.forClass(r.name, lv); return !!s; });
+    return s;
+  };
+  /** The classes that use a syllabus: subject classes linked to it, and forms whose tracker takes it for a subject. */
+  Syl.usedBy = function (s) {
+    var out = S().filter("classes", function (c) { return !c.homeroom && c.syllabusId === s.id; }), P = A.Primary;
+    if (!P || !P.levelAreas) return out;
+    var code = Syl.code(s);
+    S().filter("classes", function (c) { return c.homeroom; }).forEach(function (c) {
+      var areas = (P.levelAreas(c.level) || []).filter(function (a) {
+        if (!P.offers(c, a)) return false;
+        if (Syl.sameSubject(a, s.subject)) return true;
+        var r = A.Subjects && A.Subjects.find(a, c.level);
+        return !!r && (r.id === s.subjectId || (!!code && key(r.code) === code));
+      });
+      if (areas.some(function (a) { return Syl.forClass(a, c.level, c) === s; })) out.push(c);
+    });
+    return out;
+  };
+  /** A syllabus for more forms: those that aren't at its level go on its list of forms (a syllabus without a list is for
+      its level's forms: they go on the list first, so they keep it). */
+  Syl.addForms = function (s, list) {
+    var more = (list || []).filter(function (l) { return fit(s, l) < 0; });
+    if (!more.length) return s;
+    var to = (s.forms || []).length ? s.forms.slice() : forms().filter(function (l) { return fit(s, l) >= 0; });
+    more.forEach(function (l) { if (to.indexOf(l) < 0) to.push(l); });
+    return S().put("syllabi", Object.assign({}, s, { forms: to }));
+  };
+  /** A new syllabus for a subject at some forms, as a class adds it. With an exam code (the subject's, or one typed): the
+      exam board's, at its level (IGCSE, AS & A Level); without: the school's own, at those forms. */
+  Syl.draft = function (subject, list, rec, code) {
+    list = list || [];
+    rec = rec || (A.Subjects ? A.Subjects.find(subject, list[0] || null) : null);
+    code = String(code || (rec && rec.code) || "").trim();
+    var g = rec ? rec.group : groupOfForm(list[0] || ""), exam = !!code && g !== "school", all = forms().filter(function (l) { return groupOfForm(l) === g; });
+    var whole = exam && all.length && list.length === all.length && all.every(function (l) { return list.indexOf(l) >= 0; });
+    return { subject: subject, board: exam ? (rec && rec.board) || "Cambridge" : "School-based", level: exam ? (g === "alevel" ? "AS & A Level" : "IGCSE") : list.join(", ") || "School scheme",
+      code: code, subjectId: rec ? rec.id : null, forms: whole ? [] : list.slice(),
+      topics: [], papers: [], gradeScale: DEFAULT_SCALE.slice() };
+  };
+  /** The tracker's topics as a syllabus has them: [{ id, n, title, parts: [{ n, title }] }]. */
+  Syl.topics = function (s) {
+    return (s.topics || []).map(function (t, i) {
+      var parts = (t.outline || t.parts || []).map(function (x) { return { n: x.n || "", title: x.title || "" }; }).filter(function (x) { return x.title; });
+      var n = t.n || String(i + 1); // (its place in the syllabus: the board's part numbers needn't follow the topics' order)
+      return { id: t.id, n: String(n), title: t.title, parts: parts };
+    });
+  };
+  /** Topics typed or read for the tracker ({ id, n, title, parts }) into a syllabus's: a topic it had keeps its notes,
+      examples, questions and term, and a part it had keeps what to study in it. */
+  Syl.mergeTopics = function (lines, old) {
+    var byId = {};
+    (old || []).forEach(function (t) { byId[t.id] = t; });
+    return lines.map(function (t) {
+      var was = byId[t.id], had = (was && was.outline) || [];
+      var outline = (t.parts || []).map(function (p) {
+        var o = had.filter(function (x) { return (p.n && x.n === p.n) || normT(x.title) === normT(p.title); })[0];
+        return Object.assign({ points: [], sup: [] }, o || {}, { n: p.n || "", title: p.title });
+      });
+      var out = Object.assign({}, was || { notes: "", examples: [], questions: [], estMinutes: 30, term: 1 }, { id: t.id, n: t.n, title: t.title, outline: outline });
+      delete out.parts;
+      return out;
+    });
+  };
+  /** One of the older syllabuses ("outlines", 1.6.2 to 1.8.5) into the library: a syllabus with the same topic ids, or,
+      when the school has that syllabus already, the classes' ticks move onto its topics of the same names. The old
+      record stays, marked, for devices not updated yet. The syllabus it went into. */
+  Syl.adopt = function (o) {
+    if (!o || o.movedTo) return o ? M.syllabus(o.movedTo) : null;
+    var lv = (o.levels || [])[0] || null, draft = Syl.draft(o.subject, o.levels || []), id = "syl_" + o.id;
+    var have = M.syllabus(id) || Syl.twin(draft) || (lv ? null : Syl.forClass(o.subject, null));
+    var topics = (o.topics || []).map(function (t) { return { id: t.id, n: t.n, title: t.title, parts: t.parts || [] }; });
+    if (have && have.id === id) { /* (brought in already, from another device) */ }
+    else if (have && (have.topics || []).length) {
+      var byName = {}, map = {};
+      have.topics.forEach(function (t) { byName[normT(t.title)] = t.id; });
+      topics.forEach(function (t) { var to = byName[normT(t.title)]; if (to && to !== t.id) map[t.id] = to; });
+      var move = function (m) { var out = {}; Object.keys(m || {}).forEach(function (k) { out[map[k] || k] = m[k]; }); return out; };
+      S().filter("coverage", function (r) { return r.outlineId === o.id; }).forEach(function (r) {
+        S().put("coverage", Object.assign({}, r, { plan: move(r.plan), done: move(r.done), syllabusId: have.id }));
+      });
+      have = Syl.addForms(have, o.levels || []);
+    } else if (have) {
+      have = S().put("syllabi", Object.assign({}, have, { topics: Syl.mergeTopics(topics, []), file: have.file || o.file || null }));
+      have = Syl.addForms(have, o.levels || []);
+    } else {
+      have = S().put("syllabi", Object.assign(draft, { id: id, title: o.title || "", file: o.file || null, topics: Syl.mergeTopics(topics, []), createdBy: o.createdBy || o.by || null }));
+    }
+    S().put("outlines", Object.assign({}, o, { movedTo: have.id }));
+    return have;
+  };
+  /* ================================================================ A STUDENT'S WAY THROUGH A SYLLABUS (2026-11-15)
+     Each topic's evidence, from what the teachers set for it: the tutor's notes (Co-teacher) and flashcards, its quick check
+     and practice questions, topic tests (the Mark book's, and the topical papers sat in the tutor) and mock tests. A topic
+     is done when its quick check or practice reaches the mastery mark, or a topic test is passed; and the term's
+     end-of-term test finishes the term: passed (the Mark book's test, or the end-of-term mark on the report card), every
+     topic of that term counts as done for the student, so the term's work is finished. A topic's term is the one its
+     class's scheme gives it (js/tracker.js: Schemes & records, the syllabus tracker), else the syllabus's. */
+  var marksIx = null;
+  function marks() {
+    if (marksIx) return marksIx;
+    marksIx = { topic: {}, mock: [], final: [], rm: {} };
+    S().all("assessments").forEach(function (a) {
+      var k = String(a.kind || "");
+      if (/^topic test$/i.test(k) && a.topicId) (marksIx.topic[a.topicId] = marksIx.topic[a.topicId] || []).push(a);
+      else if (/mock/i.test(k)) marksIx.mock.push(a);
+      else if (/end of term/i.test(k)) marksIx.final.push(a);
+    });
+    S().filter("reportmarks", function (r) { return r.studentId && r.subject && r.mark != null && r.mark !== ""; }).forEach(function (r) { (marksIx.rm[r.studentId] = marksIx.rm[r.studentId] || []).push(r); });
+    setTimeout(function () { marksIx = null; }, 0);
+    return marksIx;
+  }
+  var pctOf = function (a, sid) { var v = (a.marks || {})[sid]; return v == null || v === "" || !(Number(a.outOf) > 0) ? null : Math.round(Number(v) / Number(a.outOf) * 100); };
+  var passMark = function () { return (M.EXAM && M.EXAM.passMark) || 50; };
+  /** The term a topic is for, for a student: their form's scheme for the subject (a topic it gave no term: none, 0), else,
+      with no scheme yet, the syllabus's own. */
+  function termsFor(sid, syl) {
+    var P = A.Primary, home = M.homeroomOf ? M.homeroomOf(sid) : null, plan = {};
+    if (P && A.Tracker && home) {
+      var area = ((P.levelAreas && P.levelAreas(home.level)) || []).filter(function (a) { return Syl.sameSubject(a, syl.subject); })[0] || syl.subject;
+      var cv = A.Tracker.cov(home.id, area);
+      plan = (cv && cv.plan) || {};
+    }
+    var schemed = Object.keys(plan).length > 0;
+    return function (t) { return schemed ? Number(plan[t.id]) || 0 : M.topicTerm(t); };
+  }
+  /** { byTopic: { topicId: { state: done | prog | none, term, ev: [{ k, label, pct, done }] } }, terms: { n: { done, label, pct } } } */
+  Syl.studentTopics = function (sid, syl) {
+    var ix = marks(), conf = A.Primary ? A.Primary.conf() : null, year = conf ? String(conf.year) : String(A.date().getFullYear()), termOf = termsFor(sid, syl), pass = passMark(), mastery = M.EXAM.topicMasteryMark;
+    var subj = function (name) { return Syl.sameSubject(name, syl.subject); };
+    // the end of each term: the Mark book's end-of-term test, else the end-of-term mark on the report card
+    var terms = {};
+    ix.final.filter(function (a) { return String(a.year) === year && subj(a.area); }).forEach(function (a) {
+      var p = pctOf(a, sid); if (p == null) return;
+      var n = Number(a.term), cur = terms[n];
+      if (!cur || p > cur.pct) terms[n] = { done: p >= pass, label: a.title || "End of term test", pct: p };
+    });
+    (ix.rm[sid] || []).filter(function (r) { return String(r.year) === year && subj(r.subject); }).forEach(function (r) {
+      var n = Number(r.term), p = Number(r.outOf) > 0 ? Math.round(Number(r.mark) / Number(r.outOf) * 100) : null;
+      if (p != null && !terms[n]) terms[n] = { done: p >= pass, label: "End-of-term mark", pct: p };
+    });
+    var mocks = {};
+    ix.mock.filter(function (a) { return String(a.year) === year && subj(a.area); }).forEach(function (a) {
+      var p = pctOf(a, sid); if (p == null) return;
+      var n = Number(a.term); if (!mocks[n] || p > mocks[n].pct) mocks[n] = { label: a.title || "Mock test", pct: p };
+    });
+    var byTopic = {};
+    (syl.topics || []).forEach(function (t) {
+      var ev = [], rec = M.topicProgress(sid, t.id), tu = (rec && rec.tutor) || {}, n = termOf(t);
+      var read = Object.keys(tu.read || {}).length, cards = Object.keys(tu.cards || {}).length;
+      if (read || (rec && rec.notesReadAt)) ev.push({ k: "notes", label: "Notes read" });
+      if (cards) ev.push({ k: "cards", label: "Flashcards · " + cards });
+      if (tu.check && tu.check.best != null) ev.push({ k: "check", label: "Quick check", pct: tu.check.best, done: tu.check.best >= mastery });
+      if (rec && rec.practiceBest != null) ev.push({ k: "practice", label: "Practice", pct: rec.practiceBest, done: rec.practiceBest >= mastery });
+      (ix.topic[t.id] || []).forEach(function (a) { var p = pctOf(a, sid); if (p != null) ev.push({ k: "test", label: a.title || "Topic test", pct: p, done: p >= pass }); });
+      if (M.topicTests && M.paperSitting) M.topicTests(sid, syl.id, t.id).forEach(function (pp) {
+        var r = M.paperSitting(sid, pp.id); if (!r || !r.doneAt) return;
+        var p = r.total ? Math.round(r.score / r.total * 100) : null;
+        ev.push({ k: "test", label: pp.title, pct: p, done: p != null && p >= pass });
+      });
+      if (mocks[n]) ev.push({ k: "mock", label: mocks[n].label, pct: mocks[n].pct });
+      if (terms[n] && terms[n].done) ev.push({ k: "final", label: terms[n].label, pct: terms[n].pct, done: true });
+      var noQs = !(t.questions || []).length && rec && rec.notesReadAt && !(tu.check && tu.check.best != null);
+      var state = ev.some(function (e) { return e.done; }) || noQs ? "done" : ev.length || M.topicState(rec, t) !== "none" ? "prog" : "none";
+      byTopic[t.id] = { state: state, term: n, ev: ev, rec: rec };
+    });
+    return { byTopic: byTopic, terms: terms, termOf: termOf };
+  };
+  /** The evidence of a topic as small badges. */
+  Syl.evidenceHtml = function (x) {
+    if (!x || !x.ev.length) return '<span class="muted small">Nothing yet</span>';
+    return x.ev.map(function (e) { return '<span class="badge' + (e.done ? " good" : e.pct != null && e.pct < passMark() ? " warn" : "") + '">' + esc(e.label) + (e.pct != null ? " · " + e.pct + "%" : "") + "</span>"; }).join(" ");
+  };
+  /** One student's topics not done yet, term by term, in a pop-up: from a class's syllabus page or tracker. */
+  A.act["syl-gaps"] = function (el) {
+    var u = M.user(el.getAttribute("data-sid")), syl = M.syllabus(el.getAttribute("data-syl")), only = Number(el.getAttribute("data-term")) || 0;
+    if (!u || !syl) return;
+    var st = Syl.studentTopics(u.id, syl), byTerm = {};
+    syl.topics.forEach(function (t, i) { var x = st.byTopic[t.id]; if (x.state !== "done" && (!only || x.term === only)) (byTerm[x.term] = byTerm[x.term] || []).push({ t: t, i: i, x: x }); });
+    var ns = Object.keys(byTerm).map(Number).sort(function (a, b) { return (a || 9) - (b || 9); }), left = ns.reduce(function (s, n) { return s + byTerm[n].length; }, 0);
+    UI.modal({ title: u.name, sub: esc(syl.subject) + " · " + (left ? left + " topic" + (left === 1 ? "" : "s") + " not done yet" : "every topic done") + (only ? " in Term " + only : ""), size: "wide",
+      body: (ns.length ? ns.map(function (n) {
+        var fin = st.terms[n];
+        return '<div class="label mt">' + (n ? "Term " + n : "No term yet") + (fin ? ' <span class="badge ' + (fin.done ? "good" : "warn") + '">' + esc(fin.label) + " · " + fin.pct + "%" + (fin.done ? " · term finished" : "") + "</span>" : "") + "</div>" +
+          '<div class="card">' + byTerm[n].map(function (y) {
+            return '<div class="list-row"><span class="topic-num">' + (y.i + 1) + '</span><div class="grow"><div class="title">' + esc(y.t.title) + '</div><div class="row wrap mt-sm" style="gap:4px">' + Syl.evidenceHtml(y.x) + "</div></div></div>";
+          }).join("") + "</div>";
+      }).join("") : '<div class="card-pad">' + UI.empty("checkCircle", "Every topic done", u.name + " has finished every topic" + (only ? " of Term " + only : "") + ".") + "</div>") +
+        '<p class="tiny muted mt">A topic is done when its quick check or practice reaches ' + M.EXAM.topicMasteryMark + "%, or its topic test is passed (" + passMark() + "%). Passing the end-of-term test finishes the term's topics.</p>",
+      foot: [{ label: "Close", cls: "btn-primary" }] });
+  };
+
+  // an admin's device brings them in by itself, once it has the hub's records (as js/catalogue.js makes the subjects)
+  setInterval(function () {
+    var me = A.Store && A.Store.state && M.me ? M.me() : null;
+    if (!me || !me.isAdmin || A.edition === "home" || A.Store.vacation) return;
+    var list = S().filter("outlines", function (o) { return !o.movedTo && (o.topics || []).length; }), meta = S().state.meta || {};
+    if (!list.length || (A.Sync && A.Sync.hubMode && A.Sync.hubMode() && !(meta.serverSince > 0 && A.now() - (meta.lastSyncAt || 0) < 5 * 60000))) return;
+    list.forEach(Syl.adopt);
+    A.render();
+  }, 9000);
+
+  function sylCard(s, used) {
+    used = used || Syl.usedBy(s);
     return '<a class="card class-card" href="#/t/syllabus/' + s.id + '"><div class="band"></div><div class="body"><div class="row spread"><span class="badge brand">' + esc(s.level || "") + "</span>" + (s.code ? '<span class="muted small">' + esc(s.code) + "</span>" : "") + "</div>" +
-      '<h3 class="mt-sm">' + esc(s.subject) + '</h3><div class="subj">' + esc(s.description || "") + "</div></div>" +
+      '<h3 class="mt-sm">' + esc(s.subject) + '</h3><div class="subj">' + esc(s.description || "") + '</div><div class="tiny muted mt-sm">Syllabus ID ' + esc(s.id) + "</div></div>" +
       '<div class="foot"><span>' + I("layers") + count((s.topics || []).length, "topic", "topics") + "</span><span>" + I("target") + count(qCount(s), "question", "questions") + "</span><span>" + I("clock") + count((s.papers || []).length, "paper", "papers") + "</span>" +
       (used.length ? '<span class="badge good">' + I("users") + used.map(function (c) { return esc(c.name); }).join(", ") + "</span>" : "") + "</div></a>";
   }
@@ -49,8 +318,9 @@
     // just the subjects this teacher (or admin) works with, unless they switch to All subjects
     var only = M.subjectFilter(me), every = S().all("syllabi");
     var all = only ? every.filter(function (s) { return only.indexOf(s.id) >= 0; }) : every, boards = Object.create(null); // keyed by names people type: no inherited keys
+    var usedMap = {};
     all.forEach(function (s) {
-      var name = String(s.board || "").trim() || "Other", lv = levelName(s), used = usedBy(s).length;
+      var name = String(s.board || "").trim() || "Other", lv = levelName(s), used = (usedMap[s.id] = Syl.usedBy(s)).length;
       var b = boards[name.toLowerCase()] = boards[name.toLowerCase()] || { name: name, levels: Object.create(null), n: 0, used: 0 };
       var l = b.levels[lv] = b.levels[lv] || { name: lv, items: [] };
       l.items.push(s); b.n++; b.used += used;
@@ -71,7 +341,7 @@
           var lk = bk + "/" + l.name.toLowerCase();
           var items = l.items.slice().sort(function (x, y) { return String(x.subject).localeCompare(String(y.subject)) || String(x.code || "").localeCompare(String(y.code || "")); });
           return '<details class="syl-level" data-panel="' + esc(lk) + '"' + (folded[lk] ? "" : " open") + "><summary>" + I("cap") + "<h4>" + esc(l.name) + '</h4><span class="sub">' + count(items.length, "syllabus", "syllabuses") + "</span></summary>" +
-            '<div class="grid g-auto">' + items.map(sylCard).join("") + "</div></details>";
+            '<div class="grid g-auto">' + items.map(function (s) { return sylCard(s, usedMap[s.id]); }).join("") + "</div></details>";
         }).join("") + "</div></details>";
     }).join("");
     if (!all.length) html += '<div class="card">' + (only && every.length ? UI.empty("layers", "None of your subjects yet", "Your subjects appear here once you teach a class. Switch to All subjects to see the whole library.")
@@ -96,8 +366,11 @@
   A.loadSyllabusLibrary = loadLibrary; // (js/enrol.js: a subject class made for a student takes its Cambridge syllabus)
   /** A ready-made syllabus into the school's own, each topic with a start on its notes: the record saved. */
   A.addLibrarySyllabus = function (lib, me) {
-    var src = JSON.parse(JSON.stringify(lib));
+    var have = M.syllabus(lib.id) || Syl.twin(lib);
+    if (have) return have; // (the school has it already: a syllabus is in the library once)
+    var src = JSON.parse(JSON.stringify(lib)), sr = A.Subjects && A.Subjects.find(src.subject, src.level);
     src.createdBy = me ? me.id : null;
+    if (sr) src.subjectId = sr.id;
     src.topics.forEach(function (t) {
       t.notes = t.notes || ["## In this topic", t.summary || t.title, "## How to revise it", "- Go through your class notes and textbook for this topic.",
         "- Check **What to study** and tick off each point you can explain.", "- When you feel confident, tap **I've revised this topic** below."].join("\n");
@@ -122,7 +395,7 @@
               syllabusId: src.id, room: "", studentIds: [], currentTerm: 3, allTerms: true, sequential: false, topicAccess: {} });
           }
         });
-        UI.toast(picked.length + " syllabus" + (picked.length === 1 ? "" : "es") + " added");
+        UI.toast(picked.length + " syllabus" + (picked.length === 1 ? "" : "es") + " added" + Syl.notesNote());
         A.render();
       } }],
       onMount: function (box) {
@@ -132,7 +405,7 @@
           box.querySelector("#rm-list").innerHTML = Object.keys(groups).map(function (k) {
             var items = groups[k].slice().sort(function (a, b2) { return a.subject.localeCompare(b2.subject); });
             return '<div class="rm-group"><div class="row spread"><h4>' + esc(k) + '</h4><button type="button" class="btn btn-sm btn-ghost" data-rm-all="' + esc(k) + '">Tick all</button></div><div class="rm-items">' + items.map(function (x) {
-              var have = !!M.syllabus(x.id), outline = x.topics.filter(function (t) { return t.outline && t.outline.length; }).length;
+              var have = !!(M.syllabus(x.id) || Syl.twin(x)), outline = x.topics.filter(function (t) { return t.outline && t.outline.length; }).length;
               return '<label class="rm-item' + (have ? " have" : "") + '"><input type="checkbox" value="' + esc(x.id) + '" data-group="' + esc(k) + '"' + (have ? " checked disabled" : "") + '><span class="grow"><b>' + esc(x.subject) + "</b> " + esc(x.code) +
                 '<span class="tiny muted">' + x.topics.length + " topics" + (outline ? ", what to study for " + outline : "") + (have ? " · already added" : "") + "</span></span></label>";
             }).join("") + "</div></div>";
@@ -170,16 +443,19 @@
           UI.modal({ title: "This file has problems", body: '<p class="muted">Fix these in the file and import it again:</p><ul class="small">' + res.errors.slice(0, 12).map(function (e) { return "<li>" + esc(e) + "</li>"; }).join("") + "</ul>" });
           return;
         }
-        var syl = res.syllabus, existing = syl.id && M.syllabus(syl.id);
-        var save = function (replace) {
-          if (!replace && existing) { syl.id = A.uid("syl"); syl.subject += " (copy)"; }
+        var syl = res.syllabus, existing = (syl.id && M.syllabus(syl.id)) || Syl.twin(syl);
+        var save = function (ok) {
+          if (!ok) { next(); return; } // (the library keeps its own: a syllabus is in it once)
+          if (existing) Object.assign(syl, { id: existing.id, forms: existing.forms, subjectId: existing.subjectId });
+          var sr = !syl.subjectId && A.Subjects && A.Subjects.find(syl.subject, syl.level);
+          if (sr) syl.subjectId = sr.id;
           syl.createdBy = M.me().id;
           S().put("syllabi", syl);
           done.push(syl.id);
           next();
         };
-        if (existing) UI.confirm("\"" + M.syllabusTitle(existing) + "\" is already in the library. Replace it with the imported version? (Choose Cancel to import it as a copy.)", { ok: "Replace" }).then(save);
-        else save(false);
+        if (existing) UI.confirm("\"" + M.syllabusTitle(existing) + "\" is in the library already (syllabus ID " + existing.id + "). Replace it with the imported version? The classes that use it keep it. (Cancel keeps the library's.)", { ok: "Replace" }).then(save);
+        else save(true);
       };
       next();
     }).catch(function (e) { UI.toast("Could not read that file: " + e.message, "bad"); })
@@ -279,6 +555,11 @@
           var rec = Object.assign({}, existing || { topics: [], papers: [], gradeScale: DEFAULT_SCALE.slice(), createdBy: M.me().id }, {
             board: f.board.trim() || "School-based", level: f.level.trim(), subject: f.subject.trim(), code: f.code.trim(), description: f.description.trim(), group: f.group || "other",
           });
+          var sr = A.Subjects && A.Subjects.find(rec.subject, rec.level);
+          if (sr && !rec.subjectId) rec.subjectId = sr.id;
+          if (sr && sr.code && !rec.code && boardKey(rec.board)) rec.code = String(sr.code); // (an exam board's syllabus: the subject's code)
+          var tw = Syl.twin(rec, existing && existing.id);
+          if (tw) { UI.toast(Syl.title(tw) + " is in the library already (syllabus ID " + tw.id + "). A syllabus goes in once: open that one.", "bad"); return false; }
           rec = S().put("syllabi", rec);
           UI.toast(existing ? "Saved" : "Syllabus created. Now add its topics.");
           location.hash = "#/t/syllabus/" + rec.id;
@@ -292,7 +573,8 @@
   A.act["syl-delete"] = function (el) {
     var s = M.syllabus(el.getAttribute("data-id")), used = usedBy(s);
     if (used.length) { UI.toast("Used by " + used.map(M.className).join(", ") + ". Change those classes first.", "bad"); return; }
-    UI.confirm("Delete " + M.syllabusTitle(s) + " and all its topics and questions?", { danger: true, ok: "Delete" }).then(function (ok) {
+    var forms = Syl.usedBy(s).filter(function (c) { return c.homeroom; }).map(M.className);
+    UI.confirm("Delete " + M.syllabusTitle(s) + " and all its topics and questions?" + (forms.length ? " " + forms.join(", ") + " follow it in their syllabus tracker: their ticks are kept, and come back with a syllabus of the same topics." : ""), { danger: true, ok: "Delete" }).then(function (ok) {
       if (!ok) return;
       S().remove("syllabi", s.id); UI.toast("Syllabus deleted"); location.hash = "#/t/syllabi";
     });
@@ -303,10 +585,11 @@
     var syl = M.syllabus(p.id);
     if (!syl) return { redirect: "#/t/syllabi" };
     if (p.tab === "topic") return { redirect: "#/t/syllabus/" + syl.id };
-    var tab = p.tab || "topics", used = usedBy(syl), base = "#/t/syllabus/" + syl.id;
+    var tab = p.tab || "topics", used = Syl.usedBy(syl), base = "#/t/syllabus/" + syl.id;
     var files = M.libraryList(S().filter("materials", function (m) { return !m.classId && m.syllabusId === syl.id; }));
     var head = '<div class="card card-pad mb"><div class="row wrap top"><div class="grow"><div class="row wrap"><span class="badge brand">' + esc(syl.board) + '</span><span class="badge">' + esc(syl.level) + "</span>" + (syl.code ? '<span class="badge">' + esc(syl.code) + "</span>" : "") + "</div>" +
-      '<h2 class="mt-sm" style="font-size:22px">' + esc(syl.subject) + '</h2><p class="muted small">' + esc(syl.description || "") + "</p>" +
+      '<h2 class="mt-sm" style="font-size:22px">' + esc(syl.subject) + '</h2><p class="muted small">' + esc(syl.title || syl.description || "") + "</p>" +
+      '<p class="tiny muted">Syllabus ID <b class="tnum">' + esc(syl.id) + "</b>" + ((syl.forms || []).length ? " · for " + esc(syl.forms.join(", ")) : "") + "</p>" +
       '<p class="small mt-sm">' + syl.topics.length + " topics · " + qCount(syl) + " questions · " + (syl.papers || []).length + " papers · " + (used.length ? "used by " + used.map(M.className).map(esc).join(", ") : "not used by a class yet") + "</p></div>" +
       '<div class="row wrap"><button class="btn" data-act="syl-edit" data-id="' + syl.id + '">' + I("edit") + 'Details</button><button class="btn" data-act="syl-export" data-id="' + syl.id + '">' + I("download") + 'Export</button><button class="btn btn-danger btn-icon" data-act="syl-delete" data-id="' + syl.id + '" data-tip="Delete syllabus" aria-label="Delete syllabus">' + I("trash") + "</button></div></div></div>";
     var tabs = UI.tabs([
