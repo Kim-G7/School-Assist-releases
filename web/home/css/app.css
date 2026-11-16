@@ -779,6 +779,13 @@ a.list-row, .list-row.click { color: inherit; cursor: pointer; }
 #alert-root.stacked:not(.open) > .alert-pop.deep { opacity: 0; }
 #alert-root.stacked.open { max-height: calc(100vh - 160px); overflow-y: auto; overscroll-behavior: contain; padding: 2px; }
 #alert-root.stacked.open > .alert-stackbar { position: sticky; top: 0; z-index: 1; }
+.table th.gb-new, .table td.gb-new { background: var(--brand-soft); }
+.erase-list { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 4px; }
+.erase-card { border-color: color-mix(in srgb, var(--bad) 35%, var(--border)); }
+.sound-row { padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.sound-switch { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-2); }
+.sound-switch svg { width: 16px; height: 16px; flex: none; }
+@media (max-width: 720px) { .sound-row { padding: 10px 16px; } }
 .alert-ico { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; flex: none; background: var(--brand-soft); color: var(--brand-text); }
 .alert-pop.good .alert-ico, .alert-ico.good { background: var(--good-soft); color: var(--good-text); }
 .alert-pop.bad .alert-ico, .alert-ico.bad { background: var(--bad-soft); color: var(--bad-text); }

@@ -725,11 +725,9 @@
       foot: (isNew || u.id === me.id ? [] : A.Cloud ? [{ label: "Remove", cls: "btn-danger", onClick: function () {
         A.act["cloud-remove"]({ getAttribute: function () { return u.id; } }); return false;
       } }] : [{ label: "Delete", cls: "btn-danger", onClick: function () {
-        return UI.confirm("Delete " + u.name + "? They will be removed from their classes.", { danger: true, ok: "Delete" }).then(function (ok) {
-          if (!ok) return false;
-          S().all("classes").forEach(function (c) { if (c.studentIds.indexOf(u.id) >= 0) S().patch("classes", c.id, { studentIds: c.studentIds.filter(function (x) { return x !== u.id; }) }); });
-          S().remove("users", u.id); UI.toast("Deleted"); A.render();
-        });
+        // (2026-11-16) everything that is theirs, the same as on the hub (js/erase.js, js/erase-core.js); before, only the
+        // account and their places in classes went, and their marks, work, sign-in and devices stayed with no one
+        return A.Erase.adminDelete(u).then(function (ok) { if (ok) A.render(); return !!ok; });
       } }]).concat([{ label: "Cancel" }, {
         label: "Save", cls: "btn-primary", onClick: function (m) {
           var f = UI.formData(m.querySelector("#person-form")), n = u.role === "student" ? null : M.nameRead(m.querySelector("#person-form"));
@@ -1133,7 +1131,7 @@
       '<div class="divider"></div><h3>Restore or merge</h3><p class="muted small mt-sm"><b>Merge</b> adds newer records from the file and keeps everything else. <b>Replace</b> makes this device an exact copy of the backup.</p>' +
       '<div class="row wrap mt"><label class="btn">' + I("upload") + 'Merge a backup<input type="file" accept=".json" data-change="restore" data-mode="merge" hidden></label><label class="btn btn-danger">' + I("upload") + 'Replace from backup<input type="file" accept=".json" data-change="restore" data-mode="replace" hidden></label></div></div>' +
       '<div class="card card-pad"><h3>On this device</h3><dl class="kv mt">' + counts.map(function (c) { return "<dt>" + esc(c[0]) + "</dt><dd>" + c[1] + "</dd>"; }).join("") + '<dt>Files</dt><dd id="file-count">…</dd></dl>' +
-      demoCard() + "</div></div>";
+      demoCard() + "</div></div>" + (me.isAdmin && A.Links ? A.Links.card() : "");
     if (online) html = '<h3 class="row" style="gap:8px;margin-bottom:10px">' + I("upload") + " Online backup</h3>" + online.html + '<div class="divider"></div><h3 class="row" style="gap:8px;margin-bottom:10px">' + I("database") + " This device</h3>" + html;
     return {
       html: html,
@@ -1216,17 +1214,18 @@
         '<label class="field"><span>New password</span><input class="input" type="password" name="pw" autocomplete="new-password"><span class="hint">At least ' + min + " characters.</span></label>" +
         '<label class="field"><span>Type it again</span><input class="input" type="password" name="pw2" autocomplete="new-password"></label>' +
         '<button class="btn btn-primary mt" type="submit">' + I("lock") + "Change password</button></form>" +
-        '<p class="tiny muted mt">Forgot it? Ask an administrator to reset it. Your school administrators can see student passwords to protect accounts if a device is lost or stolen.</p></div>';
+        '<p class="tiny muted mt">Forgot it? Ask an administrator to reset it. Your school administrators can see student passwords to protect accounts if a device is lost or stolen.</p></div>' + (A.Erase ? A.Erase.selfCard(me) : "");
     }
+    var mine = A.Erase ? A.Erase.selfCard(me) : "";
     if (A.staffPassword(M.me())) return '<div class="card card-pad" style="max-width:480px"><h3>Change my password</h3><form data-submit="change-pin" class="mt">' +
       '<label class="field"><span>Current password</span><input class="input" type="password" name="old" autocomplete="current-password"></label>' +
       '<label class="field"><span>New password</span><input class="input" type="password" name="pin" autocomplete="new-password" placeholder="8 or more characters, letters and a number"></label>' +
       '<label class="field"><span>Type it again</span><input class="input" type="password" name="pin2" autocomplete="new-password"></label>' +
-      '<button class="btn btn-primary mt" type="submit">' + I("lock") + "Change password</button></form></div>";
+      '<button class="btn btn-primary mt" type="submit">' + I("lock") + "Change password</button></form></div>" + mine;
     return '<div class="card card-pad" style="max-width:480px"><h3>Change my PIN</h3><form data-submit="change-pin" class="mt">' +
       '<label class="field"><span>Current PIN</span><input class="input" type="password" name="old" inputmode="numeric" maxlength="4" autocomplete="current-password"></label>' +
       '<label class="field"><span>New PIN (4 digits)</span><input class="input" type="password" name="pin" inputmode="numeric" maxlength="4" autocomplete="new-password"></label>' +
-      '<button class="btn btn-primary mt" type="submit">' + I("lock") + "Change PIN</button></form></div>";
+      '<button class="btn btn-primary mt" type="submit">' + I("lock") + "Change PIN</button></form></div>" + mine;
   };
   /** The recovery code: for choosing a new password on the sign-in screen after forgetting it. */
   function recoveryCard() {

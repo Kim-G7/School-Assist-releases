@@ -199,7 +199,13 @@
   P.pupils = function (c) { return c ? M.studentsOf(c) : []; };
   /** A pupil's parent or guardian, and the phone: as typed on their page, or the parents entered with the student
       (Enter students, js/enrol.js, keeps them in user.parents). */
-  P.guardianOf = function (u) { return u.guardian || (u.parents || []).map(function (p) { return [p.first, p.last].filter(Boolean).join(" "); }).filter(Boolean).join(", "); };
+  P.guardianOf = function (u) { return u.guardian || (u.parents || []).map(function (p) { return A.Parents ? A.Parents.name(p) : [p.hon || p.first, p.last].filter(Boolean).join(" "); }).filter(Boolean).join(", "); };
+  /** A guardian typed as "Mrs Dube": its title and last name (2026-11-16), for the pupil's form. */
+  var GUARD_HONS = ["Mr", "Mrs", "Miss", "Ms"];
+  function guardianParts(s) {
+    var m = /^(mr|mrs|miss|ms)\.?\s+(.+)$/i.exec(String(s || "").trim());
+    return m ? { hon: GUARD_HONS.filter(function (h) { return h.toLowerCase() === m[1].toLowerCase(); })[0], last: m[2], old: "" } : { hon: "", last: "", old: String(s || "").trim() };
+  }
   P.phoneOf = function (u) { return u.phone || (u.parents || []).map(function (p) { return p.phone; }).filter(Boolean).join(", "); };
   function age(dob) {
     if (!dob) return null;
@@ -960,7 +966,10 @@
       title: "Edit " + u.name, size: "wide",
       body: '<form id="pupil-form" class="form-grid">' + f("name", "Full name") +
         '<label class="field"><span>Sex</span><select class="select" name="sex"><option value=""></option><option value="M"' + (u.sex === "M" ? " selected" : "") + '>Boy</option><option value="F"' + (u.sex === "F" ? " selected" : "") + ">Girl</option></select></label>" +
-        f("dob", "Date of birth", "date") + f("birthNo", "Birth entry number (optional)") + f("guardian", "Parent or guardian") + f("phone", "Phone", "tel") + f("address", "Address", "text", " full") +
+        f("dob", "Date of birth", "date") + f("birthNo", "Birth entry number (optional)") +
+        (function () { var g = guardianParts(u.guardian); return '<label class="field"><span>Parent or guardian: Mr, Mrs, Miss or Ms</span><select class="select" name="gHon"><option value=""></option>' + GUARD_HONS.map(function (h) { return "<option" + (h === g.hon ? " selected" : "") + ">" + h + "</option>"; }).join("") + "</select>" + (g.old ? '<span class="hint">On the records as ' + esc(g.old) + ": choose the title and write the last name.</span>" : "") + "</label>" +
+          '<label class="field"><span>Their last name</span><input class="input" name="gLast" value="' + esc(g.last) + '" placeholder="e.g. Dube" autocomplete="off"></label>'; })() +
+        f("phone", "Phone", "tel") + f("address", "Address", "text", " full") +
         f("health", "Health notes (allergies, asthma…)", "text", " full") + (A.Parents ? A.Parents.fields(u) : "") + "</form>",
       foot: [{ label: "Remove from class", cls: "btn-danger", onClick: function () {
         return UI.confirm("Remove " + u.name + " from the class? Their marks and registers are kept in old reports.", { danger: true, ok: "Remove" }).then(function (ok) {
@@ -972,7 +981,9 @@
       } }, { label: "Cancel" }, { label: "Save", cls: "btn-primary", onClick: function (m) {
         var d = UI.formData(m.querySelector("#pupil-form"));
         if (d.name.trim().length < 2) { UI.toast("Enter the pupil's name", "bad"); return false; }
-        S().patch("users", u.id, { name: d.name.trim(), sex: d.sex, dob: d.dob, birthNo: d.birthNo.trim(), guardian: d.guardian.trim(), phone: d.phone.trim(), address: d.address.trim(), health: d.health.trim(), sample: false });
+        var gl = String(d.gLast || "").trim().replace(/\s+/g, " "), guardian = d.gHon && gl ? d.gHon + " " + (gl === gl.toLowerCase() || gl === gl.toUpperCase() ? gl.toLowerCase().replace(/(^|[\s'-])([a-z])/g, function (m, a, b) { return a + b.toUpperCase(); }) : gl) : gl ? gl : guardianParts(u.guardian).old;
+        if (gl && !d.gHon) { UI.toast("Choose Mr, Mrs, Miss or Ms for the parent or guardian", "bad"); return false; }
+        S().patch("users", u.id, { name: d.name.trim(), sex: d.sex, dob: d.dob, birthNo: d.birthNo.trim(), guardian: guardian, phone: d.phone.trim(), address: d.address.trim(), health: d.health.trim(), sample: false });
         if (A.Parents && A.Parents.available()) S().patch("users", u.id, { parents: A.Parents.readFields(d) });
         UI.toast("Saved"); A.render();
       } }],
@@ -1117,7 +1128,7 @@
     var pick = pickOf(classes, c, term);
     var html = '<div class="row wrap spread mb"><div><h2 style="font-size:22px">Mark book · ' + esc(c.name) + '</h2><p class="muted">Term ' + term + " " + esc(conf.year) + " · " + mineWork.length + " pieces of work marked</p></div>" +
       '<div class="row wrap">' + pick + termSel +
-      (canNew ? '<button class="btn btn-primary" data-act="pas-new" data-c="' + c.id + '" data-a="' + esc(area) + '">' + I("plus") + "New marks</button>" : "") + "</div></div>";
+      (canNew ? '<button class="btn btn-primary" data-act="pas-new" data-c="' + c.id + '" data-a="' + esc(area) + '">' + I("edit") + "Record marks</button>" : "") + "</div></div>";
     if (!canNew) html += '<div class="callout mb">' + I("eye") + "<div>You can look at " + esc(c.name) + "'s marks: only the teachers of its subjects change them.</div></div>";
     html += '<div class="pill-tabs sm"><button class="' + (!area ? "on" : "") + '" data-act="goto" data-href="#/t/markbook?term=' + term + "&c=" + c.id + '">' + (areas.length > 1 ? "All my subjects" : esc(areas[0])) + "</button>" + (areas.length > 1 ? areas.map(function (a) {
       var n = mineWork.filter(function (x) { return x.area === a; }).length;
@@ -1128,7 +1139,7 @@
       var avg = vals.length ? Math.round(A.avg(vals) / a.outOf * 100) : null;
       return '<a class="list-row click" href="#/t/assessment/' + a.id + '"><div class="grow"><div class="title">' + esc(a.title) + '</div><div class="meta"><span>' + esc(a.area) + '</span><span class="sep"></span><span>' + esc(a.kind) +
         '</span><span class="sep"></span><span>' + esc(A.fmtDate(Date.parse(a.date + "T12:00:00"))) + '</span><span class="sep"></span><span>out of ' + a.outOf + '</span><span class="sep"></span><span>' + vals.length + " of " + kids.length + " marked</span></div></div>" + UI.scoreBadge(avg) + "</a>";
-    }).join("") : UI.empty("edit", "Nothing marked yet", canNew ? (P.withStudents ? "Add a topic test, a mock test or the end-of-term test and enter each student's mark. Class work, quizzes and homework go in each subject class's Gradebook." : "Add an exercise, test, homework or CALA task and enter each pupil's mark.") : "", canNew ? '<button class="btn btn-primary" data-act="pas-new" data-c="' + c.id + '" data-a="' + esc(area) + '">' + I("plus") + "New marks</button>" : "")) + "</div>";
+    }).join("") : UI.empty("edit", "Nothing marked yet", canNew ? (P.withStudents ? "Record a topic test, a mock test or the end-of-term test, written on paper, and type each student's mark. Class work, quizzes and homework go in each subject class's Gradebook." : "Add an exercise, test, homework or CALA task and enter each pupil's mark.") : "", canNew ? '<button class="btn btn-primary" data-act="pas-new" data-c="' + c.id + '" data-a="' + esc(area) + '">' + I("edit") + "Record marks</button>" : "")) + "</div>";
     // the end-of-term mark and comment of each subject this teacher teaches: they go on the report cards (js/reportcards.js)
     html += endOfTerm(me, c, conf, term, area, q);
     // the class at a glance: each pupil's % per learning area this term
@@ -1165,7 +1176,7 @@
     var topicOpts = function (ar, cur) { var s = sylFor(ar); return '<option value="">' + (s ? "Choose the topic" : "No syllabus for " + esc(ar) + " yet") + "</option>" + (s ? s.topics.map(function (tp, i) { return '<option value="' + esc(tp.id) + '"' + (tp.id === cur ? " selected" : "") + ">" + (i + 1) + ". " + esc(tp.title) + "</option>"; }).join("") : ""); };
     var opts = areas.indexOf(a.area) >= 0 ? areas : [a.area].concat(areas);
     UI.modal({
-      title: a.id ? "Edit " + a.title : "New marks · " + c.name,
+      title: a.id ? "Edit " + a.title : "Record marks · " + c.name,
       onMount: function (m) {
         var fm = m.querySelector("#pas"), box = m.querySelector("#pas-topic");
         fm.kind.addEventListener("change", function () { box.style.display = fm.kind.value === "Topic test" ? "" : "none"; });

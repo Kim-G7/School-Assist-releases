@@ -59,7 +59,7 @@
     html += '<div class="grid g-main mt"><div class="stack-lg">';
     html += '<div class="card"><div class="card-head"><h3>New from your teachers</h3><span class="sub">Let your teacher know you have received each one</span></div>' +
       (fresh.length ? fresh.map(function (t) {
-        return '<div class="list-row"><span class="kind-bar k-' + t.kind + '"></span><div class="grow"><a class="title" href="#/s/task/' + t.id + '" style="color:inherit">' + esc(t.title) + '</a><div class="meta">' + M.kindBadge(t.kind) + "<span>" + esc(subjectOf(t)) + "</span>" + A.dueBadge(t.dueAt) + "</div></div>" +
+        return '<div class="list-row"><span class="kind-bar k-' + t.kind + '"></span><div class="grow"><a class="title" href="#/s/task/' + t.id + '" style="color:inherit">' + esc(t.title) + '</a><div class="meta">' + M.kindBadge(t.kind) + "<span>" + esc(subjectOf(t)) + "</span>" + M.taskWhen(t) + "</div></div>" +
           '<button class="btn btn-primary" data-act="ack" data-id="' + t.id + '">' + I("check") + "I've received it</button></div>";
       }).join("") : UI.empty("checkCircle", "Nothing new", "New homework, assignments, tests and presentations appear here.")) + "</div>";
     html += (A.Primary && A.Primary.studentToday && A.Primary.studentToday(me)) || A.TT.todayCard(me); // the class timetable (1.7), or the bell-time one
@@ -90,7 +90,7 @@
 
   function taskRow(me, t) {
     var st = M.taskStatus(t, me.id), eff = M.effectiveScore(t, me.id);
-    return '<a class="list-row" href="#/s/task/' + t.id + '"><span class="kind-bar k-' + t.kind + '"></span><div class="grow"><div class="title">' + esc(t.title) + '</div><div class="meta">' + M.kindBadge(t.kind) + A.dueBadge(t.dueAt, st.key === "submitted" || st.key === "graded") + "</div></div>" +
+    return '<a class="list-row" href="#/s/task/' + t.id + '"><span class="kind-bar k-' + t.kind + '"></span><div class="grow"><div class="title">' + esc(t.title) + '</div><div class="meta">' + M.kindBadge(t.kind) + M.taskWhen(t, st.key === "submitted" || st.key === "graded") + "</div></div>" +
       (eff ? '<b class="tnum small">' + eff.score + " / " + t.maxMarks + "</b>" : "") + M.statusBadge(st) + I("right") + "</a>";
   }
   function noteRow(m, me) {
@@ -159,15 +159,17 @@
     var mats = (t.materialIds || []).map(function (id) { return S().get("materials", id); }).filter(function (m) { return m && M.materialVisibleTo(m, me.id); });
     var acc = topic ? M.topicAccess(me.id, c, syl, topic) : null;
 
-    var html = '<div class="grid g-main"><div class="card card-pad"><div class="row wrap">' + M.kindBadge(t.kind) + A.dueBadge(t.dueAt, st.key === "submitted" || st.key === "graded") + M.statusBadge(st) + (t.maxMarks && !t.test ? '<span class="badge">' + I("award") + t.maxMarks + " marks</span>" : "") + (t.test ? '<span class="badge brand">' + I("clock") + "Online timed test</span>" : "") + "</div>" +
-      '<h2 class="mt-sm" style="font-size:22px">' + esc(t.title) + '</h2><p class="muted small">' + esc(M.className(c)) + " · " + esc(teacherOf(c)) + " · set " + A.fmtDate(t.createdAt) + " · due " + A.fmtDateTime(t.dueAt) +
+    var html = '<div class="grid g-main"><div class="card card-pad"><div class="row wrap">' + M.kindBadge(t.kind) + M.taskWhen(t, st.key === "submitted" || st.key === "graded") + M.statusBadge(st) + (t.maxMarks && !t.test ? '<span class="badge">' + I("award") + t.maxMarks + " marks</span>" : "") + (t.test ? '<span class="badge brand">' + I("clock") + "Online timed test</span>" : "") + "</div>" +
+      '<h2 class="mt-sm" style="font-size:22px">' + esc(t.title) + '</h2><p class="muted small">' + esc(M.className(c)) + " · " + esc(teacherOf(c)) + (t.recorded ? " · done on paper " + A.fmtDate(t.dueAt) : " · set " + A.fmtDate(t.createdAt) + " · due " + A.fmtDateTime(t.dueAt)) +
       (Array.isArray(t.assignedTo) ? " · with " + M.assignees(t).filter(function (u) { return u.id !== me.id; }).map(function (u) { return A.firstName(u.name); }).join(", ") : "") + "</p>" +
       '<div class="prose mt">' + A.md(t.instructions || "") + "</div>" +
       (topic ? '<div class="callout mt">' + I("book") + '<div class="grow">This task is on <b>' + esc(topic.title) + "</b>. " + (acc.open ? "Revise the notes and worked examples first." : esc(M.lockText(acc)) + ".") + "</div>" + (acc.open ? '<a class="btn btn-sm" href="#/s/topic/' + syl.id + "/" + topic.id + '">Open notes</a>' : "") + "</div>" : "") +
       (mats.length ? '<div class="label mt">Materials</div><div class="card">' + mats.map(function (m) { return A.materialRow(m); }).join("") + "</div>" : "") + "</div>";
 
     var side = '<div class="card card-pad">';
-    if (!sub.receivedAt) {
+    if (t.recorded) {
+      side += '<div class="row small">' + I("edit") + "<span>Done on paper in class on " + esc(A.fmtDate(t.dueAt)) + ". " + esc(teacherOf(c)) + " records the marks here: there is nothing to hand in.</span></div>";
+    } else if (!sub.receivedAt) {
       side += '<h3 style="font-size:16px">Have you got it?</h3><p class="muted small mt-sm">Tap below so ' + esc(teacherOf(c)) + " knows you've received this " + M.KINDS[t.kind].label.toLowerCase() + '.</p><button class="btn btn-primary btn-lg btn-block mt" data-act="ack" data-id="' + t.id + '">' + I("check") + "I've received it</button>";
     } else {
       side += '<div class="row small">' + I("checkCircle") + "<span>Received " + A.fmtDateTime(sub.receivedAt) + "</span></div>";
@@ -286,7 +288,7 @@
   /* ========================================================= NOTIFICATIONS */
   A.route("s/notifications", function (p, q, me) {
     var msgs = M.messagesForStudent(me.id);
-    return { title: "Notifications", html: '<p class="muted mb">Messages from your teachers. Study notes for each topic are in Exam mode.</p><div class="card">' + (msgs.length ? msgs.map(function (m) { return noteRow(m, me); }).join("") : UI.empty("bell", "No notifications yet")) + "</div>" };
+    return { title: "Notifications", html: '<div class="row wrap spread mb"><p class="muted">Messages from your teachers. Study notes for each topic are in Exam mode.</p>' + (A.Alerts && A.Alerts.soundSwitch ? A.Alerts.soundSwitch() : "") + '</div><div class="card">' + (msgs.length ? msgs.map(function (m) { return noteRow(m, me); }).join("") : UI.empty("bell", "No notifications yet")) + "</div>" };
   }, { role: "student" });
 
   /* ============================================================= PROGRESS */

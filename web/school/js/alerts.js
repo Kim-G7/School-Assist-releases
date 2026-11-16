@@ -69,6 +69,55 @@
     if (created.length) Al.refreshBell();
   };
 
+  /* ---------------------------------------------------------------- the sound (2026-11-16)
+     A new notification plays a short two-note chime, so a teacher or student busy with something else notices it. It
+     is made by the browser (Web Audio), so there is no sound file to load and it works offline. Once for a few at a
+     time; each device can turn it off (the bell's list, and the students' Notifications page). A browser plays sound
+     only after the page has been touched or clicked once, so the chime is readied on the first click or key. */
+  var SOUND_KEY = "sca-sound", ctx = null, lastChime = 0;
+  Al.soundOn = function () { try { return localStorage.getItem(SOUND_KEY) !== "off"; } catch (e) { return true; } };
+  Al.setSound = function (on) { try { localStorage.setItem(SOUND_KEY, on ? "on" : "off"); } catch (e) { /* private mode */ } };
+  function audio() {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!ctx) try { ctx = new AC(); } catch (e) { return null; }
+    if (ctx.state === "suspended" && ctx.resume) ctx.resume().catch(function () { /* not until the page is touched */ });
+    return ctx;
+  }
+  var ready = function () { audio(); document.removeEventListener("pointerdown", ready, true); document.removeEventListener("keydown", ready, true); };
+  document.addEventListener("pointerdown", ready, true);
+  document.addEventListener("keydown", ready, true);
+  /** The chime: two soft notes going up (A5, then E6). Returns true when it played. */
+  Al.chime = function (force) {
+    if (!force && (!Al.soundOn() || A.now() - lastChime < 2500)) return false;
+    var ac = audio();
+    if (!ac || ac.state !== "running") return false;
+    lastChime = A.now();
+    var t0 = ac.currentTime + 0.01;
+    [[880, 0], [1318.5, 0.14]].forEach(function (n) {
+      var o = ac.createOscillator(), g = ac.createGain();
+      o.type = "sine"; o.frequency.value = n[0];
+      g.gain.setValueAtTime(0.0001, t0 + n[1]);
+      g.gain.exponentialRampToValueAtTime(0.18, t0 + n[1] + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + n[1] + 0.32);
+      o.connect(g); g.connect(ac.destination);
+      o.start(t0 + n[1]); o.stop(t0 + n[1] + 0.34);
+    });
+    return true;
+  };
+  /** The switch for this device's sound (the bell's list and the students' Notifications page). */
+  Al.soundSwitch = function () {
+    var on = Al.soundOn();
+    return '<label class="check sound-switch"><input type="checkbox" data-change="alert-sound"' + (on ? " checked" : "") + ">" + I(on ? "bell" : "bellOff") + "<span>Play a sound for new notifications on this device</span></label>";
+  };
+  A.act["alert-sound"] = function (el) {
+    Al.setSound(el.checked);
+    if (el.checked) Al.chime(true);
+    var ico = el.parentNode.querySelector("svg");
+    if (ico) ico.outerHTML = I(el.checked ? "bell" : "bellOff");
+    UI.toast(el.checked ? "Sound on for new notifications" : "Sound off on this device");
+  };
+
   /* ---------------------------------------------------------------- pop-ups */
   /** School Assist Teacher: every pop-up leaves after 10 seconds (it stays in the bell). A pointer resting on it
    *  holds it; when the pointer leaves, it goes 3 seconds later. */
@@ -94,6 +143,7 @@
       '<button type="button" class="btn btn-ghost btn-icon btn-sm" data-alert-dismiss="' + a.id + '" aria-label="Close">' + I("x") + "</button>";
     add(root, el);
     autoClose(el, POP_MS);
+    Al.chime();
     if (document.hidden && window.Notification && Notification.permission === "granted") {
       try { new Notification(a.title, { body: a.body, icon: A.Theme.iconURL(), tag: a.id }); } catch (e) { /* not supported */ }
     }
@@ -182,9 +232,9 @@
     var me = M.me(), list = Al.mine(me.id);
     UI.modal({
       title: "Notifications", sub: A.edition === "home" ? "Submissions, due work and exam integrity" : "Notices from the school, submissions, due work and exam integrity", size: "wide", flush: true,
-      body: list.length ? list.map(function (a) {
+      body: '<div class="sound-row">' + Al.soundSwitch() + "</div>" + (list.length ? list.map(function (a) {
         return '<a class="list-row" href="' + Al.href(a) + '" data-alert-open="' + a.id + '"><div class="alert-ico ' + (TONE[a.kind] || "") + '">' + I(ICON[a.kind] || "bell") + '</div><div class="grow"><div class="title">' + (a.readAt ? "" : '<span class="badge accent" style="margin-right:6px">New</span>') + esc(a.title) + '</div><div class="small muted">' + esc(a.body) + '</div><div class="tiny muted mt-sm">' + A.relTime(a.createdAt) + "</div></div>" + I("right") + "</a>";
-      }).join("") : UI.empty("bell", "No notifications yet", "You'll be told here when everyone has submitted, when work is due, and when a test needs checking."),
+      }).join("") : UI.empty("bell", "No notifications yet", "You'll be told here when everyone has submitted, when work is due, and when a test needs checking.")),
       foot: [{ label: "Mark all as read", onClick: function () { list.forEach(function (a) { if (!a.readAt) S().put("alerts", Object.assign({}, a, { readAt: A.now() })); }); Al.refreshBell(); } }, { label: "Close", cls: "btn-primary" }],
     });
   };
@@ -215,6 +265,7 @@
         out.push({ id: "msg_" + m.id, at: m.createdAt, icon: "bell", title: "New notice: " + (m.subject || "from your teacher"), body: (from ? from.name + ": " : "") + clip(m.body, 110), href: "#/s/notifications" });
       });
       M.tasksForStudent(me.id).forEach(function (t) {
+        if (t.recorded) return; // marks from work done on paper: the mark tells them (below)
         var c = M.cls(t.classId);
         out.push({ id: "task_" + t.id, at: t.createdAt, icon: "tasks", title: "New task: " + t.title, body: (c ? c.subject + ". " : "") + (t.dueAt ? "Due " + A.fmtDate(t.dueAt) + "." : ""), href: "#/s/task/" + t.id });
       });
@@ -279,6 +330,7 @@
       '<button type="button" class="btn btn-ghost btn-icon btn-sm" data-news-close aria-label="Close">' + I("x") + "</button>";
     add(root, el);
     autoClose(el, POP_MS);
+    Al.chime();
     if (document.hidden && window.Notification && Notification.permission === "granted") {
       try { new Notification(ev.title, { body: ev.body || "", icon: A.Theme.iconURL(), tag: ev.id }); } catch (e) { /* not supported */ }
     }

@@ -1,7 +1,8 @@
 /* Parents (School Assist Premium, 2026-11-08).
  *
  * A school's admins make a link (Settings → Parents). A parent who opens it sees that school, not "join or set up a
- * school", and gives their own first and last name, their phone number and their child's student ID; the hub checks
+ * school", and gives their title (Mr, Mrs, Miss or Ms) and last name, their phone number and their child's student ID
+ * (2026-11-16: before, their first name; a school's records may have a first name still); the hub checks
  * them against the student's record (user.parents) and gives this phone a key that opens only that parent's children
  * (hub-parents.cjs).
  *
@@ -108,7 +109,7 @@
     return '<div class="login par-login"><section class="login-brand"><div style="position:relative;z-index:1">' + A.Theme.logoHTML() + "<h1>" + esc(b.name) + '</h1><p class="motto">' + esc(b.motto) + "</p>" + about(b) + "</div></section>" +
       '<section class="login-panel"><div class="login-box"><h2>For parents</h2><p class="muted mt-sm">Follow your child at ' + esc(b.shortName || b.name) + ": attendance, subjects and teachers, marks, progress and the timetable.</p>" +
       (V.error ? '<p class="form-msg mt" role="alert">' + I("alert") + esc(V.error) + "</p>" : "") +
-      '<form data-submit="par-signup" class="mt"><label class="field"><span>Your first name</span><input class="input" name="first" autocomplete="given-name" required></label>' +
+      '<form data-submit="par-signup" class="mt"><label class="field"><span>Mr, Mrs, Miss or Ms</span><select class="select" name="hon" required><option value="">Choose…</option>' + Par.HONS.map(function (h) { return '<option value="' + h + '">' + h + "</option>"; }).join("") + "</select></label>" +
       '<label class="field"><span>Your last name</span><input class="input" name="last" autocomplete="family-name" required></label>' +
       '<label class="field"><span>Your phone number</span><input class="input" name="phone" type="tel" inputmode="tel" autocomplete="tel" required><span class="hint">The number the school has for you.</span></label>' +
       '<label class="field"><span>Your child\'s student ID</span><input class="input" name="studentNo" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="e.g. ' + esc(b.abbr || "ABC") + '-FM1-001" required><span class="hint">The ID your child uses at school.</span></label>' +
@@ -119,7 +120,7 @@
     var d = V.draft, f = UI.formData(form);
     if (!d || V.signing) return;
     V.signing = true; V.error = ""; A.render();
-    call(d.hub, "signup", { link: d.link, deviceId: "par-" + A.Devices.id(), label: A.Devices.detect ? deviceName() : "Parent's phone", first: f.first.trim(), last: f.last.trim(), phone: f.phone.trim(), studentNo: f.studentNo.trim() }).then(function (j) {
+    call(d.hub, "signup", { link: d.link, deviceId: "par-" + A.Devices.id(), label: A.Devices.detect ? deviceName() : "Parent's phone", first: f.hon, hon: f.hon, last: f.last.trim(), phone: f.phone.trim(), studentNo: f.studentNo.trim() }).then(function (j) {
       st.schools = st.schools.filter(function (x) { return x.sid !== d.sid; }).concat([{ sid: d.sid, hub: d.hub, link: d.link, key: j.key, school: j.school, parent: j.parent, children: j.children, at: j.at }]);
       st.cur = d.sid; V.draft = null; V.picked = true; V.signing = false; save();
       location.hash = "#/p/progress";
@@ -335,15 +336,36 @@
   Par.available = function () { return A.edition !== "teacher" && A.edition !== "home" && !A.Cloud && !!A.Licence && A.Licence.isOn("parent-monitor") && A.Sync.hubHasRules(); };
   Par.nav = function (me) { return me.isAdmin && Par.available() ? { href: "#/t/parents", icon: "users", label: "Parents", key: "parents" } : null; };
 
-  /** The parents' names and phone numbers on a student's form: the school's check on who may see that student. */
+  /* A parent or guardian is written as staff are (2026-11-16): Mr, Mrs, Miss or Ms and their last name, "Mrs Dube" (a first
+     name can be hard for the school to know). user.parents: [{ hon, first, last, phone }]: "first" holds the title too, so
+     a hub from before 1.8.7, which matches a parent by first name, last name and phone, still finds them. A record from
+     before, with a first name and no title, keeps its first name until someone chooses the title. */
+  Par.HONS = ["Mr", "Mrs", "Miss", "Ms"];
+  var isHon = function (s) { return Par.HONS.some(function (h) { return h.toLowerCase() === String(s || "").trim().replace(/\.$/, "").toLowerCase(); }); };
+  var honOf = function (p) { return p ? (p.hon || (isHon(p.first) ? String(p.first).trim().replace(/\.$/, "") : "")) : ""; };
+  var tidyLast = function (s) { s = String(s || "").trim().replace(/\s+/g, " ").slice(0, 60); return s === s.toLowerCase() || s === s.toUpperCase() ? s.toLowerCase().replace(/(^|[\s'-])([a-z])/g, function (m, a, b) { return a + b.toUpperCase(); }) : s; };
+  /** "Mrs Dube" (or, from before, "Tendai Dube"). */
+  Par.name = function (p) { return p ? [honOf(p) || p.first || "", p.last || ""].join(" ").trim() : ""; };
+  /** The parents' titles, last names and phone numbers on a student's form: the school's check on who may see that student. */
   Par.fields = function (u) {
     if (!Par.available()) return "";
-    var p = (u && u.parents) || [], f = function (i, part, label, extra) { return '<label class="field' + (extra || "") + '"><span>' + label + '</span><input class="input" name="par' + i + part + '" value="' + esc((p[i] || {})[part] || "") + '" autocomplete="off"' + (part === "phone" ? ' type="tel"' : "") + "></label>"; };
-    return '<div class="field full"><span class="label">Parents or guardians</span><span class="hint">A parent joins the parents\' app with this name, this phone number and the student\'s ID, so write them as the parent will.</span></div>' +
-      f(0, "first", "Parent's first name") + f(0, "last", "Parent's last name") + f(0, "phone", "Parent's phone", " full") + f(1, "first", "Second parent's first name") + f(1, "last", "Second parent's last name") + f(1, "phone", "Second parent's phone", " full");
+    var p = (u && u.parents) || [];
+    var one = function (i, who) {
+      var x = p[i] || {}, hon = honOf(x), old = !hon && x.first ? x.first : "";
+      return '<label class="field"><span>' + who + ': Mr, Mrs, Miss or Ms</span><select class="select" name="par' + i + 'hon"><option value=""></option>' + Par.HONS.map(function (h) { return '<option value="' + h + '"' + (h === hon ? " selected" : "") + ">" + h + "</option>"; }).join("") + "</select>" +
+          (old ? '<span class="hint">On the records as ' + esc(old + " " + (x.last || "")) + ": choose the title.</span>" : "") + '<input type="hidden" name="par' + i + 'first" value="' + esc(old) + '"></label>' +
+        '<label class="field"><span>' + who + "'s last name</span><input class=\"input\" name=\"par" + i + 'last" value="' + esc(x.last || "") + '" autocomplete="off" placeholder="e.g. Dube"></label>' +
+        '<label class="field full"><span>' + who + "'s phone</span><input class=\"input\" type=\"tel\" name=\"par" + i + 'phone" value="' + esc(x.phone || "") + '" autocomplete="off"></label>';
+    };
+    return '<div class="field full"><span class="label">Parents or guardians</span><span class="hint">Mr, Mrs, Miss or Ms and the last name, as the school calls them (Mrs Dube). A parent joins the parents\' app with these, this phone number and the student\'s ID.</span></div>' +
+      one(0, "Parent") + one(1, "Second parent");
   };
   Par.readFields = function (d, prefix) {
-    return [0, 1].map(function (i) { return { first: String(d[(prefix || "") + "par" + i + "first"] || "").trim(), last: String(d[(prefix || "") + "par" + i + "last"] || "").trim(), phone: String(d[(prefix || "") + "par" + i + "phone"] || "").trim() }; }).filter(function (x) { return x.first && x.last; });
+    var g = function (i, k) { return String(d[(prefix || "") + "par" + i + k] || "").trim(); };
+    return [0, 1].map(function (i) {
+      var hon = isHon(g(i, "hon")) ? g(i, "hon") : "", last = tidyLast(g(i, "last"));
+      return hon ? { hon: hon, first: hon, last: last, phone: g(i, "phone") } : { first: g(i, "first"), last: last, phone: g(i, "phone") };
+    }).filter(function (x) { return x.first && x.last; });
   };
 
   /** Who is where: the forms, each with its classes, its students and the parents using School Assist. */
@@ -369,7 +391,7 @@
     });
     var order = M.structure().levels || [], list = Object.keys(forms).map(function (k) { return forms[k]; }).sort(function (a, b) { var x = order.indexOf(a.level), y = order.indexOf(b.level); return (x < 0 ? 99 : x) - (y < 0 ? 99 : y) || a.level.localeCompare(b.level); });
     list.forEach(function (f) { f.list = Object.keys(f.classes).map(function (k) { return f.classes[k]; }).sort(function (a, b) { return a.label.localeCompare(b.label); }); });
-    return { forms: list, parents: parents, students: students, reached: Object.keys(reached).length, noName: students.filter(function (u) { return !(u.parents || []).some(function (x) { return x.first && x.last && x.phone; }); }).length };
+    return { forms: list, parents: parents, students: students, reached: Object.keys(reached).length, noName: students.filter(function (u) { return !(u.parents || []).some(function (x) { return (x.hon || x.first) && x.last && x.phone; }); }).length };
   }
   var count = function (o) { return Object.keys(o).length; }, plural = function (n, s) { return n + " " + s + (n === 1 ? "" : "s"); }, use = function (n) { return plural(n, "parent") + (n === 1 ? " uses" : " use") + " School Assist"; };
   function row(href, title, meta, n, reached, total) {
@@ -395,17 +417,21 @@
     var crumbs = [{ label: "Parents", href: "#/t/parents" }, { label: form.level, href: "#/t/parents?f=" + encodeURIComponent(form.level) }, { label: k.label }];
     var students = k.students.slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
     if (edit) {
-      var box = function (u, i, part, hint) { var v = ((u.parents || [])[i] || {})[part] || ""; return '<input class="input sm"' + (part === "phone" ? ' type="tel"' : "") + ' name="' + u.id + "__par" + i + part + '" value="' + esc(v) + '" placeholder="' + hint + '" aria-label="' + esc(u.name) + ": " + hint + '" autocomplete="off">'; };
+      var box = function (u, i, part, hint) {
+        var x = (u.parents || [])[i] || {}, nm = u.id + "__par" + i + part;
+        if (part === "hon") { var h = honOf(x); return '<select class="select sm" name="' + nm + '" aria-label="' + esc(u.name) + ': Mr, Mrs, Miss or Ms"><option value="">' + esc(!h && x.first ? x.first : "Title") + "</option>" + Par.HONS.map(function (o) { return '<option' + (o === h ? " selected" : "") + ">" + o + "</option>"; }).join("") + '</select><input type="hidden" name="' + u.id + "__par" + i + 'first" value="' + esc(!h && x.first ? x.first : "") + '">'; }
+        return '<input class="input sm"' + (part === "phone" ? ' type="tel"' : "") + ' name="' + nm + '" value="' + esc(x[part] || "") + '" placeholder="' + hint + '" aria-label="' + esc(u.name) + ": " + hint + '" autocomplete="off">';
+      };
       return { title: k.label, crumbs: crumbs, html: '<p class="muted mb">Each parent joins with this name, this phone number and the student\'s ID, so write them as the parent will.</p><form data-submit="par-names" data-class="' + esc(k.key) + '"><div class="card table-wrap"><table class="table"><thead><tr><th>Student</th><th>Parent</th><th>Second parent</th></tr></thead><tbody>' +
-        students.map(function (u) { return "<tr><td><b>" + esc(u.name) + '</b><div class="small muted">' + esc(u.studentNo || "") + '</div></td><td><div class="par-two">' + box(u, 0, "first", "First name") + box(u, 0, "last", "Last name") + box(u, 0, "phone", "Phone") + '</div></td><td><div class="par-two">' + box(u, 1, "first", "First name") + box(u, 1, "last", "Last name") + box(u, 1, "phone", "Phone") + "</div></td></tr>"; }).join("") +
+        students.map(function (u) { return "<tr><td><b>" + esc(u.name) + '</b><div class="small muted">' + esc(u.studentNo || "") + '</div></td><td><div class="par-two">' + box(u, 0, "hon") + box(u, 0, "last", "Last name") + box(u, 0, "phone", "Phone") + '</div></td><td><div class="par-two">' + box(u, 1, "hon") + box(u, 1, "last", "Last name") + box(u, 1, "phone", "Phone") + "</div></td></tr>"; }).join("") +
         '</tbody></table></div><div class="row mt"><button class="btn btn-primary" type="submit">' + I("check") + 'Save</button><a class="btn" href="' + href + '">Cancel</a></div></form>' };
     }
     var html = '<div class="row wrap spread mb"><p class="muted">' + use(count(k.parents)) + "; " + k.reached + " of " + plural(k.students.length, "student") + ' have a parent on it.</p><a class="btn" href="' + href + '&e=1">' + I("edit") + "Parents' details</a></div>";
     html += '<div class="card table-wrap"><table class="table"><thead><tr><th>Student</th><th>Parents on the school\'s records</th><th>Using School Assist</th></tr></thead><tbody>' + students.map(function (u) {
       var on = all.filter(function (p) { return (p.studentIds || []).indexOf(u.id) >= 0; });
-      return "<tr><td><b>" + esc(u.name) + '</b><div class="small muted">' + esc(u.studentNo || "") + "</div></td><td>" + ((u.parents || []).map(function (x) { return esc(x.first + " " + x.last) + " " + (x.phone ? '<span class="small muted tnum">' + esc(x.phone) + "</span>" : '<span class="badge warn">No phone yet</span>'); }).join("<br>") || '<span class="badge warn">No details yet</span>') + "</td><td>" +
+      return "<tr><td><b>" + esc(u.name) + '</b><div class="small muted">' + esc(u.studentNo || "") + "</div></td><td>" + ((u.parents || []).map(function (x) { return esc(Par.name(x)) + " " + (x.phone ? '<span class="small muted tnum">' + esc(x.phone) + "</span>" : '<span class="badge warn">No phone yet</span>'); }).join("<br>") || '<span class="badge warn">No details yet</span>') + "</td><td>" +
         (on.map(function (p) {
-          return '<div class="row wrap" style="gap:8px"><span>' + esc(p.first + " " + p.last) + '</span><span class="small muted">' + (p.removedAt ? "removed" : "seen " + esc(A.relTime(p.lastSeenAt || p.joinedAt))) + '</span><button class="btn btn-sm btn-ghost" data-act="par-remove" data-id="' + esc(p.id) + '">' + (p.removedAt ? "Let back in" : "Remove") + "</button></div>";
+          return '<div class="row wrap" style="gap:8px"><span>' + esc(Par.name(p)) + '</span><span class="small muted">' + (p.removedAt ? "removed" : "seen " + esc(A.relTime(p.lastSeenAt || p.joinedAt))) + '</span><button class="btn btn-sm btn-ghost" data-act="par-remove" data-id="' + esc(p.id) + '">' + (p.removedAt ? "Let back in" : "Remove") + "</button></div>";
         }).join("") || '<span class="muted">Not yet</span>') + "</td></tr>";
     }).join("") + "</tbody></table></div>";
     return { title: k.label, crumbs: crumbs, html: html };
@@ -424,7 +450,7 @@
     var p = S().get("parents", el.getAttribute("data-id"));
     if (!p) return;
     if (p.removedAt) { S().patch("parents", p.id, { removedAt: null }); return A.render(); }
-    UI.confirm("Remove " + p.first + " " + p.last + "? They can no longer see their child in School Assist, and can't sign up again until you let them back in here.", { danger: true, ok: "Remove" }).then(function (ok) {
+    UI.confirm("Remove " + Par.name(p) + "? They can no longer see their child in School Assist, and can't sign up again until you let them back in here.", { danger: true, ok: "Remove" }).then(function (ok) {
       if (ok) { S().patch("parents", p.id, { removedAt: A.now() }); A.render(); }
     });
   };
@@ -442,7 +468,7 @@
   Par.settings = function (me) {
     var r = linkRec(), link = linkUrl(r), c = census();
     var html = '<div class="card card-pad mb"><h3 class="row">' + I("link") + " The link for parents</h3>" +
-      '<p class="muted small mt-sm" style="max-width:680px">Send parents this link. It opens ' + esc(A.Theme.get().name) + "'s own page, where each parent gives their first name, last name, phone number and their child's student ID. If they match the student's record, the parent sees only their own child.</p>";
+      '<p class="muted small mt-sm" style="max-width:680px">Send parents this link. It opens ' + esc(A.Theme.get().name) + "'s own page, where each parent gives Mr, Mrs, Miss or Ms, their last name, phone number and their child's student ID. If they match the student's record, the parent sees only their own child.</p>";
     if (!online()) html += '<div class="callout warn mt">' + I("wifiOff") + '<div class="small">Parents reach the school over the internet. Turn on <b>Phones away from school</b> in Offline &amp; sync first, on the hub computer.</div></div>';
     else if (!r || !r.token) html += '<div class="row mt"><button class="btn btn-primary" data-act="par-make-link">' + I("link") + "Make the link</button></div>";
     else html += '<div class="row wrap top mt" style="gap:20px"><div class="invite-qr" id="par-qr"></div><div class="grow"><div class="label">Link</div><code class="pw-mask" style="display:inline-block;font-size:14px;word-break:break-all">' + esc(link) + "</code>" +
@@ -477,7 +503,7 @@
     var link = linkUrl(linkRec()), b = A.Theme.get();
     A.qrSvg(link).then(function (svg) {
       UI.printSheet({ title: "Parents of " + b.name, pageWidth: 794, css: "@page{size:A4;margin:16mm}#print-root .inv{width:178mm;margin:0 auto;text-align:center;font-family:'Segoe UI',Arial,sans-serif;color:#111}#print-root .inv .logo{width:28mm;height:28mm;margin:0 auto}#print-root .inv .logo img,#print-root .inv .logo svg{width:100%;height:100%}#print-root .inv .qr svg{width:80mm;height:80mm}#print-root .inv code{word-break:break-all}",
-        html: '<section class="inv">' + A.Theme.logoHTML() + "<h1>" + esc(b.name) + "</h1><p>Parents: scan this with your phone's camera to follow your child's progress</p><div class=\"qr\">" + svg + "</div><p>or open <code>" + esc(link) + "</code></p><p>You will need your first name, your last name, the phone number the school has for you and your child's student ID.</p></section>" });
+        html: '<section class="inv">' + A.Theme.logoHTML() + "<h1>" + esc(b.name) + "</h1><p>Parents: scan this with your phone's camera to follow your child's progress</p><div class=\"qr\">" + svg + "</div><p>or open <code>" + esc(link) + "</code></p><p>You will need your title (Mr, Mrs, Miss or Ms), your last name, the phone number the school has for you and your child's student ID.</p></section>" });
     }, function (e) { UI.toast(e.message, "bad"); });
   };
 })(window.App);

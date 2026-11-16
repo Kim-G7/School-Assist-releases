@@ -366,13 +366,19 @@
   M.taskStatus = function (task, sid) {
     var sub = M.submission(task.id, sid), sc = M.effectiveScore(task, sid);
     if (sc) return { key: "graded", label: "Graded", tone: "good" };
+    // marks recorded from work done on paper (the Gradebook's Record marks): nothing to receive or hand in
+    if (task.recorded) return { key: "recorded", label: "No mark yet", tone: "" };
     if (sub && sub.submittedAt) return { key: "submitted", label: task.kind === "presentation" ? "Ready" : "Submitted", tone: "brand" };
     var overdue = task.dueAt && task.dueAt < A.now();
     if (sub && sub.receivedAt) return overdue ? { key: "overdue", label: "Overdue", tone: "bad" } : { key: "received", label: "Received", tone: "" };
     return overdue ? { key: "overdue", label: "Not received", tone: "bad" } : { key: "new", label: "New", tone: "accent" };
   };
   /** Only homework and assignments are handed in; tests and presentations are marked by the teacher. */
-  M.canSubmit = function (task) { return task.kind === "homework" || task.kind === "assignment"; };
+  M.canSubmit = function (task) { return !task.recorded && (task.kind === "homework" || task.kind === "assignment"); };
+  /** When a task is due, or (marks recorded from paper) the day it was done. */
+  M.taskWhen = function (task, neutralPast) {
+    return task && task.recorded ? '<span class="badge">' + A.icon("edit") + "On paper · " + A.esc(A.fmtDate(task.dueAt)) + "</span>" : A.dueBadge(task.dueAt, neutralPast);
+  };
   M.needsMarking = function (task) {
     if (!task.maxMarks) return 0;
     return M.assignees(task).filter(function (u) { var s = M.submission(task.id, u.id); return s && s.submittedAt && !M.effectiveScore(task, u.id); }).length;

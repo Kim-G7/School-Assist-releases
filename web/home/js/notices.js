@@ -47,7 +47,7 @@
   /* ------------------------------------------------------------------ the Notices page */
   function card(n, me) {
     var t = Nt.type(n.type), from = M.user(n.fromId), past = n.at && n.at < A.startOfDay();
-    return '<div class="card notice-card mb' + (past ? " past" : "") + '"><div class="row" style="align-items:flex-start;gap:12px">' +
+    return '<div class="card card-pad notice-card mb' + (past ? " past" : "") + '"><div class="row" style="align-items:flex-start;gap:14px">' +
       '<div class="alert-ico">' + I(t.icon) + '</div><div class="grow" style="min-width:0">' +
       '<div class="row wrap" style="gap:6px"><span class="badge">' + esc(t.label) + "</span>" + (n.at ? '<span class="badge ' + (past ? "" : "good") + '">' + I("clock") + esc(A.fmtDateTime(n.at)) + "</span>" : "") + "</div>" +
       '<h3 style="margin:6px 0 4px;font-size:17px">' + esc(n.title) + "</h3>" +

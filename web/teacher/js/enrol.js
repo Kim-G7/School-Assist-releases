@@ -66,8 +66,8 @@
   function makeClass(level, stream, subject, home, lib, me) {
     var base = "c_" + slug(home ? home.id.replace(/^cls_/, "") : level + "-" + (stream || "all")) + "_" + slug(subject), id = base;
     for (var n = 2; S().get("classes", id); n++) id = base + "-" + n;
-    var syl = syllabusFor(level, subject, lib, me);
-    return S().put("classes", { id: id, name: home ? home.name : [level, stream].filter(Boolean).join(" "), level: level, stream: stream || null, subject: subject,
+    var syl = (A.Syl && A.Syl.forClass(subject, level, null)) || syllabusFor(level, subject, lib, me), rec = A.Subjects ? A.Subjects.find(subject, level) : null;
+    return S().put("classes", { id: id, name: home ? home.name : [level, stream].filter(Boolean).join(" "), level: level, stream: stream || null, subject: subject, subjectId: rec ? rec.id : null,
       teacherId: teacherFor(home, level, stream, subject) || null, syllabusId: syl ? syl.id : null, room: "", studentIds: [], currentTerm: (A.Primary.conf() || {}).term || 1,
       sequential: false, topicAccess: {}, madeFor: "students", createdBy: me.id });
   }
@@ -185,6 +185,89 @@
         body: (me.title || "An admin") + " added student " + u.name + " to your class " + home.name + "." });
     }
   }
+
+  /* ------------------------------------------------------------------ subject classes follow the subjects (2026-11-16)
+     A subject class used to get its students only when they were entered or edited on Enter students: a Physics class
+     made for a new student had that one student, and the rest of the form taking Physics (from before, or by the
+     school's records: js/catalogue.js) weren't in it. Now, by itself:
+       - every subject a teacher teaches in a form (My subjects: js/tracker.js T.pairs) has its subject class (Form 3A
+         Physics, Form 4A Physics, Lower 6 Sciences Physics, Form 1A Mathematics), so the teacher records marks, sets work
+         and follows the students of each class that takes it; a class is made once a student of the form takes it;
+       - every student of the form (and stream) who takes the subject is in it;
+       - a student deleted or gone from the school is in none.
+     Only Enter students takes a student out of a subject they still have (their subjects changed). An admin's device
+     looks after every class; a teacher's device, the classes they teach. */
+  var takesIt = function (u, subject, memo) {
+    var k = u.id, set = memo[k];
+    if (!set) {
+      set = memo[k] = {};
+      (A.Subjects ? A.Subjects.ofStudent(u) : (u.registered || []).map(function (n) { return { name: n }; })).forEach(function (x) {
+        var l = letters(x.name); set[l] = 1; (ALIAS[l] || []).forEach(function (a) { set[a] = 1; });
+      });
+    }
+    var l = letters(subject);
+    return !!set[l] || (ALIAS[l] || []).some(function (a) { return !!set[a]; });
+  };
+  var inSchool = function (u) { return !!u && !u._deleted && u.role === "student" && !u.leftAt && u.status !== "declined" && u.status !== "pending"; };
+  En.syncClasses = function (opts) {
+    opts = opts || {};
+    var me = M.me(), out = { made: [], added: 0, removed: 0, teachers: 0 };
+    if (!me || me.role !== "teacher" || !En.applies() || !A.Tracker || !A.Primary.homerooms || (A.Fees && A.Fees.isFinance(me))) return out;
+    var meta = (S().state && S().state.meta) || {};
+    // a device of a school hub: only once it has the hub's records (it would make a class the hub has already)
+    if (!opts.force && A.Sync && A.Sync.hubMode && A.Sync.hubMode() && !(meta.serverSince > 0 && A.now() - (meta.lastSyncAt || 0) < 5 * 60000)) return out;
+    var who = A.Tracker.whoTeaches(), memo = {}, want = {};
+    Object.keys(who).forEach(function (k) {
+      if (!me.isAdmin && who[k].indexOf(me.id) < 0) return;
+      var cut = k.indexOf("|"), h = M.cls(k.slice(0, cut)), subject = k.slice(cut + 1);
+      if (!h || !h.homeroom || h._deleted) return;
+      var kids = (h.studentIds || []).map(M.user).filter(function (u) { return inSchool(u) && takesIt(u, subject, memo); });
+      var c = subjectClass(h.level, h.stream, subject);
+      if (!c) {
+        if (!kids.length) return; // nobody in the form takes it (yet)
+        c = makeClass(h.level, h.stream, subject, h, null, me);
+        out.made.push(c.id);
+      } else if (!c.teacherId) {
+        var tid = teacherFor(h, h.level, h.stream, subject);
+        if (tid) { c = S().put("classes", Object.assign({}, c, { teacherId: tid })); out.teachers++; }
+      }
+      var w = (want[c.id] = want[c.id] || {});
+      kids.forEach(function (u) { w[u.id] = 1; });
+    });
+    Object.keys(want).forEach(function (id) {
+      var c = S().get("classes", id), ids = (c.studentIds || []).slice(), fresh = Object.keys(want[id]).filter(function (sid) { return ids.indexOf(sid) < 0; });
+      if (!fresh.length) return;
+      S().put("classes", Object.assign({}, c, { studentIds: ids.concat(fresh) }));
+      out.added += fresh.length;
+      if (c.syllabusId) fresh.forEach(function (sid) {
+        var en = S().get("enrolments", "en_" + sid + "_" + c.syllabusId);
+        if (!en || en._deleted || en.status === "dropped" || en.status === "declined") S().put("enrolments", { id: "en_" + sid + "_" + c.syllabusId, studentId: sid, syllabusId: c.syllabusId, classId: c.id, status: "approved", requestedAt: A.now(), decidedAt: A.now(), decidedBy: me.id, by: "school records" });
+      });
+    });
+    // nobody deleted or gone from the school (a student this device has no record of at all is left alone: its records
+    // may still be on their way; Check the records lists them)
+    S().filter("classes", function (c) { return !c._deleted && (me.isAdmin || c.teacherId === me.id); }).forEach(function (c) {
+      var ids = c.studentIds || [], keep = ids.filter(function (sid) { var u = S().get("users", sid); return !u || (!u._deleted && (c.homeroom || !u.leftAt)); });
+      if (keep.length === ids.length) return;
+      out.removed += ids.length - keep.length;
+      S().put("classes", Object.assign({}, c, { studentIds: keep }));
+    });
+    return out;
+  };
+  // by itself on a staff device, a little after signing in and whenever students, classes, the timetable or the subjects change
+  var syncedFor = "";
+  setInterval(function () {
+    var me = A.Store && A.Store.state && M.me ? M.me() : null;
+    if (!me || me.role !== "teacher" || !En.applies() || A.Store.vacation) return;
+    var sig = function (coll) { var n = 0, at = 0; S().all(coll).forEach(function (r) { n++; if ((r.updatedAt || 0) > at) at = r.updatedAt || 0; }); return n + ":" + at; };
+    var k = [me.id, sig("users"), sig("classes"), sig("timetable"), sig("subjects"), S().all("reportmarks").length].join("|");
+    if (k === syncedFor) return;
+    var r = En.syncClasses();
+    var meta = (S().state && S().state.meta) || {};
+    if (A.Sync && A.Sync.hubMode && A.Sync.hubMode() && !(meta.serverSince > 0)) return; // (not yet: ask again)
+    syncedFor = r.made.length || r.added || r.removed || r.teachers ? "" : k; // (what it changed is looked at once more)
+    if (r.made.length || r.added || r.removed) A.render();
+  }, 10000);
 
   /* ------------------------------------------------------------------ the page */
   A.route("t/enrol", function (p, q, me) {

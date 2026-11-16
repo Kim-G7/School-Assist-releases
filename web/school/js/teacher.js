@@ -158,7 +158,7 @@
       '<button class="btn btn-primary" data-act="new-class">' + I("plus") + "New class</button></div>" + A.subjectScopeBar(me);
     if (!classes.length) {
       html += '<div class="card">' + UI.empty("users", "No classes yet", "Create your first class, choose its syllabus and add students.", '<button class="btn btn-primary" data-act="new-class">' + I("plus") + "New class</button>") + "</div>";
-      return { title: "My classes", html: html };
+      return { title: A.Primary ? "Subject classes" : "My classes", html: html };
     }
     // board and level first (Cambridge IGCSE, Cambridge A Level…), then the subject groups
     var levels = {};
@@ -179,7 +179,7 @@
           x.items.map(classRow).join("") + "</details>";
       }).join("");
     });
-    return { title: "My classes", html: html, mount: function () { var inp = document.querySelector("[data-input=class-filter]"); if (inp && inp.value) A.act["class-filter"](inp); } };
+    return { title: A.Primary ? "Subject classes" : "My classes", html: html, mount: function () { var inp = document.querySelector("[data-input=class-filter]"); if (inp && inp.value) A.act["class-filter"](inp); } };
   }, { role: "teacher" });
 
   /* the old per-class student tables, kept for small schools: shown on the class pages instead */
@@ -338,16 +338,17 @@
   function taskRow(t, showClass) {
     var n = M.taskCounts(t), c = M.cls(t.classId);
     return '<a class="list-row" href="#/t/task/' + t.id + '"><span class="kind-bar k-' + t.kind + '"></span><div class="grow"><div class="title">' + esc(t.title) + "</div>" +
-      '<div class="meta">' + M.kindBadge(t.kind) + A.dueBadge(t.dueAt, true) + (showClass ? "<span>" + esc(M.className(c)) + "</span>" : "") +
+      '<div class="meta">' + M.kindBadge(t.kind) + M.taskWhen(t, true) + (showClass ? "<span>" + esc(M.className(c)) + "</span>" : "") +
       (t.assignedTo !== "all" ? '<span class="badge">' + I("user") + n.total + " selected</span>" : "") + (t.test ? '<span class="badge brand">' + I("clock") + "Online test</span>" : "") + M.taskFlags(t) + "</div></div>" +
+      (t.recorded ? '<div style="width:170px" class="small"><div class="row spread"><span class="muted">Marked</span><b class="tnum">' + n.graded + "/" + n.total + "</b></div>" + UI.bar(A.pct(n.graded, n.total), "good") + "</div>" :
       '<div style="width:170px" class="small" data-tip="' + n.received + " of " + n.total + " received · " + n.submitted + " submitted · " + n.graded + ' graded"><div class="row spread"><span class="muted">Received</span><b class="tnum">' + n.received + "/" + n.total + "</b></div>" + UI.bar(A.pct(n.received, n.total)) +
-      '<div class="row spread mt-sm"><span class="muted">' + (t.kind === "test" ? "Done" : "Submitted") + '</span><b class="tnum">' + n.submitted + "/" + n.total + "</b></div>" + UI.bar(A.pct(n.submitted, n.total), "accent") + "</div>" + I("right") + "</a>";
+      '<div class="row spread mt-sm"><span class="muted">' + (t.kind === "test" ? "Done" : "Submitted") + '</span><b class="tnum">' + n.submitted + "/" + n.total + "</b></div>" + UI.bar(A.pct(n.submitted, n.total), "accent") + "</div>") + I("right") + "</a>";
   }
 
   /* ---- gradebook */
   CLASS_TABS.gradebook = function (c, q) {
     var tasks = M.tasksForClass(c.id).filter(function (t) { return t.maxMarks; }).sort(function (a, b) { return (a.dueAt || 0) - (b.dueAt || 0); });
-    var studs = M.studentsOf(c);
+    var studs = M.studentsOf(c), col = q && q.col ? String(q.col) : "";
     if (!studs.length) return '<div class="card">' + UI.empty("award", "No students in this class yet", "Add students to the class, then their marks go here.") + "</div>";
     // the end-of-term mark and comment for the report cards (js/reportcards.js), for the term chosen (now, by default)
     var R = A.Report, now = R.termNow(), et = { year: String((q && q.year) || now.year), term: Number(q && q.term) || now.term, classId: c.id, subject: c.subject };
@@ -355,12 +356,12 @@
     // Gradebook is the class's work through the term, its tasks
     var rc = A.edition !== "home" && !A.Primary; // home study has no report cards
     if (!rc) { var none = function () { return ""; }; R = { entryBar: none, datalist: none, entryHead: none, entryCells: none, entryFoot: none }; }
-    var html = '<div class="row spread wrap mb"><p class="muted small">The marks of the class\'s work: class work, quizzes, homework and assignments, one column a task. Type a mark and press Tab to save it. Online quizzes fill in automatically (grey), and you can overwrite them.' + (rc ? ' At the end of term, fill in the <b>End of term</b> mark and a <b>Comment</b> for every student: they go on the report cards.' : "") + "</p>" +
-      '<div class="row"><button class="btn btn-sm" data-act="new-task" data-class="' + c.id + '" data-kind="classwork">' + I("plus") + "Class work</button><button class=\"btn btn-sm\" data-act=\"gb-csv\" data-class=\"" + c.id + '">' + I("download") + "Export CSV</button></div></div>" +
+    var html = '<div class="row spread wrap mb"><p class="muted small">The marks of the class\'s work: class work, quizzes, homework and assignments, one column a task. Type a mark and press Tab to save it. Online quizzes fill in automatically (grey), and you can overwrite them. Work done on paper: <b>Record marks</b> makes its column, with nothing for the students to receive or hand in.' + (rc ? ' At the end of term, fill in the <b>End of term</b> mark and a <b>Comment</b> for every student: they go on the report cards.' : "") + "</p>" +
+      '<div class="row wrap"><button class="btn btn-sm btn-primary" data-act="gb-record" data-class="' + c.id + '">' + I("edit") + 'Record marks</button><button class="btn btn-sm" data-act="new-task" data-class="' + c.id + '" data-kind="classwork">' + I("plus") + "Set class work</button><button class=\"btn btn-sm\" data-act=\"gb-csv\" data-class=\"" + c.id + '">' + I("download") + "Export CSV</button></div></div>" +
       (A.Primary ? '<div class="callout mb">' + I("award") + '<div class="grow">Topic tests, mock tests and the end-of-term test are recorded in the <b>Mark book</b>.</div><a class="btn btn-sm" href="#/t/markbook">Mark book ' + I("right") + "</a></div>" : "") +
       R.entryBar(et, "#/t/class/" + c.id + "/gradebook?term={t}&year=" + et.year) + R.datalist() +
       '<div class="card table-wrap"><table class="table"><thead><tr><th class="sticky">Student</th>' +
-      tasks.map(function (t) { var k = (M.KINDS[t.kind] || M.KINDS.homework).label; return '<th class="num" data-tip="' + esc(t.title + " · " + k + " · due " + A.fmtDate(t.dueAt)) + '"><a href="#/t/task/' + t.id + '">' + esc(t.title.length > 16 ? t.title.slice(0, 15) + "…" : t.title) + '</a><div class="tiny">' + esc(k) + " · / " + t.maxMarks + "</div></th>"; }).join("") +
+      tasks.map(function (t) { var k = (M.KINDS[t.kind] || M.KINDS.homework).label; return '<th class="num' + (t.id === col ? " gb-new" : "") + '" data-tip="' + esc(t.title + " · " + k + (t.recorded ? " · on paper " : " · due ") + A.fmtDate(t.dueAt)) + '"><a href="#/t/task/' + t.id + '">' + esc(t.title.length > 16 ? t.title.slice(0, 15) + "…" : t.title) + '</a><div class="tiny">' + esc(k) + (t.recorded ? " · paper" : "") + " · / " + t.maxMarks + "</div></th>"; }).join("") +
       '<th class="num">Average</th>' + R.entryHead(et) + "</tr></thead><tbody>" +
       studs.map(function (u) {
         var pcts = [];
@@ -370,7 +371,7 @@
           if (eff) pcts.push((eff.score / t.maxMarks) * 100);
           var val = mk && mk.score != null ? mk.score : "";
           var ph = eff && eff.source === "auto" ? eff.score : "";
-          return '<td class="num"><input class="cell" inputmode="decimal" value="' + val + '" placeholder="' + ph + '" data-change="gb-score" data-task="' + t.id + '" data-sid="' + u.id + '" data-max="' + t.maxMarks + '" aria-label="' + esc(u.name + " " + t.title) + '"></td>';
+          return '<td class="num' + (t.id === col ? " gb-new" : "") + '"><input class="cell" inputmode="decimal" value="' + val + '" placeholder="' + ph + '" data-change="gb-score" data-task="' + t.id + '" data-sid="' + u.id + '" data-max="' + t.maxMarks + '" aria-label="' + esc(u.name + " " + t.title) + '"></td>';
         }).join("");
         var avg = pcts.length ? Math.round(A.avg(pcts)) : null;
         return '<tr><td class="sticky"><a href="#/t/student/' + u.id + "/" + c.id + '" class="row">' + A.avatar(u, "sm") + esc(u.name) + "</a></td>" + cells + '<td class="num">' + UI.scoreBadge(avg) + "</td>" + R.entryCells(et, u) + "</tr>";
@@ -379,9 +380,48 @@
         var sc = M.assignees(t).map(function (u) { var e = M.effectiveScore(t, u.id); return e ? (e.score / t.maxMarks) * 100 : null; }).filter(function (x) { return x != null; });
         return '<td class="num">' + UI.scoreBadge(sc.length ? Math.round(A.avg(sc)) : null) + "</td>";
       }).join("") + "<td></td>" + R.entryFoot(et) + "</tr></tbody></table></div>" +
-      (tasks.length ? "" : '<p class="muted small mt">Tasks with a mark total (class work, quizzes, homework, assignments) appear here as columns.</p>');
-    return html;
+      (tasks.length ? "" : '<p class="muted small mt">Tasks with a mark total (class work, quizzes, homework, assignments) and marks recorded from paper appear here as columns.</p>');
+    if (!col) return html;
+    return { html: html, mount: function (root) {
+      var first = root.querySelector('input[data-task="' + col.replace(/"/g, "") + '"]');
+      if (!first) return;
+      var th = root.querySelector("th.gb-new");
+      if (th && th.scrollIntoView) th.scrollIntoView({ block: "nearest", inline: "center" });
+      first.focus(); first.select();
+    } };
   };
+  /* (2026-11-16) Record marks: work done on paper (a quiz, class work, a test written in class, homework handed in as a
+     book) whose marks are typed straight in, with nothing set for the students to receive or hand in. It is a column of
+     the Gradebook like a task's: a task marked "recorded", its date the day it was done. Students see their mark (My
+     tasks → Marked, and a pop-up when it is marked), never a task to do. */
+  var REC_KINDS = ["test", "classwork", "homework", "assignment"];
+  function recordModal(c, existing) {
+    var me = M.me(), t = existing || { kind: "test", title: "", maxMarks: "", topicId: null };
+    var syl = M.syllabus(c.syllabusId), topics = syl ? M.syllabusTopics ? M.syllabusTopics(syl) : syl.topics : [];
+    UI.modal({
+      title: existing ? "Edit " + existing.title : "Record marks · " + M.className(c), sub: "Work done on paper: you type the marks in. Nothing is sent to the students to do.",
+      body: '<form id="rec-form" class="form-grid">' +
+        '<label class="field"><span>What was it?</span><select class="select" name="kind">' + REC_KINDS.map(function (k) { return '<option value="' + k + '"' + (t.kind === k ? " selected" : "") + ">" + esc(M.KINDS[k].label) + "</option>"; }).join("") + "</select></label>" +
+        '<label class="field"><span>Date it was done</span><input class="input" type="date" name="date" value="' + A.isoDate(existing ? existing.dueAt : A.now()) + '"></label>' +
+        '<label class="field full"><span>Title</span><input class="input" name="title" maxlength="80" value="' + esc(t.title || "") + '" placeholder="e.g. Quiz on indices"></label>' +
+        '<label class="field"><span>Marks out of</span><input class="input" name="maxMarks" inputmode="numeric" value="' + esc(t.maxMarks || "") + '" placeholder="e.g. 20"></label>' +
+        '<label class="field"><span>Topic <span class="muted">(optional)</span></span><select class="select" name="topicId"><option value="">None</option>' + (topics || []).map(function (tp) { return '<option value="' + esc(tp.id) + '"' + (tp.id === t.topicId ? " selected" : "") + ">" + esc(tp.title) + "</option>"; }).join("") + "</select></label>" +
+        "</form>",
+      foot: [{ label: "Cancel" }, { label: existing ? "Save" : "Next: type the marks", cls: "btn-primary", icon: "check", onClick: function (m) {
+        var f = UI.formData(m.querySelector("#rec-form")), out = Number(f.maxMarks), day = A.isoDay(f.date), title = String(f.title || "").trim();
+        if (!title) { UI.toast("Give it a title", "bad"); return false; }
+        if (!(out > 0) || out > 1000) { UI.toast("Enter what it is marked out of", "bad"); return false; }
+        if (day == null) { UI.toast("Enter the date it was done", "bad"); return false; }
+        if (day > A.startOfDay()) { UI.toast("That day hasn't come yet: record the marks once the work is done", "bad"); return false; }
+        var rec = S().put("tasks", Object.assign({}, t, { kind: f.kind, classId: c.id, title: title.slice(0, 80), instructions: t.instructions || "", topicId: f.topicId || null,
+          dueAt: day + 12 * 3600000, maxMarks: out, assignedTo: "all", createdBy: t.createdBy || me.id, materialIds: t.materialIds || [], recorded: true }));
+        UI.toast(existing ? "Saved" : "Type each student's mark and press Tab");
+        location.hash = "#/t/class/" + c.id + "/gradebook?col=" + rec.id;
+        A.render();
+      } }],
+    });
+  }
+  A.act["gb-record"] = function (el) { var c = M.cls(el.getAttribute("data-class")); if (c) recordModal(c); };
   A.act["gb-score"] = function (el) {
     var v = el.value.trim(), max = Number(el.getAttribute("data-max"));
     if (v !== "" && (isNaN(Number(v)) || Number(v) < 0 || Number(v) > max)) { UI.toast("Enter a mark between 0 and " + max, "bad"); el.focus(); return; }
@@ -567,28 +607,30 @@
         (paper ? "Paper: " + esc(paper.title) + " (" + paper.questionIds.length + " questions)." : t.test.count + " questions from: " + t.test.topicIds.map(function (id) { var tp = M.topic(tsyl, id); return tp ? esc(tp.title) : ""; }).join(", ") + ".") +
         " Students take it in exam mode and it is marked automatically.</div></div>";
     }
-    var html = '<div class="grid g-main"><div class="card card-pad"><div class="row wrap">' + M.kindBadge(t.kind) + A.dueBadge(t.dueAt, true) + M.taskFlags(t) + (t.maxMarks ? '<span class="badge">' + I("award") + t.maxMarks + " marks</span>" : "") +
+    var html = '<div class="grid g-main"><div class="card card-pad"><div class="row wrap">' + M.kindBadge(t.kind) + M.taskWhen(t, true) + M.taskFlags(t) + (t.maxMarks ? '<span class="badge">' + I("award") + t.maxMarks + " marks</span>" : "") +
       (topic ? '<span class="badge brand">' + I("book") + esc(topic.title) + "</span>" : "") + "</div>" +
-      '<h2 class="mt-sm" style="font-size:22px">' + esc(t.title) + '</h2><p class="muted small">' + esc(M.className(c)) + " · set " + A.fmtDateTime(t.createdAt) + " · due " + A.fmtDateTime(t.dueAt) + " · " + (t.assignedTo === "all" ? "whole class" : who.length + " selected students: " + who.map(function (u) { return A.firstName(u.name); }).join(", ")) + "</p>" +
+      '<h2 class="mt-sm" style="font-size:22px">' + esc(t.title) + '</h2><p class="muted small">' + esc(M.className(c)) + (t.recorded ? " · done on paper " + A.fmtDate(t.dueAt) + " · marks recorded " + A.fmtDateTime(t.createdAt) : " · set " + A.fmtDateTime(t.createdAt) + " · due " + A.fmtDateTime(t.dueAt)) + " · " + (t.assignedTo === "all" ? "whole class" : who.length + " selected students: " + who.map(function (u) { return A.firstName(u.name); }).join(", ")) + "</p>" +
       '<div class="prose mt small">' + A.md(t.instructions || "") + "</div>" + testInfo +
       (mats.length ? '<div class="label mt">Attached materials</div><div class="card">' + mats.map(function (m) { return A.materialRow(m); }).join("") + "</div>" : "") +
+      (t.recorded ? '<div class="callout mt">' + I("edit") + "<div>Done on paper on " + esc(A.fmtDate(t.dueAt)) + ": its marks were recorded in the Gradebook. Students see their mark, and nothing to hand in.</div></div>" : "") +
       '<div class="row wrap mt"><button class="btn" data-act="edit-task" data-id="' + t.id + '">' + I("edit") + "Edit</button>" +
-      '<button class="btn" data-act="remind-task" data-id="' + t.id + '">' + I("bell") + "Remind students</button>" +
+      (t.recorded ? "" : '<button class="btn" data-act="remind-task" data-id="' + t.id + '">' + I("bell") + "Remind students</button>") +
       '<button class="btn btn-danger" data-act="del-task" data-id="' + t.id + '">' + I("trash") + "Delete</button></div></div>" +
-      '<div class="grid" style="align-content:start">' + UI.stat("check", n.received + " / " + n.total, "Received") + UI.stat("upload", n.submitted + " / " + n.total, t.kind === "test" ? "Completed" : "Submitted") + UI.stat("award", n.graded + " / " + n.total, "Graded", true) + "</div></div>";
+      '<div class="grid" style="align-content:start">' + (t.recorded ? "" : UI.stat("check", n.received + " / " + n.total, "Received") + UI.stat("upload", n.submitted + " / " + n.total, t.kind === "test" ? "Completed" : "Submitted")) + UI.stat("award", n.graded + " / " + n.total, "Graded", true) + "</div></div>";
 
     html += '<div class="section-title"><h2>Students</h2><span class="sub">' + (t.maxMarks ? "Feedback saves as you go. The marks are entered in the Gradebook." : "Feedback saves as you go.") + "</span>" +
       (t.maxMarks ? '<span class="grow"></span><a class="btn btn-sm" href="#/t/class/' + c.id + '/gradebook">' + I("award") + "Marks in the Gradebook</a>" : "") + "</div>" +
-      '<div class="card table-wrap"><table class="table"><thead><tr><th>Student</th><th>Received</th><th>' + (t.kind === "test" ? "Completed" : "Submitted") + "</th><th>Work</th>" + (t.maxMarks ? '<th class="num">Mark / ' + t.maxMarks + "</th>" : "") + "<th>Feedback</th></tr></thead><tbody>" +
+      '<div class="card table-wrap"><table class="table"><thead><tr><th>Student</th>' + (t.recorded ? "" : "<th>Received</th><th>" + (t.kind === "test" ? "Completed" : "Submitted") + "</th><th>Work</th>") + (t.maxMarks ? '<th class="num">Mark / ' + t.maxMarks + "</th>" : "") + "<th>Feedback</th></tr></thead><tbody>" +
       who.map(function (u) {
         var s = M.submission(t.id, u.id) || {}, mk = M.mark(t.id, u.id) || {}, eff = M.effectiveScore(t, u.id);
         var att = s.attemptId && S().get("attempts", s.attemptId), cf = att && M.copyFlag(att, me.id);
         var work = s.attemptId ? '<a class="btn btn-sm" href="#/t/attempt/' + s.attemptId + '">' + I("eye") + "View paper (" + s.autoPct + "%)</a>" + (cf && cf.flagged ? ' <span class="badge serious" data-tip="' + cf.identical + " of " + cf.written + ' written answers match the marking scheme">' + I("shield") + "Possible copying</span>" : "")
           : s.text || s.fileId ? '<button class="btn btn-sm" data-act="view-sub" data-task="' + t.id + '" data-sid="' + u.id + '">' + I("eye") + "View</button>" : '<span class="muted small">—</span>';
-        return "<tr><td><a class=\"row\" href=\"#/t/student/" + u.id + "/" + c.id + '">' + A.avatar(u, "sm") + esc(u.name) + "</a></td>" +
+        var paper = t.recorded;
+        return "<tr><td><a class=\"row\" href=\"#/t/student/" + u.id + "/" + c.id + '">' + A.avatar(u, "sm") + esc(u.name) + "</a></td>" + (paper ? "" :
           "<td>" + (s.receivedAt ? '<span class="badge good" data-tip="' + A.fmtDateTime(s.receivedAt) + '">' + I("check") + A.relTime(s.receivedAt) + "</span>" : '<span class="badge">Not yet</span>') + "</td>" +
           "<td>" + (s.submittedAt ? '<span class="badge brand" data-tip="' + A.fmtDateTime(s.submittedAt) + '">' + (s.confirmedBook ? I("check") + "Book handed in · " : "") + A.relTime(s.submittedAt) + "</span>" + (t.dueAt && s.submittedAt > t.dueAt ? ' <span class="badge bad">Late</span>' : "") : M.canSubmit(t) && t.dueAt && A.now() > t.dueAt ? '<span class="badge bad">Not submitted</span>' : '<span class="muted small">—</span>') + "</td>" +
-          "<td>" + work + "</td>" +
+          "<td>" + work + "</td>") +
           (t.maxMarks ? '<td class="num tnum">' + (eff ? esc(String(eff.score)) + (eff.source === "auto" ? ' <span class="tiny muted">auto</span>' : "") : '<span class="muted">—</span>') + "</td>" : "") +
           '<td><input class="input sm" style="min-width:200px" value="' + esc(mk.feedback || "") + '" placeholder="Feedback for ' + esc(A.firstName(u.name)) + '" data-change="mark-feedback" data-task="' + t.id + '" data-sid="' + u.id + '"></td></tr>';
       }).join("") + "</tbody></table></div>";
@@ -665,7 +707,7 @@
 
     html += '<div class="section-title"><h2>Tasks</h2></div><div class="card">' + (tasks.length ? tasks.map(function (t) {
       var stt = M.taskStatus(t, u.id), eff = M.effectiveScore(t, u.id);
-      return '<a class="list-row" href="#/t/task/' + t.id + '"><span class="kind-bar k-' + t.kind + '"></span><div class="grow"><div class="title">' + esc(t.title) + '</div><div class="meta">' + M.kindBadge(t.kind) + A.dueBadge(t.dueAt, true) + "</div></div>" +
+      return '<a class="list-row" href="#/t/task/' + t.id + '"><span class="kind-bar k-' + t.kind + '"></span><div class="grow"><div class="title">' + esc(t.title) + '</div><div class="meta">' + M.kindBadge(t.kind) + M.taskWhen(t, true) + "</div></div>" +
         (eff ? '<b class="tnum">' + eff.score + " / " + t.maxMarks + "</b>" : "") + M.statusBadge(stt) + "</a>";
     }).join("") : UI.empty("tasks", "No tasks")) + "</div>" +
       '<div class="row mt"><button class="btn btn-danger" data-act="remove-student" data-class="' + c.id + '" data-sid="' + u.id + '">' + I("x") + "Remove from " + esc(M.className(c)) + "</button></div>";
@@ -941,9 +983,9 @@
     var t = existing || { kind: kind || "homework", title: "", instructions: "", maxMarks: "", assignedTo: "all", classId: (cls || classes[0] || {}).id, dueAt: M.schoolDays(firstDay, 3)[2] + A.hm("16:00") * 60000, materialIds: [] };
     if (!t.classId) { UI.toast("Create a class first", "bad"); return; }
     var kinds = Object.keys(M.KINDS);
+    // (2026-11-16) the due date is a date box with the calendar, as every other date in School Assist (it was a list of
+    // the next 30 school days); a weekend is refused when saving
     var dueDay = A.startOfDay(t.dueAt), dueTime = A.fmtTime(t.dueAt);
-    var days = M.schoolDays(A.now(), 30);
-    if (days.indexOf(dueDay) < 0) days.unshift(dueDay);
     var times = M.dueTimes();
     if (times.indexOf(dueTime) < 0) times.push(dueTime);
     UI.modal({
@@ -955,7 +997,7 @@
         '<label class="field"><span>Topic <span class="muted">(optional)</span></span><select class="select" name="topicId" id="task-topic"></select></label>' +
         '<label class="field full"><span>Title</span><input class="input" name="title" value="' + esc(t.title) + '" placeholder="e.g. Exercise 4.2: Indices" required></label>' +
         '<label class="field full"><span>Instructions</span><textarea class="textarea" name="instructions" rows="5" placeholder="What should students do? Page numbers, questions, what to hand in…">' + esc(t.instructions || "") + "</textarea></label>" +
-        '<label class="field"><span>Due date <span class="muted">(Monday to Friday)</span></span><select class="select" name="dueDay">' + days.map(function (d) { return '<option value="' + d + '"' + (d === dueDay ? " selected" : "") + ">" + (d === A.startOfDay() ? "Today, " : "") + A.fmtDate(d) + "</option>"; }).join("") + "</select></label>" +
+        '<label class="field"><span>Due date <span class="muted">(Monday to Friday)</span></span><input class="input" type="date" name="dueDate" value="' + A.isoDate(dueDay) + '"></label>' +
         '<label class="field"><span>Due time <span class="muted">(08:00 to 16:00)</span></span><select class="select" name="dueTime">' + times.map(function (x) { return "<option" + (x === dueTime ? " selected" : "") + ">" + x + "</option>"; }).join("") + "</select></label>" +
         '<label class="field"><span>Marks out of <span class="muted">(blank if not marked)</span></span><input class="input" name="maxMarks" inputmode="numeric" value="' + (t.maxMarks || "") + '"></label>' +
         '<p class="field small muted" id="task-kind-hint" style="align-self:end"></p>' +
@@ -975,7 +1017,9 @@
           var form = el.querySelector("#task-form"), f = UI.formData(form);
           var classId = existing ? t.classId : f.classId;
           if (!f.title.trim()) { UI.toast("Give the task a title", "bad"); return false; }
-          var due = Number(f.dueDay) + A.hm(f.dueTime) * 60000;
+          var day = A.isoDay(f.dueDate);
+          if (day == null) { UI.toast("Choose the date it is due", "bad"); return false; }
+          var due = day + A.hm(f.dueTime) * 60000;
           if (!M.isSchoolDay(due) || A.hm(f.dueTime) < A.hm(M.DAY_START) || A.hm(f.dueTime) > A.hm(M.DAY_END)) { UI.toast("Work can only be due Monday to Friday, 08:00 to 16:00", "bad"); return false; }
           if (M.canSubmit({ kind: f.kind }) && due < A.now() + 5 * 60000 && (!existing || due !== t.dueAt)) { UI.toast("That due time has already passed. Choose a later time.", "bad"); return false; }
           var mode = el.querySelector("#task-to .on").getAttribute("data-a");
@@ -1049,5 +1093,5 @@
     var cid = el.getAttribute("data-class");
     taskModal(null, cid ? M.cls(cid) : null, el.getAttribute("data-kind"));
   };
-  A.act["edit-task"] = function (el) { taskModal(M.task(el.getAttribute("data-id"))); };
+  A.act["edit-task"] = function (el) { var t = M.task(el.getAttribute("data-id")); if (t && t.recorded) recordModal(M.cls(t.classId), t); else taskModal(t); };
 })(window.App);

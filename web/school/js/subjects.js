@@ -194,10 +194,11 @@
     var ids = M.relevantSubjects(me);
     return me.isAdmin && !ids.length ? null : ids; // an admin who hasn't ticked any sees everything
   };
-  /** The classes on a member of staff's pages: theirs, narrowed to their subjects. */
+  /** The classes on a member of staff's pages: theirs, narrowed to their subjects. A class of theirs with no syllabus yet
+      stays (2026-11-16: Lower 6 Physics, made for the teacher before the school added AS & A Level Physics, was hidden). */
   M.myClasses = function (me) {
     var list = M.classesForTeacher(me.id), f = M.subjectFilter(me);
-    return f ? list.filter(function (c) { return f.indexOf(c.syllabusId) >= 0; }) : list;
+    return f ? list.filter(function (c) { return !c.syllabusId || f.indexOf(c.syllabusId) >= 0; }) : list;
   };
   /** "My subjects | All subjects" at the top of a staff page. Admins also get "Choose my subjects". */
   A.subjectScopeBar = function (me, library) {

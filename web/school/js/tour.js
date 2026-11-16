@@ -22,7 +22,7 @@
     [/^t\/others/, "View other classes", "Every class in the school, form by form, with its class teacher and students. Open one to see its students, marks and syllabus (view only)."],
     [/^t\/register/, "Register", "Today's register: mark each student present, absent, late or excused. It saves by itself."],
     [/^t\/timetable/, "Timetable", "The week's lessons: yours, or a class's. Each lesson shows its subject and its teacher."],
-    [/^t\/markbook/, "Mark book", "The tests of the classes you teach: topic tests, mock tests and the end-of-term test (class work and homework are in each subject class's Gradebook)."],
+    [/^t\/markbook/, "Mark book", "The tests of the classes you teach: topic tests, mock tests and the end-of-term test, written on paper: Record marks and type each student's mark (class work and homework are in each subject class's Gradebook)."],
     [/^t\/assessment\//, "Marked work", "One piece of marked work: each student's mark out of the total, with the class's average, highest and lowest."],
     [/^t\/reports/, "Reports", "The term's reports: each student's marks and your comments, and the top students in each form. Admins make the report cards."],
     [/^t\/reportcards/, "Report cards", "Make, check and print the school's report cards, and choose how they look."],

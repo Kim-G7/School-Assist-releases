@@ -109,6 +109,11 @@ window.App = window.App || {};
   A.pad = function (n) { return (n < 10 ? "0" : "") + n; };
   A.isoDate = function (ts) { var d = A.wall(ts); return d.getFullYear() + "-" + A.pad(d.getMonth() + 1) + "-" + A.pad(d.getDate()); };
   A.startOfDay = function (ts) { var d = A.wall(ts); d.setHours(0, 0, 0, 0); return A.fromWall(d); };
+  /** A date box's "2026-11-20" as the start of that day on the school's clock (null when it isn't a date). */
+  A.isoDay = function (iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+    return m ? A.startOfDay(A.fromWall(new Date(+m[1], +m[2] - 1, +m[3], 12))) : null;
+  };
   var MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   var WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   // dates as dd/mm/yyyy everywhere (2026-11-10: "Tue 10 Nov" and "10 Nov 2026" before), on the school's wall clock
@@ -220,6 +225,7 @@ window.App = window.App || {};
     back: '<path d="m12 19-7-7 7-7M19 12H5"/>',
     search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
     bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+    bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0M2 2l20 20"/>',
     cap: '<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>',
     present: '<path d="M2 3h20M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3M7 21l5-5 5 5"/>',
     pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
