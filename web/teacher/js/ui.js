@@ -502,7 +502,11 @@
   var both = function (root, sel) { var out = root.matches && root.matches(sel) ? [root] : []; return out.concat(Array.prototype.slice.call(root.querySelectorAll(sel))); };
   UI.tidyInputs = function (root) {
     if (!root || !root.querySelectorAll) return;
-    both(root, TYPED).forEach(function (el) { if (!el.hasAttribute("autocomplete")) el.setAttribute("autocomplete", "off"); });
+    both(root, TYPED).forEach(function (el) {
+      if (!el.hasAttribute("autocomplete")) el.setAttribute("autocomplete", "off");
+      // (characters that show nothing or turn text around go as the box is left: util.js A.plain)
+      if (!el.getAttribute("data-plain")) { el.setAttribute("data-plain", "1"); el.addEventListener("change", function () { var v = A.plain(el.value); if (v !== el.value) el.value = v; }, true); }
+    });
     both(root, 'input[type="date"]').forEach(dmy);
   };
   UI.isoToDmy = function (v) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || ""); return m ? m[3] + "/" + m[2] + "/" + m[1] : ""; };

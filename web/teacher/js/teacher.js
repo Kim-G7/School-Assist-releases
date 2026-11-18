@@ -778,7 +778,7 @@
             if (session !== lastSession) { head = '<div class="mat-session tiny muted">' + esc(session) + "</div>"; lastSession = session; }
           }
           var find = " " + [m.title, m.fileName, syl ? syl.subject + " " + syl.code : "", M.MAT_CATS[M.matCategory(m)] || "", (m.tags || []).join(" "), m.series || ""].join(" ").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() + " ";
-          return head + A.materialRow(m, { teacher: true }).replace('<div class="list-row click"', '<div class="list-row click" data-find="' + esc(find) + '"');
+          return head + A.materialRow(m, { teacher: true }).replace('<div class="list-row click"', function () { return '<div class="list-row click" data-find="' + esc(find) + '"'; });
         }).join("") + "</details>";
     }).join("") + '<div class="card hidden" id="mat-none">' + UI.empty("search", "Nothing matches", "Try another word, or search everything.") + "</div>"
       : '<div class="card">' + UI.empty("library", "Nothing here yet", sec === "papers" ? "Add exam papers with Add material." : "Add textbooks, worksheets and other files with Add material.") + "</div>";

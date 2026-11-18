@@ -98,9 +98,13 @@
   A.pwRequestList = function () {
     return S().filter("pwrequests", function (r) { return !r.doneAt; }).sort(function (a, b) { return b.askedAt - a.askedAt; });
   };
+  /* A new password: three of 256 easy words and a number, from the device's secure random numbers (crypto, not
+     Math.random): about 1.5 billion possible, so guessing at the hub's sign-in limit would take centuries. */
+  var PW_WORDS = ("acorn amber anchor apple apron arrow atlas badge baker bamboo banjo barn basket beach beacon bean bell berry bike blanket bloom boat bonus book bottle branch brave bread breeze brick bridge brook brush bucket bunny butter button cabin cactus camel camera candle canoe canyon carpet carrot castle cedar chair chalk cherry chess cliff clock cloud clover coast cocoa comet copper coral cotton crayon cricket crown cupcake daisy dawn delta desert dolphin donkey dragon drum eagle earth echo ember engine fable falcon feather fern fiddle field fig finch flame flute forest fossil fountain fox frost garden gecko giant ginger glacier globe glove goose grape grass gravel guitar hammer haven hazel helmet heron hill honey horse house igloo island ivory jacket jaguar jelly jungle kettle kite koala ladder lake lamp" +
+    " lantern lemon lily lion lizard lobster lotus lucky magnet mango maple marble meadow melon mint mirror monkey moon moss mountain muffin nest noodle north nutmeg oak oasis ocean olive onion orange orbit otter owl paddle panda paper parrot peach peanut pearl pebble pencil penguin pepper piano pickle pillow pine planet plum pocket pony poppy puzzle quartz quiet rabbit radio rain rainbow raven reef ribbon river robin rocket rose ruby saddle salmon sand satin seed shell silver sky sled snow sofa spark spoon spring star stone storm sugar summer sunny swan table tiger timber toast tomato torch tower train tulip turtle umbrella valley velvet violin wagon walnut water whale wheat willow window winter wizard wolf wonder yogurt zebra zigzag green happy baobab kudu impala rhino hippo giraffe cheetah buffalo").split(" ");
   function newPassword() {
-    var words = ["river", "maple", "sunny", "tiger", "cloud", "green", "lucky", "stone", "happy", "eagle"], r = function (n) { return Math.floor(Math.random() * n); };
-    return words[r(words.length)] + "-" + words[r(words.length)] + "-" + (10 + r(90));
+    var r = function (n) { var a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n; };
+    return PW_WORDS[r(PW_WORDS.length)] + "-" + PW_WORDS[r(PW_WORDS.length)] + "-" + PW_WORDS[r(PW_WORDS.length)] + "-" + (10 + r(90));
   }
   A.newPassword = newPassword; // Settings → People & devices → Give a new password
   A.act["school-pw-reset"] = function (el) {

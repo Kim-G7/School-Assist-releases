@@ -44,7 +44,7 @@
   var current = function () { return find(st.cur) || (st.schools.length === 1 ? st.schools[0] : null); };
 
   function call(base, what, body, key) {
-    return fetch(base + "/api/parent/" + what, { method: "POST", headers: Object.assign({ "Content-Type": "application/json" }, key ? { "X-SA-Key": key } : {}), body: JSON.stringify(body || {}) })
+    return (A.Human ? A.Human.fetch : window.fetch.bind(window))(base + "/api/parent/" + what, { method: "POST", headers: Object.assign({ "Content-Type": "application/json" }, key ? { "X-SA-Key": key } : {}), body: JSON.stringify(body || {}) })
       .then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (j) {
           if (r.ok) return j;

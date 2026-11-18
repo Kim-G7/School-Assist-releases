@@ -386,7 +386,7 @@
             (r.left ? '<span class="badge warn">' + r.left + " of " + r.total + " left</span>" : '<span class="badge good">' + I("check") + "Term done</span>") + I("right") + "</button>";
         }).join("") + "</div></div>";
     }
-    if (!edit) html = html.replace('<div class="grid g-4 mb">', '<div class="callout mb">' + I("eye") + "<div><b>View only.</b> Only the teacher of " + esc(s) + " in " + esc(c.name) + " plans and ticks its topics.</div></div>" + '<div class="grid g-4 mb">');
+    if (!edit) html = html.replace('<div class="grid g-4 mb">', function () { return '<div class="callout mb">' + I("eye") + "<div><b>View only.</b> Only the teacher of " + esc(s) + " in " + esc(c.name) + " plans and ticks its topics.</div></div>" + '<div class="grid g-4 mb">'; });
     return { title: s + " · " + c.name, crumbs: crumbs, html: html };
   }, { role: "teacher" });
   A.act["trk-done"] = function (el) {

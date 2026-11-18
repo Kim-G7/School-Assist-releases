@@ -141,13 +141,28 @@
         if (method === 0) return Promise.resolve(new TextDecoder().decode(data));
         if (method !== 8 || typeof DecompressionStream === "undefined") return Promise.reject(new Error("This copy can't open that Word document. Save it as a PDF and read that."));
         var stream = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-        return new Response(stream).text();
+        // (read part by part and stopped past 30 MB: a small file that unpacks to gigabytes, a "zip bomb", never fills the memory)
+        var reader = stream.getReader(), parts = [], got = 0;
+        var pump = function () {
+          return reader.read().then(function (r) {
+            if (r.done) return new TextDecoder().decode(parts.length === 1 ? parts[0] : concat(parts, got));
+            got += r.value.length;
+            if (got > 30 * 1048576) { reader.cancel(); throw new Error("That Word document is too big to read. Save it as a PDF and read that."); }
+            parts.push(r.value); return pump();
+          });
+        };
+        return pump();
       }
       at += 46 + nl + el + cl;
     }
     return Promise.reject(new Error("No text was found in that Word document."));
   }
+  function concat(parts, n) { var out = new Uint8Array(n), at = 0; parts.forEach(function (p) { out.set(p, at); at += p.length; }); return out; }
   function docxLines(xml) {
+    // (a real Word document's text has no DOCTYPE or entities of its own: one that does is refused before any parsing,
+    // so no external entity (XXE) or entity bomb is ever read; the browser's parser loads none anyway)
+    if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new Error("That Word document has parts School Assist won't read. Save it again from Word, or as a PDF.");
+    if (xml.length > 30 * 1048576) throw new Error("That Word document is too big to read. Save it as a PDF and read that.");
     var doc = new DOMParser().parseFromString(xml, "application/xml"), W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main", out = [];
     var ps = doc.getElementsByTagNameNS(W, "p");
     for (var i = 0; i < ps.length; i++) {

@@ -496,7 +496,7 @@
     var dev = A.Devices && A.Devices.detect ? A.Devices.detect() : {};
     var me = JSON.stringify({ key: key, deviceId: A.Devices ? A.Devices.id() : meta().deviceId, label: [dev.model, dev.os, dev.browser].filter(Boolean).join(" · ") || "A device" });
     var post = function (url, body) {
-      return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body })
+      return (A.Human ? A.Human.fetch : window.fetch.bind(window))(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body })
         .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || "School Assist replied " + r.status + "."); return j; }); });
     };
     // the school's own server: this device becomes its first admin's there, and School Assist notes where it is

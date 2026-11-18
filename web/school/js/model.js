@@ -190,7 +190,7 @@
     }, Promise.resolve(0));
   };
   M.sameName = function (a, b) {
-    var n = function (x) { return String(x || "").toLowerCase().replace(/[^a-z]/g, ""); };
+    var n = function (x) { return A.lookalike(x).replace(/[^a-z]/g, ""); };
     return !!n(a) && n(a) === n(b);
   };
 

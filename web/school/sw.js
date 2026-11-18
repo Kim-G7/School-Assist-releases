@@ -1,7 +1,7 @@
 /* Service worker: keeps the whole app available offline once it has been opened, and opens it from this device.
    Bump VERSION whenever you change any file: the new list is fetched and the next opening shows it. The PDF viewer
    (vendor/pdfjs, 1.5 MB) is not fetched up front: it is kept the first time a PDF opens. */
-var VERSION = "classroom-v68";
+var VERSION = "classroom-v70";
 var FILES = [
   "./", "index.html", "school.config.js", "manifest.webmanifest", "css/app.css", "assets/icon.svg", "assets/icon-180.png", "assets/icon-192.png", "assets/icon-512.png",
   "fonts/inter-latin-400-normal.woff2", "fonts/inter-latin-500-normal.woff2", "fonts/inter-latin-600-normal.woff2", "fonts/inter-latin-700-normal.woff2",
@@ -30,7 +30,8 @@ self.addEventListener("fetch", function (e) {
     return c.match(e.request, { ignoreSearch: true }).then(function (hit) {
       var net = fetch(e.request).then(function (res) { if (res.ok) c.put(e.request, res.clone()); return res; });
       if (hit) { e.waitUntil(net.catch(function () {})); return hit; }
-      return net.catch(function () { return c.match("index.html"); });
+      // (offline: opening the app gets the app; a script or file not kept yet fails as not reached, never as the page)
+      return net.catch(function () { return e.request.mode === "navigate" ? c.match("index.html") : Response.error(); });
     });
   }));
 });

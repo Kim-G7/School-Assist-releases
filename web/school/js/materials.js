@@ -183,7 +183,8 @@
         });
         return;
       }
-      var url = URL.createObjectURL(rec.blob);
+      // (a PDF is shown as a PDF whatever the file says it is: a file passing itself off as one never runs as a page here)
+      var url = URL.createObjectURL(/pdf/.test(type) ? new Blob([rec.blob], { type: "application/pdf" }) : rec.blob);
       var inner;
       if (/pdf/.test(type)) inner = '<iframe class="viewer" src="' + url + '#toolbar=1" title="' + esc(mat.title) + '"></iframe>';
       else if (/^video\//.test(type)) inner = '<div class="media-wrap"><video src="' + url + '" controls playsinline controlsList="nodownload" style="max-width:100%;max-height:100%"></video></div>';

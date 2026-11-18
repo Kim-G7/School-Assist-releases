@@ -60,6 +60,61 @@
     return h;
   }
   function readJson(r) { return r.json().catch(function () { return {}; }); }
+
+  /* (2026-11-17) Cloudflare Turnstile. School Assist's online hub can ask a device to show it is a person before a staff
+     code, a school's key or a parent's sign-up goes through: it answers 403 { turnstile: <its site key> }. Cloudflare's
+     check then shows in a small window (usually a second, often nothing to tick) and the request goes again with its
+     token. A school's own hub computer never asks: the check needs the internet. */
+  var Human = A.Human = {
+    script: null,
+    load: function () {
+      if (window.turnstile) return Promise.resolve(window.turnstile);
+      if (!Human.script) Human.script = new Promise(function (resolve, reject) {
+        var s = document.createElement("script");
+        s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+        s.async = true;
+        s.onload = function () { if (window.turnstile) resolve(window.turnstile); else { Human.script = null; reject(err("human", "The check that you're a person didn't load. Try again.")); } };
+        s.onerror = function () { Human.script = null; reject(err("human", "The check that you're a person couldn't load. Check the internet and try again.")); };
+        document.head.appendChild(s);
+      });
+      return Human.script;
+    },
+    /** One token from Cloudflare's check, shown in a small window. */
+    ask: function (sitekey) {
+      return Human.load().then(function (ts) {
+        return new Promise(function (resolve, reject) {
+          var done = false, wid = null, m = null;
+          var end = function (fn, v) { if (done) return; done = true; fn(v); if (m) m.close(); };
+          m = A.UI.modal({ title: "Checking you're a person", sub: "So nobody can guess the school's codes with a program. It usually takes a second.", sticky: true, noFocus: true,
+            body: '<div class="human-box" aria-live="polite"></div>', foot: [{ label: "Cancel" }],
+            onMount: function (el) {
+              try {
+                wid = ts.render(el.querySelector(".human-box"), { sitekey: sitekey, theme: document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light",
+                  callback: function (token) { end(resolve, token); },
+                  "error-callback": function () { end(reject, err("human", "The check that you're a person didn't work. Try again.")); },
+                  "expired-callback": function () { try { ts.reset(wid); } catch (e) { /* gone */ } } });
+              } catch (e) { setTimeout(function () { end(reject, err("human", "The check that you're a person couldn't start. Try again.")); }, 0); }
+            },
+            onClose: function () { try { if (wid != null) ts.remove(wid); } catch (e) { /* gone */ } if (!done) { done = true; reject(err("human", "The check was closed, so nothing was sent.")); } } });
+        });
+      });
+    },
+    /** fetch() of a JSON POST, sent once more with Cloudflare's token when the hub asks for one. */
+    fetch: function (url, init) {
+      return fetch(url, init).then(function (r) {
+        if (r.status !== 403) return r;
+        return r.clone().json().catch(function () { return {}; }).then(function (j) {
+          if (!j.turnstile || typeof j.turnstile !== "string") return r;
+          return Human.ask(j.turnstile).then(function (token) {
+            var body = {};
+            try { body = JSON.parse(init && init.body || "{}"); } catch (e) { /* not JSON */ }
+            body.turnstile = token;
+            return fetch(url, Object.assign({}, init, { body: JSON.stringify(body) }));
+          });
+        });
+      });
+    },
+  };
   /* School fees and Parents rely on the hub to keep those records off other people's devices (hub-fees.cjs, hub-parents.cjs).
      A school hub on an older installer has no such rules and answers "method not allowed" here: the two stay off until it has. */
   var rulesAskedAt = 0;
@@ -114,7 +169,7 @@
     if (joining) return joining.then(function (r) { return staffCode || carry || signin ? join(c, staffCode, carry, signin) : r; }, function () { return join(c, staffCode, carry, signin); });
     m.joinAskedAt = A.now();
     joining = packSecret(m).then(function (secret) {
-      return fetch(c.url + "/api/join", { method: "POST", headers: { "Content-Type": "application/json" },
+      return Human.fetch(c.url + "/api/join", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deviceId: A.Devices ? A.Devices.id() : m.deviceId, label: deviceLabel(), secret: secret || undefined, staffCode: staffCode || undefined, carry: carry || undefined, signin: signin || undefined, quiet: quiet || undefined }) });
     })
       .then(function (r) {

@@ -139,7 +139,7 @@
   };
   M.staffName = function (hon, last, first, id) {
     var base = hon + " " + tidy(last), f = tidy(first);
-    var twin = S().filter("users", function (u) { return u.role === "teacher" && u.id !== id && !u.leftAt && String(u.name).toLowerCase() === base.toLowerCase(); }).length;
+    var twin = S().filter("users", function (u) { return u.role === "teacher" && u.id !== id && !u.leftAt && A.lookalike(u.name) === A.lookalike(base); }).length;
     return twin && f ? hon + " " + f.charAt(0) + ". " + tidy(last) : base;
   };
   /** A teacher written one way everywhere it is short (the timetable, 2026-11-15): title and last name, "Mrs Dube"; the
@@ -162,7 +162,7 @@
     if (typeof u === "string") return shortOf(shortParts({ name: u }), false);
     var p = shortParts(u), plain = shortOf(p, false);
     if (!p.t) return plain;
-    var twin = S().filter("users", function (x) { return x.role === "teacher" && x.id !== u.id && !x.leftAt && x.status !== "declined" && shortOf(shortParts(x), false).toLowerCase() === plain.toLowerCase(); }).length;
+    var twin = S().filter("users", function (x) { return x.role === "teacher" && x.id !== u.id && !x.leftAt && x.status !== "declined" && A.lookalike(shortOf(shortParts(x), false)) === A.lookalike(plain); }).length;
     return twin ? shortOf(p, true) : plain;
   };
   /** A first guess from a name typed before 1.6.2 ("Mrs L Madzivanyika" → Mrs, Madzivanyika, L), for the form to show. */
@@ -287,6 +287,12 @@
     };
     if (yes) go(); else UI.confirm("Decline " + u.name + "'s registration?", { danger: true, ok: "Decline" }).then(function (ok) { if (ok) go(); });
   };
+  /** Someone on the staff already whose name reads the same (accents, capitals and Greek or Cyrillic look-alike letters
+      aside: util.js A.lookalike), shown on a registration waiting for approval, so a copy of a colleague's name stands out. */
+  var lookalikeOf = function (u) {
+    var me = A.lookalike(u.name), was = me && S().filter("users", function (x) { return x.id !== u.id && x.role === u.role && !x.leftAt && x.status !== "pending" && x.status !== "declined" && A.lookalike(x.name) === me; })[0];
+    return was ? '<span class="sep"></span><span class="badge warn">' + (A.plain(was.name) === A.plain(u.name) ? "Same name as " : "Looks like ") + esc(was.name) + (was.staffNo ? " (" + esc(was.staffNo) + ")" : "") + ", already on the staff</span>" : "";
+  };
   /** Settings → People & devices → Teachers (admins): the codes and anyone waiting. */
   A.staffAdminHtml = function (me) {
     if (!me || !me.isAdmin) return "";
@@ -294,7 +300,7 @@
     var waiting = pend.length ? '<div class="card mb"><div class="card-head">' + I("users") + "<h3>Waiting for approval</h3><span class=\"sub\">" + pend.length + "</span></div>" + pend.map(function (u) {
       return '<div class="list-row"><div class="grow"><div class="title">' + esc(u.name) + ' <span class="badge' + (u.isAdmin ? " accent" : "") + '">' + (u.isAdmin ? "Admin" : "Teacher") + "</span></div>" +
         '<div class="meta"><span>' + esc(u.email || u.subjects || "") + "</span>" + ((u.areasNew || []).length ? '<span class="sep"></span><span>Not on the list: ' + esc(u.areasNew.join(", ")) + "</span>" : "") +
-          (u.homeAsk && S().get("classes", u.homeAsk) ? '<span class="sep"></span><span>Class teacher of ' + esc(S().get("classes", u.homeAsk).name) + "</span>" : "") + (u.registeredAt ? '<span class="sep"></span><span>Registered ' + esc(A.relTime(u.registeredAt)) + "</span>" : "") + "</div></div>" +
+          (u.homeAsk && S().get("classes", u.homeAsk) ? '<span class="sep"></span><span>Class teacher of ' + esc(S().get("classes", u.homeAsk).name) + "</span>" : "") + (u.registeredAt ? '<span class="sep"></span><span>Registered ' + esc(A.relTime(u.registeredAt)) + "</span>" : "") + lookalikeOf(u) + "</div></div>" +
         '<button class="btn btn-sm btn-primary" data-act="staff-decide" data-id="' + u.id + '" data-yes="1">' + I("check") + "Approve</button>" +
         '<button class="btn btn-sm btn-ghost" data-act="staff-decide" data-id="' + u.id + '" data-yes="0">Decline</button></div>';
     }).join("") + '<p class="tiny muted" style="padding:0 20px 14px">Only admins approve teachers and other admins.</p></div>' : "";

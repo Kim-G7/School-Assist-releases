@@ -175,6 +175,8 @@ html.scr-desktop.scr-full:not(.scr-locked) .top-actions .scr-min { margin-left: 
 .batch-file > .i { flex: none; color: var(--brand-text); }
 .batch-file .name { font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .select.invalid { border-color: var(--bad); }
+/* Cloudflare's "are you a person" check (js/sync.js A.Human) */
+.human-box { display: flex; justify-content: center; align-items: center; min-height: 72px; }
 .file-drop.over { border-color: var(--brand-text); background: var(--brand-softer); }
 .warn-text { color: var(--warn-text); }
 .text-bad { color: var(--bad); }

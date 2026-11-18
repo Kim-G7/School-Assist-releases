@@ -22,7 +22,7 @@
   var said = function (r, s) { return own(r.marks, s) || own(r.marksAt, s); };
   function students(a, b) {
     var seen = Object.create(null);
-    [a && a.marks, a && a.marksAt, b && b.marks, b && b.marksAt].forEach(function (m) { if (m) Object.keys(m).forEach(function (k) { seen[k] = 1; }); });
+    [a && a.marks, a && a.marksAt, b && b.marks, b && b.marksAt].forEach(function (m) { if (m) Object.keys(m).forEach(function (k) { if (!badName(k)) seen[k] = 1; }); }); // (never "__proto__" and the like)
     return Object.keys(seen);
   }
   function setTimes(rec, times) { if (Object.keys(times).length) rec.marksAt = times; else delete rec.marksAt; }

@@ -38,8 +38,26 @@ window.App = window.App || {};
     return pw.length < 8 ? "Use at least 8 characters for the password." : !/[A-Za-z]/.test(pw) || !/\d/.test(pw) ? "Use letters and at least one number in the password." : "";
   };
 
+  /* Unicode (the Spotify lesson, 2026-11-18). Characters that show nothing or turn text around (zero-width spaces,
+     right-to-left overrides, blank fillers) are dropped wherever text is shown (A.esc) or typed (ui.js tidyInputs), so
+     "notes" + U+202E + "fdp.exe" can't pass for "notesexe.pdf" and no name hides a character. A.lookalike compares names by how they
+     LOOK: accents, full-width and other compatibility letters, and Greek or Cyrillic letters drawn like Latin ones
+     fold to plain Latin, so "Mrs Μoyo" typed with a Greek M is the same name as "Mrs Moyo". It folds the same way
+     however often it is applied (what Spotify's name check didn't, 2013). */
+  var HIDDEN = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\u3164\uFEFF\uFFA0]/g;
+  A.plain = function (s) { return String(s == null ? "" : s).replace(HIDDEN, ""); };
+  // Cyrillic, then Greek (lower case: names are lowered first), and two Latin letters, each with the Latin letter it is drawn like
+  var LOOK = { "\u0430": "a", "\u0432": "b", "\u0435": "e", "\u043A": "k", "\u043C": "m", "\u043D": "h", "\u043E": "o", "\u0440": "p", "\u0441": "c", "\u0442": "t", "\u0443": "y", "\u0445": "x",
+    "\u0455": "s", "\u0456": "i", "\u0458": "j", "\u0501": "d", "\u04AF": "y", "\u03B1": "a", "\u03B2": "b", "\u03B5": "e", "\u03B6": "z", "\u03B7": "h", "\u03B9": "i", "\u03BA": "k", "\u03BC": "m",
+    "\u03BD": "n", "\u03BF": "o", "\u03C1": "p", "\u03C4": "t", "\u03C5": "y", "\u03C7": "x", "\u0261": "g", "\u0131": "i" };
+  var fold = function (s) {
+    return String(s == null ? "" : s).replace(HIDDEN, "").normalize("NFKD").replace(/[\u0300-\u036F]/g, "").toLowerCase()
+      .replace(/[\u0370-\u03FF\u0400-\u052F\u0250-\u02AF\u0131]/g, function (c) { return LOOK[c] || c; }).replace(/\s+/g, " ").trim();
+  };
+  A.lookalike = function (s) { var a = fold(s), b = fold(a); return a === b ? a : fold(b); };
+
   A.esc = function (s) {
-    return String(s == null ? "" : s)
+    return String(s == null ? "" : s).replace(HIDDEN, "")
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   };
